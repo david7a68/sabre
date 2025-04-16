@@ -4,6 +4,8 @@ use winit::dpi::PhysicalSize;
 use winit::window::Window;
 use winit::window::WindowId;
 
+use crate::graphics::DrawInfo;
+use crate::graphics::DrawInfoUniforms;
 use crate::graphics::GraphicsContext;
 use crate::graphics::RenderPipeline;
 
@@ -21,6 +23,7 @@ pub struct WindowState {
     surface: wgpu::Surface<'static>,
     surface_config: wgpu::SurfaceConfiguration,
 
+    draw_uniforms: DrawInfoUniforms,
     render_pipeline: RenderPipeline,
 }
 
@@ -72,6 +75,7 @@ impl WindowState {
         surface.configure(&context.device, &config);
 
         let render_pipeline = context.get_render_pipeline(format);
+        let draw_uniforms = render_pipeline.create_draw_info_uniforms();
 
         Self {
             queue: context.queue.clone(),
@@ -79,6 +83,7 @@ impl WindowState {
             window,
             surface,
             surface_config: config,
+            draw_uniforms,
             render_pipeline,
         }
     }
@@ -143,6 +148,15 @@ impl WindowState {
             });
 
             render_pass.set_pipeline(&self.render_pipeline.pipeline);
+
+            self.draw_uniforms.bind_and_update(
+                &self.queue,
+                &mut render_pass,
+                DrawInfo {
+                    viewport_size: [self.surface_config.width, self.surface_config.height],
+                },
+            );
+
             render_pass.draw(0..3, 0..1);
         }
 

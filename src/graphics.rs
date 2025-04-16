@@ -3,9 +3,12 @@ use std::sync::Arc;
 use log::info;
 use winit::window::Window;
 
-pub use crate::graphics::pipeline::RenderPipeline;
-use crate::graphics::pipeline::RenderPipelineCache;
 use crate::window::WindowState;
+
+pub use pipeline::DrawInfo;
+pub use pipeline::DrawInfoUniforms;
+pub use pipeline::RenderPipeline;
+use pipeline::RenderPipelineCache;
 
 mod pipeline;
 

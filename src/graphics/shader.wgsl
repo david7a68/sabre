@@ -1,6 +1,13 @@
+struct DrawInfo {
+    viewport_size: vec2<u32>
+}
+
 struct VertexOutput {
     @builtin(position) clip_position: vec4<f32>,
 };
+
+@group(0) @binding(0)
+var<uniform> draw_info: DrawInfo;
 
 @vertex
 fn vs_main(
