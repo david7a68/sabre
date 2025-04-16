@@ -4,8 +4,8 @@ use winit::dpi::PhysicalSize;
 use winit::window::Window;
 use winit::window::WindowId;
 
-use crate::context::GraphicsContext;
-use crate::context::RenderPipeline;
+use crate::graphics::GraphicsContext;
+use crate::graphics::RenderPipeline;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RenderError {

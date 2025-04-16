@@ -11,7 +11,7 @@ use winit::platform::windows::WindowAttributesExtWindows;
 use winit::window::Window;
 use winit::window::WindowId;
 
-use crate::context::GraphicsContext;
+use crate::graphics::GraphicsContext;
 use crate::window::RenderError;
 use crate::window::WindowState;
 
