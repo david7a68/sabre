@@ -4,9 +4,10 @@ use winit::dpi::PhysicalSize;
 use winit::window::Window;
 use winit::window::WindowId;
 
+use crate::graphics::DrawBuffer;
 use crate::graphics::DrawInfo;
-use crate::graphics::DrawInfoUniforms;
 use crate::graphics::GraphicsContext;
+use crate::graphics::Primitive;
 use crate::graphics::RenderPipeline;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -23,8 +24,9 @@ pub struct WindowState {
     surface: wgpu::Surface<'static>,
     surface_config: wgpu::SurfaceConfiguration,
 
-    draw_uniforms: DrawInfoUniforms,
+    frame_counter: u64,
     render_pipeline: RenderPipeline,
+    frames_in_flight: [Frame; 2],
 }
 
 impl WindowState {
@@ -75,7 +77,8 @@ impl WindowState {
         surface.configure(&context.device, &config);
 
         let render_pipeline = context.get_render_pipeline(format);
-        let draw_uniforms = render_pipeline.create_draw_info_uniforms();
+
+        let frames_in_flight = [Frame::new(&render_pipeline), Frame::new(&render_pipeline)];
 
         Self {
             queue: context.queue.clone(),
@@ -83,8 +86,9 @@ impl WindowState {
             window,
             surface,
             surface_config: config,
-            draw_uniforms,
+            frame_counter: 0,
             render_pipeline,
+            frames_in_flight,
         }
     }
 
@@ -118,6 +122,8 @@ impl WindowState {
             },
         };
 
+        let frame = &mut self.frames_in_flight[self.frame_counter as usize % 2];
+
         let view = output
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
@@ -149,13 +155,17 @@ impl WindowState {
 
             render_pass.set_pipeline(&self.render_pipeline.pipeline);
 
-            self.draw_uniforms.bind_and_update(
+            frame.draw_uniforms.bind_and_update(
                 &self.queue,
                 &mut render_pass,
-                DrawInfo {
+                &DrawInfo {
                     viewport_size: [self.surface_config.width, self.surface_config.height],
                 },
             );
+
+            frame
+                .primitives
+                .bind_and_update(&self.queue, &mut render_pass, &[]);
 
             render_pass.draw(0..3, 0..1);
         }
@@ -165,6 +175,24 @@ impl WindowState {
         self.window.pre_present_notify();
         output.present();
 
+        self.frame_counter += 1;
         Ok(())
+    }
+}
+
+struct Frame {
+    draw_uniforms: DrawBuffer<DrawInfo>,
+    primitives: DrawBuffer<[Primitive]>,
+}
+
+impl Frame {
+    fn new(render_pipeline: &RenderPipeline) -> Self {
+        let draw_uniforms = render_pipeline.create_draw_info_uniforms();
+        let primitives = render_pipeline.create_primitive_buffer();
+
+        Self {
+            draw_uniforms,
+            primitives,
+        }
     }
 }

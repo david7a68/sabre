@@ -5,11 +5,15 @@ use winit::window::Window;
 
 use crate::window::WindowState;
 
+pub use draw::Canvas;
+pub use draw::DrawCommand;
+pub use draw::Primitive;
+pub use pipeline::DrawBuffer;
 pub use pipeline::DrawInfo;
-pub use pipeline::DrawInfoUniforms;
 pub use pipeline::RenderPipeline;
 use pipeline::RenderPipelineCache;
 
+mod draw;
 mod pipeline;
 
 pub struct GraphicsContext {
