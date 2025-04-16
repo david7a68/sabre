@@ -5,6 +5,7 @@ use winit::window::Window;
 use winit::window::WindowId;
 
 use crate::context::GraphicsContext;
+use crate::context::RenderPipeline;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RenderError {
@@ -19,6 +20,8 @@ pub struct WindowState {
     device: wgpu::Device,
     surface: wgpu::Surface<'static>,
     surface_config: wgpu::SurfaceConfiguration,
+
+    render_pipeline: RenderPipeline,
 }
 
 impl WindowState {
@@ -31,10 +34,9 @@ impl WindowState {
 
         let format = caps
             .formats
-            .iter()
-            .find(|f| f.is_srgb())
-            .copied()
-            .unwrap_or(caps.formats[0]);
+            .first()
+            .cloned()
+            .expect("Surface incompatible with selected adapter!");
 
         let present_mode = {
             let mut mailbox = None;
@@ -69,12 +71,15 @@ impl WindowState {
 
         surface.configure(&context.device, &config);
 
+        let render_pipeline = context.get_render_pipeline(format);
+
         Self {
             queue: context.queue.clone(),
             device: context.device.clone(),
             window,
             surface,
             surface_config: config,
+            render_pipeline,
         }
     }
 
@@ -117,7 +122,7 @@ impl WindowState {
             .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
 
         {
-            let _render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("Render Pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                     view: &view,
@@ -136,10 +141,12 @@ impl WindowState {
                 occlusion_query_set: None,
                 timestamp_writes: None,
             });
+
+            render_pass.set_pipeline(&self.render_pipeline.pipeline);
+            render_pass.draw(0..3, 0..1);
         }
 
-        // submit will accept anything that implements IntoIter
-        self.queue.submit(std::iter::once(encoder.finish()));
+        self.queue.submit([encoder.finish()]);
 
         self.window.pre_present_notify();
         output.present();
