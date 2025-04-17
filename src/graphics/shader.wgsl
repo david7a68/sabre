@@ -41,21 +41,21 @@ fn vs_main(
 fn fs_main(
     in: VertexOutput
 ) -> @location(0) vec4f {
-    return vec4f(0.3, 0.2, 0.1, 1.0);    
+    return in.color;    
 }
 
-/// 1----2  4
+/// 2----1  5
 /// |   / / |
 /// |  / /  |
 /// | / /   |
-/// 0  3----5
+/// 0  3----4
 const CORNER_LOOKUP: array<vec2f, 6> = array<vec2f, 6>(
     vec2f(0.0, 0.0),
+    vec2f(1.0, 1.0),
     vec2f(0.0, 1.0),
-    vec2f(1.0, 1.0),
     vec2f(0.0, 0.0),
+    vec2f(1.0, 0.0),
     vec2f(1.0, 1.0),
-    vec2f(1.0, 0.0)
 );
 
 fn to_clip_coords(position: vec2f) -> vec4f {

@@ -32,6 +32,7 @@ impl GraphicsContext {
         let mut flags = wgpu::InstanceFlags::empty();
 
         if cfg!(debug_assertions) {
+            info!("Creating graphics context with debug and validation layers enabled");
             flags |= wgpu::InstanceFlags::DEBUG;
             flags |= wgpu::InstanceFlags::VALIDATION;
         }
@@ -60,14 +61,24 @@ impl GraphicsContext {
 
         info!("Adapter: {:?}", adapter.get_info());
 
+        let mut features = wgpu::Features::empty();
+
+        if cfg!(feature = "profile") {
+            features |= wgpu::Features::TIMESTAMP_QUERY_INSIDE_ENCODERS;
+            features |= wgpu::Features::TIMESTAMP_QUERY_INSIDE_PASSES;
+            features |= wgpu::Features::TIMESTAMP_QUERY;
+        }
+
         let (device, queue) = adapter
-            .request_device(&wgpu::DeviceDescriptor {
-                label: Some("Device"),
-                required_features: wgpu::Features::empty(),
-                required_limits: wgpu::Limits::default(),
-                memory_hints: wgpu::MemoryHints::default(),
-                trace: wgpu::Trace::Off,
-            })
+            .request_device(
+                &wgpu::DeviceDescriptor {
+                    label: Some("Device"),
+                    required_features: features,
+                    required_limits: wgpu::Limits::default(),
+                    memory_hints: wgpu::MemoryHints::default(),
+                },
+                None,
+            )
             .await
             .unwrap();
 

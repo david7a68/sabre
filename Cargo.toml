@@ -3,10 +3,20 @@ name = "sabre"
 version = "0.1.0"
 edition = "2024"
 
+[profile.release]
+lto = "thin"
+debug = "limited"
+
+[features]
+profile = ["tracy/enable"]
+
 [dependencies]
 bytemuck = "1"
+color = "0.2"
 env_logger = "0.11"
 futures = "0.3"
+glamour = "0.16"
 log = "0.4"
-wgpu = { version = "25", features = ["static-dxc"] }
+wgpu = { version = "24", features = ["static-dxc"] }
+tracy = { version = "1", features = ["wgpu"], package = "tracy_full" }
 winit = "0.30"

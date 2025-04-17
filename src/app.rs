@@ -11,11 +11,15 @@ use winit::platform::windows::WindowAttributesExtWindows;
 use winit::window::Window;
 use winit::window::WindowId;
 
+use crate::color::Color;
+use crate::graphics::Canvas;
 use crate::graphics::GraphicsContext;
+use crate::graphics::Primitive;
 use crate::window::RenderError;
 use crate::window::WindowState;
 
 pub struct App {
+    canvas: Canvas,
     context: Option<GraphicsContext>,
     render_contexts: Vec<WindowState>,
 }
@@ -24,6 +28,7 @@ impl App {
     #[expect(clippy::new_without_default)]
     pub fn new() -> Self {
         Self {
+            canvas: Canvas::new(),
             context: None,
             render_contexts: vec![],
         }
@@ -47,7 +52,8 @@ impl ApplicationHandler for App {
 
         // Render to the window before showing it to avoid flashing when
         // creating the window for the first time.
-        render_context.render().unwrap();
+        self.canvas.begin(Color::BLACK);
+        render_context.render(&self.canvas).unwrap();
         render_context.set_visible(true);
 
         self.render_contexts.push(render_context);
@@ -101,7 +107,18 @@ impl ApplicationHandler for App {
                     .find(|rc| rc.window_id() == window_id)
                     .unwrap();
 
-                match window.render() {
+                self.canvas.begin(Color::srgb(0.1, 0.2, 0.3, 1.0));
+
+                self.canvas
+                    .draw(Primitive::new(100.0, 100.0, 50.0, 50.0, Color::WHITE));
+                self.canvas
+                    .draw(Primitive::new(200.0, 200.0, 50.0, 50.0, Color::WHITE));
+                self.canvas
+                    .draw(Primitive::new(300.0, 300.0, 50.0, 50.0, Color::WHITE));
+                self.canvas
+                    .draw(Primitive::new(400.0, 400.0, 50.0, 50.0, Color::WHITE));
+
+                match window.render(&self.canvas) {
                     Ok(_) => {}
                     Err(e) => match e {
                         RenderError::SurfaceOutOfMemory => {
@@ -117,6 +134,8 @@ impl ApplicationHandler for App {
                         }
                     },
                 }
+
+                tracy::frame!();
             }
             _ => (),
         }

@@ -71,6 +71,15 @@ impl<T: NoUninit> DrawBuffer<T> {
 }
 
 impl<T: NoUninit> DrawBuffer<[T]> {
+    pub fn resize(&mut self, device: &wgpu::Device, capacity: u64) {
+        self.buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("Draw Info Uniforms"),
+            size: capacity * std::mem::size_of::<T>() as u64,
+            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::STORAGE,
+            mapped_at_creation: false,
+        });
+    }
+
     pub fn bind_and_update(
         &self,
         queue: &wgpu::Queue,
@@ -115,7 +124,7 @@ impl RenderPipeline {
 
 /// A cache for render pipelines.
 ///
-/// This is used because different monitors may have different preffered color
+/// This is used because different monitors may have different preferred color
 /// formats and we want to accommodate that. The cache allows us to share render
 /// pipelines between windows in that case, instead of creating a new pipeline
 /// for each window.
