@@ -7,24 +7,23 @@ use winit::window::Window;
 use winit::window::WindowId;
 
 use crate::graphics::Canvas;
-use crate::graphics::DrawBuffer;
-use crate::graphics::DrawCommand;
-use crate::graphics::DrawInfo;
-use crate::graphics::GraphicsContext;
-use crate::graphics::Primitive;
-use crate::graphics::RenderPipeline;
+use crate::graphics::draw::DrawCommand;
+use crate::graphics::pipeline::DrawInfo;
+
+use super::draw::GpuPrimitive;
+use super::pipeline::DrawBuffer;
+use super::pipeline::RenderPipeline;
+use super::pipeline::RenderPipelineCache;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RenderError {
-    SurfaceOutOfMemory,
-    SurfaceUnknownError,
-    SurfaceTimedOut,
+    OutOfMemory,
+    TimedOut,
+    Unknown,
 }
 
-pub struct WindowState {
+pub struct Surface {
     window: Arc<Window>,
-    queue: wgpu::Queue,
-    device: wgpu::Device,
     surface: wgpu::Surface<'static>,
     surface_config: wgpu::SurfaceConfiguration,
 
@@ -33,13 +32,15 @@ pub struct WindowState {
     frames_in_flight: [Frame; 2],
 }
 
-impl WindowState {
+impl Surface {
     pub(crate) fn new(
-        context: &GraphicsContext,
         window: Arc<Window>,
         surface: wgpu::Surface<'static>,
+        device: &wgpu::Device,
+        adapter: &wgpu::Adapter,
+        pipeline_cache: &RenderPipelineCache,
     ) -> Self {
-        let caps = surface.get_capabilities(&context.adapter);
+        let caps = surface.get_capabilities(adapter);
 
         let format = caps
             .formats
@@ -73,20 +74,18 @@ impl WindowState {
             width: window.inner_size().width,
             height: window.inner_size().height,
             present_mode,
-            desired_maximum_frame_latency: 2,
+            desired_maximum_frame_latency: 1,
             alpha_mode: caps.alpha_modes[0],
             view_formats: vec![],
         };
 
-        surface.configure(&context.device, &config);
+        surface.configure(device, &config);
 
-        let render_pipeline = context.get_render_pipeline(format);
+        let render_pipeline = pipeline_cache.get_pipeline(format);
 
         let frames_in_flight = [Frame::new(&render_pipeline), Frame::new(&render_pipeline)];
 
         Self {
-            queue: context.queue.clone(),
-            device: context.device.clone(),
             window,
             surface,
             surface_config: config,
@@ -100,21 +99,26 @@ impl WindowState {
         self.window.id()
     }
 
-    pub fn set_visible(&mut self, visible: bool) {
-        self.window.set_visible(visible);
-    }
-
     #[tracing::instrument(skip(self))]
-    pub fn resize(&mut self, new_size: PhysicalSize<u32>) {
+    pub fn resize(&mut self, device: &wgpu::Device, new_size: PhysicalSize<u32>) {
         if new_size.width > 0 && new_size.height > 0 {
             self.surface_config.width = new_size.width;
             self.surface_config.height = new_size.height;
-            self.surface.configure(&self.device, &self.surface_config);
+            self.surface.configure(device, &self.surface_config);
         }
     }
 
+    pub(crate) fn pre_present_notify(&self) {
+        self.window.pre_present_notify();
+    }
+
     #[tracing::instrument(skip(self, canvas))]
-    pub fn render(&mut self, canvas: &Canvas) -> Result<(), RenderError> {
+    pub(crate) fn write_commands(
+        &mut self,
+        queue: &wgpu::Queue,
+        device: &wgpu::Device,
+        canvas: &Canvas,
+    ) -> Result<(wgpu::SurfaceTexture, wgpu::CommandBuffer), RenderError> {
         info!(
             "Rendering frame {} with {} primitives and {} commands",
             self.frame_counter,
@@ -122,20 +126,22 @@ impl WindowState {
             canvas.commands().len(),
         );
 
-        let output = match self.surface.get_current_texture() {
-            Ok(output) => output,
-            Err(e) => match e {
-                wgpu::SurfaceError::Timeout => return Err(RenderError::SurfaceTimedOut),
-                wgpu::SurfaceError::OutOfMemory => return Err(RenderError::SurfaceOutOfMemory),
-                wgpu::SurfaceError::Other => return Err(RenderError::SurfaceUnknownError),
-                wgpu::SurfaceError::Outdated | wgpu::SurfaceError::Lost => {
-                    let size = self.window.inner_size();
-                    debug!("Recreating lost or outdated surface. New size: {size:?}",);
-                    self.resize(size);
-                    self.surface.get_current_texture().unwrap()
-                }
-            },
-        };
+        let output = tracing::info_span!("get_current_texture").in_scope(|| {
+            match self.surface.get_current_texture() {
+                Ok(output) => Ok(output),
+                Err(e) => match e {
+                    wgpu::SurfaceError::Timeout => Err(RenderError::TimedOut),
+                    wgpu::SurfaceError::OutOfMemory => Err(RenderError::OutOfMemory),
+                    wgpu::SurfaceError::Other => Err(RenderError::Unknown),
+                    wgpu::SurfaceError::Outdated | wgpu::SurfaceError::Lost => {
+                        let size = self.window.inner_size();
+                        debug!("Recreating lost or outdated surface. New size: {size:?}",);
+                        self.resize(device, size);
+                        Ok(self.surface.get_current_texture().unwrap())
+                    }
+                },
+            }
+        })?;
 
         let frame = &mut self.frames_in_flight[self.frame_counter as usize % 2];
 
@@ -143,9 +149,8 @@ impl WindowState {
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
 
-        let mut encoder = self
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+        let mut encoder =
+            device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
 
         let load_op = if let Some(clear_color) = canvas.clear_color() {
             debug!("Clearing frame with color: {clear_color:?}");
@@ -179,7 +184,7 @@ impl WindowState {
             render_pass.set_pipeline(&self.render_pipeline.pipeline);
 
             frame.draw_uniforms.bind_and_update(
-                &self.queue,
+                queue,
                 &mut render_pass,
                 &DrawInfo {
                     viewport_size: [self.surface_config.width, self.surface_config.height],
@@ -188,7 +193,7 @@ impl WindowState {
 
             frame
                 .primitives
-                .bind_and_update(&self.queue, &mut render_pass, canvas.primitives());
+                .bind_and_update(queue, device, &mut render_pass, canvas.primitives());
 
             let mut vertex_offset = 0;
             for command in canvas.commands() {
@@ -202,21 +207,13 @@ impl WindowState {
             }
         }
 
-        self.queue.submit([encoder.finish()]);
-
-        self.window.pre_present_notify();
-        output.present();
-
-        tracing_tracy::client::frame_mark();
-
-        self.frame_counter += 1;
-        Ok(())
+        Ok((output, encoder.finish()))
     }
 }
 
 struct Frame {
     draw_uniforms: DrawBuffer<DrawInfo>,
-    primitives: DrawBuffer<[Primitive]>,
+    primitives: DrawBuffer<[GpuPrimitive]>,
 }
 
 impl Frame {

@@ -5,7 +5,9 @@ struct DrawInfo {
 struct Rect {
     min: vec2f,
     max: vec2f,
+    uvwh: vec4f,
     color: vec4f,
+    texture: u32,
 }
 
 struct VertexOutput {

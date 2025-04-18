@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [profile.release]
-# lto = "thin"
+lto = "thin"
 debug = "limited"
 
 [features]
@@ -20,6 +20,17 @@ image = { version = "0.25", default-features = false, features = [
     "png",
     "rayon",
 ] }
+memmap2 = "0.9.5"
+smallvec = { version = "1.15.0", features = [
+    "const_generics",
+    "const_new",
+    "union",
+] }
+tokio = { version = "1.44", features = [
+    "parking_lot",
+    "rt-multi-thread",
+    "sync",
+] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = [
     "env-filter",
@@ -28,8 +39,11 @@ tracing-subscriber = { version = "0.3", features = [
 ] }
 tracing-tracy = { version = "0.11", default-features = false, features = [
     "broadcast",
+    "callstack-inlines",
+    "code-transfer",
+    "context-switch-tracing",
     "fibers",
-    "flush-on-exit",
+    "ondemand",
     "only-localhost",
     "sampling",
     "system-tracing",

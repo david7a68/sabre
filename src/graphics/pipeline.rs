@@ -8,7 +8,7 @@ use bytemuck::Zeroable;
 use tracing::info;
 use wgpu::include_wgsl;
 
-use crate::graphics::draw::Primitive;
+use crate::graphics::draw::GpuPrimitive;
 
 const SHADER: wgpu::ShaderModuleDescriptor = include_wgsl!("shader.wgsl");
 
@@ -85,21 +85,25 @@ impl<T: NoUninit> DrawBuffer<[T]> {
     }
 
     pub fn bind_and_update(
-        &self,
+        &mut self,
         queue: &wgpu::Queue,
+        device: &wgpu::Device,
         render_pass: &mut wgpu::RenderPass,
         contents: &[T],
     ) {
-        queue.write_buffer(&self.buffer, 0, bytemuck::cast_slice(contents));
+        let contents = bytemuck::cast_slice(contents);
+
+        self.ensure_capacity(device, contents.len() as u64);
+
+        queue.write_buffer(&self.buffer, 0, contents);
         render_pass.set_bind_group(self.bind_group, &self.binding, &[]);
     }
 }
 
 #[derive(Clone)]
-pub struct RenderPipeline {
+pub(crate) struct RenderPipeline {
     pub device: wgpu::Device,
     pub pipeline: wgpu::RenderPipeline,
-    pub layout: wgpu::PipelineLayout,
     pub draw_info_bind_group_layout: wgpu::BindGroupLayout,
     pub primitive_bind_group_layout: wgpu::BindGroupLayout,
 }
@@ -115,11 +119,11 @@ impl RenderPipeline {
         )
     }
 
-    pub fn create_primitive_buffer(&self) -> DrawBuffer<[Primitive]> {
+    pub fn create_primitive_buffer(&self) -> DrawBuffer<[GpuPrimitive]> {
         DrawBuffer::new(
             &self.device,
             wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
-            std::mem::size_of::<Primitive>() as u64 * 1024,
+            std::mem::size_of::<GpuPrimitive>() as u64 * 1024,
             1,
             &self.primitive_bind_group_layout,
         )
@@ -135,7 +139,7 @@ impl RenderPipeline {
 ///
 /// There is no mechanism to invalidate the cache, under the assumption that
 /// there are a fixed number of formats that can be used.
-pub(super) struct RenderPipelineCache {
+pub(crate) struct RenderPipelineCache {
     device: wgpu::Device,
     shader: wgpu::ShaderModule,
     layout: wgpu::PipelineLayout,
@@ -251,7 +255,6 @@ impl RenderPipelineCache {
         let pipeline = RenderPipeline {
             device: self.device.clone(),
             pipeline: render_pipeline,
-            layout: self.layout.clone(),
             draw_info_bind_group_layout: self.draw_info_bind_group_layout.clone(),
             primitive_bind_group_layout: self.primitive_bind_group_layout.clone(),
         };
