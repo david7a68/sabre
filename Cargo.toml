@@ -4,19 +4,35 @@ version = "0.1.0"
 edition = "2024"
 
 [profile.release]
-lto = "thin"
+# lto = "thin"
 debug = "limited"
 
 [features]
-profile = ["tracy/enable"]
+profile = ["tracing-tracy/enable"]
 
 [dependencies]
 bytemuck = "1"
 color = "0.2"
-env_logger = "0.11"
 futures = "0.3"
 glamour = "0.16"
-log = "0.4"
-wgpu = { version = "24", features = ["static-dxc"] }
-tracy = { version = "1", features = ["wgpu"], package = "tracy_full" }
+image = { version = "0.25", default-features = false, features = [
+    "jpeg",
+    "png",
+    "rayon",
+] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = [
+    "env-filter",
+    "parking_lot",
+    "smallvec",
+] }
+tracing-tracy = { version = "0.11", default-features = false, features = [
+    "broadcast",
+    "fibers",
+    "flush-on-exit",
+    "only-localhost",
+    "sampling",
+    "system-tracing",
+] }
+wgpu = { version = "25", features = ["static-dxc"] }
 winit = "0.30"

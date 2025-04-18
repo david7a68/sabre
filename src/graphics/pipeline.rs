@@ -5,7 +5,7 @@ use std::sync::Mutex;
 use bytemuck::NoUninit;
 use bytemuck::Pod;
 use bytemuck::Zeroable;
-use log::info;
+use tracing::info;
 use wgpu::include_wgsl;
 
 use crate::graphics::draw::Primitive;
@@ -71,7 +71,11 @@ impl<T: NoUninit> DrawBuffer<T> {
 }
 
 impl<T: NoUninit> DrawBuffer<[T]> {
-    pub fn resize(&mut self, device: &wgpu::Device, capacity: u64) {
+    pub fn ensure_capacity(&mut self, device: &wgpu::Device, capacity: u64) {
+        if self.buffer.size() >= capacity * std::mem::size_of::<T>() as u64 {
+            return;
+        }
+
         self.buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Draw Info Uniforms"),
             size: capacity * std::mem::size_of::<T>() as u64,
@@ -121,8 +125,6 @@ impl RenderPipeline {
         )
     }
 }
-
-//Wip
 
 /// A cache for render pipelines.
 ///

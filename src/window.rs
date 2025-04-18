@@ -1,8 +1,7 @@
 use std::sync::Arc;
-use std::time::Duration;
 
-use log::debug;
-use log::info;
+use tracing::debug;
+use tracing::info;
 use winit::dpi::PhysicalSize;
 use winit::window::Window;
 use winit::window::WindowId;
@@ -32,8 +31,6 @@ pub struct WindowState {
     frame_counter: u64,
     render_pipeline: RenderPipeline,
     frames_in_flight: [Frame; 2],
-
-    profile_context: tracy::wgpu::ProfileContext,
 }
 
 impl WindowState {
@@ -87,14 +84,6 @@ impl WindowState {
 
         let frames_in_flight = [Frame::new(&render_pipeline), Frame::new(&render_pipeline)];
 
-        let profile_context = tracy::wgpu::ProfileContext::new(
-            &context.adapter,
-            &context.device,
-            &context.queue,
-            2,
-            Duration::from_secs(1),
-        );
-
         Self {
             queue: context.queue.clone(),
             device: context.device.clone(),
@@ -104,7 +93,6 @@ impl WindowState {
             frame_counter: 0,
             render_pipeline,
             frames_in_flight,
-            profile_context,
         }
     }
 
@@ -116,9 +104,8 @@ impl WindowState {
         self.window.set_visible(visible);
     }
 
+    #[tracing::instrument(skip(self))]
     pub fn resize(&mut self, new_size: PhysicalSize<u32>) {
-        let _ = tracy::frame::discontinuous_frame(tracy::c_str!("Window resize"));
-
         if new_size.width > 0 && new_size.height > 0 {
             self.surface_config.width = new_size.width;
             self.surface_config.height = new_size.height;
@@ -126,9 +113,8 @@ impl WindowState {
         }
     }
 
+    #[tracing::instrument(skip(self, canvas))]
     pub fn render(&mut self, canvas: &Canvas) -> Result<(), RenderError> {
-        let _ = tracy::frame::discontinuous_frame(tracy::c_str!("Render frame"));
-
         info!(
             "Rendering frame {} with {} primitives and {} commands",
             self.frame_counter,
@@ -157,11 +143,9 @@ impl WindowState {
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
 
-        let mut encoder = tracy::wgpu_command_encoder!(
-            &self.device,
-            &mut self.profile_context,
-            &wgpu::CommandEncoderDescriptor { label: None }
-        );
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
 
         let load_op = if let Some(clear_color) = canvas.clear_color() {
             debug!("Clearing frame with color: {clear_color:?}");
@@ -177,23 +161,20 @@ impl WindowState {
         };
 
         {
-            let mut render_pass = tracy::wgpu_render_pass!(
-                encoder,
-                &wgpu::RenderPassDescriptor {
-                    label: Some("Render Pass"),
-                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                        view: &view,
-                        resolve_target: None,
-                        ops: wgpu::Operations {
-                            load: load_op,
-                            store: wgpu::StoreOp::Store,
-                        },
-                    })],
-                    depth_stencil_attachment: None,
-                    occlusion_query_set: None,
-                    timestamp_writes: None,
-                }
-            );
+            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("Render Pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &view,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: load_op,
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: None,
+                occlusion_query_set: None,
+                timestamp_writes: None,
+            });
 
             render_pass.set_pipeline(&self.render_pipeline.pipeline);
 
@@ -226,8 +207,7 @@ impl WindowState {
         self.window.pre_present_notify();
         output.present();
 
-        self.profile_context.end_frame(&self.device, &self.queue);
-        tracy::frame!();
+        tracing_tracy::client::frame_mark();
 
         self.frame_counter += 1;
         Ok(())

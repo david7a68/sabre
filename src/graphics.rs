@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use log::info;
+use tracing::info;
 use winit::window::Window;
 
 use crate::window::WindowState;
@@ -70,15 +70,13 @@ impl GraphicsContext {
         }
 
         let (device, queue) = adapter
-            .request_device(
-                &wgpu::DeviceDescriptor {
-                    label: Some("Device"),
-                    required_features: features,
-                    required_limits: wgpu::Limits::default(),
-                    memory_hints: wgpu::MemoryHints::default(),
-                },
-                None,
-            )
+            .request_device(&wgpu::DeviceDescriptor {
+                label: Some("Device"),
+                required_features: features,
+                required_limits: wgpu::Limits::default(),
+                memory_hints: wgpu::MemoryHints::default(),
+                trace: wgpu::Trace::Off,
+            })
             .await
             .unwrap();
 

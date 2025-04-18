@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use futures::executor::block_on;
-use log::warn;
+use tracing::warn;
 use winit::application::ApplicationHandler;
 use winit::event::WindowEvent;
 use winit::event_loop::ActiveEventLoop;
@@ -135,7 +135,7 @@ impl ApplicationHandler for App {
                     },
                 }
 
-                tracy::frame!();
+                tracing_tracy::client::frame_mark();
             }
             _ => (),
         }
