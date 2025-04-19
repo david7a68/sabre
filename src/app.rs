@@ -3,6 +3,7 @@ use std::time::Duration;
 
 use futures::executor::block_on;
 use smallvec::smallvec;
+use tracing::info;
 use tracing::instrument;
 use winit::application::ApplicationHandler;
 use winit::event::WindowEvent;
@@ -19,10 +20,12 @@ use winit::window::WindowId;
 use crate::color::Color;
 use crate::graphics::GraphicsContext;
 use crate::graphics::Primitive;
+use crate::graphics::Texture;
 
 pub struct App {
     graphics: Option<GraphicsContext>,
     windows: Vec<Arc<Window>>,
+    texture: Option<Texture>,
 }
 
 impl App {
@@ -31,6 +34,7 @@ impl App {
         Self {
             graphics: None,
             windows: vec![],
+            texture: None,
         }
     }
 }
@@ -63,7 +67,7 @@ impl ApplicationHandler for App {
 
         let mut graphics_context = block_on(async { GraphicsContext::new(window.clone()).await });
 
-        // graphics_context.load_image("test.png").unwrap();
+        self.texture = Some(graphics_context.load_image("scratch/test.png").unwrap());
 
         // Render to the window before showing it to avoid flashing when
         // creating the window for the first time.
@@ -83,6 +87,7 @@ impl ApplicationHandler for App {
     fn suspended(&mut self, _: &ActiveEventLoop) {
         self.windows.clear();
         self.graphics = None;
+        self.texture = None;
     }
 
     #[instrument(skip(self, event_loop))]
@@ -109,6 +114,7 @@ impl ApplicationHandler for App {
             }
             WindowEvent::Destroyed => {
                 if self.windows.is_empty() {
+                    info!("All windows destroyed, shutting down.");
                     event_loop.exit();
                 }
             }
@@ -124,9 +130,13 @@ impl ApplicationHandler for App {
 
                 canvas.clear(Color::srgb(0.1, 0.2, 0.3, 1.0));
                 canvas.draw(Primitive::new(100.0, 100.0, 50.0, 50.0, Color::WHITE));
-                canvas.draw(Primitive::new(200.0, 200.0, 50.0, 50.0, Color::WHITE));
-                canvas.draw(Primitive::new(300.0, 300.0, 50.0, 50.0, Color::WHITE));
-                canvas.draw(Primitive::new(400.0, 400.0, 50.0, 50.0, Color::WHITE));
+                canvas.draw(Primitive::new(100.0, 200.0, 50.0, 50.0, Color::WHITE));
+                canvas.draw(Primitive::new(100.0, 300.0, 50.0, 50.0, Color::WHITE));
+                canvas.draw(Primitive::new(100.0, 400.0, 50.0, 50.0, Color::WHITE));
+                canvas.draw(
+                    Primitive::new(200.0, 50.0, 400.0, 450.0, Color::WHITE)
+                        .with_texture(self.texture.clone().unwrap(), None),
+                );
 
                 graphics.render(smallvec![(window.id(), canvas)]).unwrap();
             }

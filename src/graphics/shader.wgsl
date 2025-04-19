@@ -33,8 +33,9 @@ fn vs_main(
     out.clip_position = to_clip_coords(vertex_position);
     out.color = rects[rect_index].color;
 
-    // todo: probably wrong
-    out.uv = rects[rect_index].uvwh.xy;
+    let uvwh = rects[rect_index].uvwh;
+    out.uv = uvwh.xy + uvwh.zw * CORNER_LOOKUP[vertex_index];
+    out.uv = vec2f(out.uv.x, 1.0 - out.uv.y); // flip y
 
     return out;
 }
@@ -61,6 +62,22 @@ const CORNER_LOOKUP: array<vec2f, 6> = array<vec2f, 6>(
     vec2f(0.0, 0.0),
     vec2f(1.0, 0.0),
     vec2f(1.0, 1.0),
+);
+
+/// Same as corner lookup but flipped vertically and horizontally
+///
+/// 4----3  0
+/// |   / / |
+/// |  / /  |
+/// | / /   |
+/// 5  1----2
+const UV_LOOKUP: array<vec2f, 6> = array<vec2f, 6>(
+    vec2f(1.0, 0.0),
+    vec2f(0.0, 1.0),
+    vec2f(1.0, 1.0),
+    vec2f(1.0, 0.0),
+    vec2f(0.0, 0.0),
+    vec2f(0.0, 1.0),
 );
 
 fn to_clip_coords(position: vec2f) -> vec4f {

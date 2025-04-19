@@ -14,17 +14,14 @@ use super::texture_manager::TextureManager;
 
 const VERTICES_PER_PRIMITIVE: u32 = 6;
 
-pub struct DrawTexture {
-    pub uv: [f32; 2],
-    pub wh: [f32; 2],
-    pub texture: Texture,
-}
-
+#[derive(Debug)]
 pub struct Primitive {
     pub point: [f32; 2],
     pub size: [f32; 2],
     pub color: Color,
-    pub texture: Option<DrawTexture>,
+
+    pub uvwh: Option<[f32; 4]>,
+    pub texture: Option<Texture>,
 }
 
 impl Primitive {
@@ -33,24 +30,15 @@ impl Primitive {
             point: [x, y],
             size: [width, height],
             color,
+            uvwh: None,
             texture: None,
         }
     }
 
-    pub fn with_texture(mut self, texture: DrawTexture) -> Self {
+    pub fn with_texture(mut self, texture: Texture, rect: impl Into<Option<[f32; 4]>>) -> Self {
+        self.uvwh = rect.into();
         self.texture = Some(texture);
         self
-    }
-
-    fn extract(&self) -> GpuPrimitive {
-        GpuPrimitive {
-            point: self.point,
-            size: self.size,
-            uvwh: self.texture.as_ref().map_or([0.0; 4], |texture| {
-                [texture.uv[0], texture.uv[1], texture.wh[0], texture.wh[1]]
-            }),
-            color: self.color,
-        }
     }
 }
 
@@ -136,32 +124,42 @@ impl Canvas {
         self.texture_manager.load(path)
     }
 
-    pub fn draw(&mut self, mut primitive: Primitive) {
-        let texture = primitive.texture.take().unwrap_or(DrawTexture {
-            uv: [0.0, 0.0],
-            wh: [1.0, 1.0],
-            texture: self.texture_manager.white_pixel(),
-        });
+    pub fn draw(&mut self, primitive: Primitive) {
+        let Primitive {
+            point,
+            size,
+            color,
+            uvwh,
+            texture,
+        } = primitive;
+
+        let uvwh = uvwh.unwrap_or([0.0, 0.0, 1.0, 1.0]);
+        let texture = texture.unwrap_or_else(|| self.texture_manager.white_pixel());
 
         let DrawCommand::Draw {
             texture: prev_texture,
             num_vertices,
         } = self.storage.commands.last_mut().unwrap();
 
-        if *prev_texture == texture.texture.id() {
+        if *prev_texture == texture.id() {
             *num_vertices += VERTICES_PER_PRIMITIVE;
         } else {
-            self.storage
-                .textures
-                .insert(texture.texture.id(), texture.texture.clone());
+            self.storage.textures.insert(texture.id(), texture.clone());
 
             self.storage.commands.push(DrawCommand::Draw {
-                texture: texture.texture.id(),
+                texture: texture.id(),
                 num_vertices: VERTICES_PER_PRIMITIVE,
             });
         }
 
-        self.storage.primitives.push(primitive.extract());
+        let prim = GpuPrimitive {
+            point,
+            size,
+            uvwh,
+            color,
+        };
+
+        self.storage.primitives.push(prim);
     }
 }
 

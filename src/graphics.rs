@@ -11,13 +11,14 @@ use winit::window::WindowId;
 
 pub use draw::Canvas;
 pub use draw::Primitive;
+pub use texture_manager::Texture;
+pub use texture_manager::TextureId;
+pub use texture_manager::TextureLoadError;
 
 use self::draw::CanvasStorage;
 use self::pipeline::RenderPipelineCache;
 use self::surface::RenderError;
 use self::surface::Surface;
-use self::texture_manager::Texture;
-use self::texture_manager::TextureLoadError;
 use self::texture_manager::TextureManager;
 
 mod draw;
