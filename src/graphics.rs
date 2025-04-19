@@ -1,3 +1,4 @@
+use std::path::Path;
 use std::sync::Arc;
 use std::sync::mpsc;
 
@@ -14,13 +15,14 @@ use self::draw::CanvasStorage;
 use self::pipeline::RenderPipelineCache;
 use self::surface::RenderError;
 use self::surface::Surface;
+use self::texture_manager::Texture;
+use self::texture_manager::TextureLoadError;
 use self::texture_manager::TextureManager;
 
 mod draw;
 mod pipeline;
 mod surface;
 mod texture_manager;
-mod uploader;
 
 pub struct GraphicsContext {
     pub instance: wgpu::Instance,
@@ -98,7 +100,7 @@ impl GraphicsContext {
 
         let render_pipelines = Arc::new(RenderPipelineCache::new(device.clone()));
 
-        let textures = TextureManager::new(device.clone());
+        let textures = TextureManager::new(queue.clone(), device.clone());
 
         let (canvas_reclaim_sender, canvas_reclaim_receiver) = mpsc::channel();
 
@@ -151,6 +153,10 @@ impl GraphicsContext {
         }
     }
 
+    pub fn load_image(&mut self, path: impl AsRef<Path>) -> Result<Texture, TextureLoadError> {
+        self.textures.load(path)
+    }
+
     pub fn get_canvas(&mut self) -> Canvas {
         let storage = self
             .canvas_reclaim_receiver
@@ -172,6 +178,8 @@ impl GraphicsContext {
     ) -> Result<(), RenderError> {
         let mut command_buffers = SmallVec::<[_; 2]>::new();
         let mut presents = SmallVec::<[_; 2]>::new();
+
+        self.textures.flush();
 
         for (window_id, canvas) in targets {
             let Some(window) = self.windows.iter_mut().find(|w| w.window_id() == window_id) else {

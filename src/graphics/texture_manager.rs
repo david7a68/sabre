@@ -4,11 +4,13 @@ use std::hash::Hash;
 use std::io::Cursor;
 use std::path::Path;
 use std::rc::Rc;
+use std::sync::mpsc;
 
 use image::ImageDecoder;
 use image::ImageReader;
-
-use super::uploader::Uploader;
+use tracing::field::Empty;
+use tracing::info;
+use tracing::info_span;
 
 #[derive(Debug)]
 pub enum TextureLoadError {
@@ -31,7 +33,7 @@ impl From<image::ImageError> for TextureLoadError {
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct TextureId {
     pub index: u32,
     pub version: u32,
@@ -82,23 +84,34 @@ impl Drop for Texture {
 #[derive(Clone)]
 pub(crate) struct TextureManager {
     inner: Rc<RefCell<TextureManagerInner>>,
+
+    queue: wgpu::Queue,
+    device: wgpu::Device,
+
+    ready_sender: mpsc::Sender<TextureId>,
 }
 
 impl TextureManager {
-    pub fn new(device: wgpu::Device) -> Self {
+    pub fn new(queue: wgpu::Queue, device: wgpu::Device) -> Self {
+        let (ready_sender, ready_receiver) = mpsc::channel();
+
         let inner = TextureManagerInner {
-            device,
-            staging: wgpu::util::StagingBelt::new(1024),
             textures: Vec::new(),
             free_slots: Vec::new(),
+            ready_receiver,
         };
 
         Self {
+            queue,
+            device,
             inner: Rc::new(RefCell::new(inner)),
+            ready_sender,
         }
     }
 
-    pub fn reserve(&self, path: impl AsRef<Path>) -> Result<Texture, TextureLoadError> {
+    pub fn load(&self, path: impl AsRef<Path>) -> Result<Texture, TextureLoadError> {
+        let start_time = std::time::Instant::now();
+
         let mut inner = self.inner.borrow_mut();
 
         let path = path.as_ref();
@@ -106,39 +119,100 @@ impl TextureManager {
         let file = File::open(path)?;
         let mapping = unsafe { memmap2::Mmap::map(&file) }?;
 
-        let reader = ImageReader::new(Cursor::new(&mapping)).with_guessed_format()?;
-        let decoder = reader.into_decoder()?;
-        let (width, height) = decoder.dimensions();
+        let ((width, height), bytes_per_pixel) = {
+            let reader = ImageReader::new(Cursor::new(&mapping)).with_guessed_format()?;
+            let decoder = reader.into_decoder()?;
+            (decoder.dimensions(), decoder.color_type().bytes_per_pixel())
+        };
 
-        // let texture = inner.device.create_texture(&wgpu::TextureDescriptor {
-        //     label: Some(path.to_string_lossy().as_ref()),
-        //     size: wgpu::Extent3d {
-        //         width,
-        //         height,
-        //         depth_or_array_layers: 1,
-        //     },
-        //     mip_level_count: 1,
-        //     sample_count: 1,
-        //     dimension: wgpu::TextureDimension::D2,
-        //     format: wgpu::TextureFormat::Rgba8UnormSrgb,
-        //     usage: wgpu::TextureUsages::COPY_DST | wgpu::TextureUsages::TEXTURE_BINDING,
-        //     view_formats: &[],
-        // });
+        let texture = self.device.create_texture(&wgpu::TextureDescriptor {
+            label: Some(path.to_string_lossy().as_ref()),
+            size: wgpu::Extent3d {
+                width,
+                height,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba8UnormSrgb,
+            usage: wgpu::TextureUsages::COPY_DST | wgpu::TextureUsages::TEXTURE_BINDING,
+            view_formats: &[],
+        });
 
-        let (index, version) = if let Some(free_slot_idx) = inner.free_slots.pop() {
+        let (index, version, slot) = if let Some(free_slot_idx) = inner.free_slots.pop() {
             let slot = &mut inner.textures[free_slot_idx as usize];
-            slot.version += 1;
-            slot.texture = None;
-            (free_slot_idx, slot.version)
+            (free_slot_idx, slot.version, slot)
         } else {
             let index = inner.textures.len() as u32;
-            inner.textures.push(TextureSlot {
-                version: 0,
-                refcounts: 1,
-                texture: None,
-            });
-            (index, 0)
+            inner.textures.push(TextureSlot::default());
+            (index, 0, inner.textures.last_mut().unwrap())
         };
+
+        // 1 reference. We don't care about the loader thread because the
+        // texture itself is also refcounted by wgpu.
+        slot.refcounts = 1;
+        slot.texture = Some(texture.clone());
+
+        tokio::task::spawn_blocking({
+            let span = info_span!(
+                "Texture load",
+                path = %path.display(),
+                texture_id = debug(TextureId { index, version}),
+                width = width,
+                height = height,
+                file_size = mapping.len(),
+                decoded_size = Empty,
+            );
+
+            let queue = self.queue.clone();
+            let ready = self.ready_sender.clone();
+
+            move || {
+                let _enter = span.enter();
+
+                let temp = {
+                    let reader = ImageReader::new(Cursor::new(&mapping))
+                        .with_guessed_format()
+                        .unwrap();
+
+                    let decoder = reader.into_decoder().unwrap();
+                    let mut temp = vec![0; decoder.total_bytes() as usize];
+                    span.record("decoded_size", temp.len());
+
+                    decoder.read_image(&mut temp).unwrap();
+
+                    temp
+                };
+
+                queue.write_texture(
+                    wgpu::TexelCopyTextureInfo {
+                        texture: &texture,
+                        mip_level: 0,
+                        origin: wgpu::Origin3d { x: 0, y: 0, z: 0 },
+                        aspect: wgpu::TextureAspect::All,
+                    },
+                    &temp,
+                    wgpu::TexelCopyBufferLayout {
+                        offset: 0,
+                        bytes_per_row: Some(width * bytes_per_pixel as u32),
+                        rows_per_image: Some(height),
+                    },
+                    wgpu::Extent3d {
+                        width,
+                        height,
+                        depth_or_array_layers: 1,
+                    },
+                );
+
+                ready.send(TextureId { index, version }).unwrap();
+
+                info!(
+                    "Texture loaded after {} ms",
+                    start_time.elapsed().as_secs_f32() * 1000.0
+                );
+            }
+        });
 
         Ok(Texture {
             index,
@@ -148,14 +222,26 @@ impl TextureManager {
             manager: self.inner.clone(),
         })
     }
+
+    /// Flushes the texture manager, updating the state of any textures that
+    /// have been loaded since the last time this method was called.
+    pub fn flush(&mut self) {
+        let mut inner = self.inner.borrow_mut();
+
+        while let Ok(texture_id) = inner.ready_receiver.try_recv() {
+            let slot = &mut inner.textures[texture_id.index as usize];
+
+            if slot.version == texture_id.version {
+                slot.is_copied = true;
+            }
+        }
+    }
 }
 
 struct TextureManagerInner {
-    device: wgpu::Device,
-    staging: wgpu::util::StagingBelt,
     textures: Vec<TextureSlot>,
     free_slots: Vec<u32>,
-    // loaded_textures: Vec<
+    ready_receiver: mpsc::Receiver<TextureId>,
 }
 
 impl TextureManagerInner {
@@ -171,13 +257,10 @@ impl TextureManagerInner {
     }
 }
 
+#[derive(Default)]
 struct TextureSlot {
     version: u32,
-    refcounts: u32,
     texture: Option<wgpu::Texture>,
-}
-
-struct UploadBuffer {
-    buffer: wgpu::Buffer,
-    offset: u64,
+    is_copied: bool,
+    refcounts: u32,
 }

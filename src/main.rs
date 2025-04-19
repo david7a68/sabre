@@ -31,7 +31,7 @@ fn main() {
     });
 
     tracing_subscriber::registry()
-        .with(tracing_subscriber::fmt::layer())
+        .with(tracing_subscriber::fmt::layer().pretty())
         .with(tracing_tracy::TracyLayer::new(TracyConfig::default()))
         .with(env_filter)
         .with(def_filter)

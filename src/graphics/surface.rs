@@ -112,7 +112,7 @@ impl Surface {
         self.window.pre_present_notify();
     }
 
-    #[tracing::instrument(skip(self, canvas))]
+    #[tracing::instrument(skip_all)]
     pub(crate) fn write_commands(
         &mut self,
         queue: &wgpu::Queue,
@@ -153,8 +153,6 @@ impl Surface {
             device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
 
         let load_op = if let Some(clear_color) = canvas.clear_color() {
-            debug!("Clearing frame with color: {clear_color:?}");
-
             wgpu::LoadOp::Clear(wgpu::Color {
                 r: clear_color.r.into(),
                 g: clear_color.g.into(),

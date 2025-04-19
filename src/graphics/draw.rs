@@ -121,7 +121,7 @@ impl Canvas {
     }
 
     pub fn load_texture(&mut self, path: impl AsRef<Path>) -> Result<Texture, TextureLoadError> {
-        todo!()
+        self.texture_manager.load(path)
     }
 
     pub fn draw(&mut self, primitive: Primitive) {

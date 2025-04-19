@@ -60,10 +60,12 @@ impl ApplicationHandler for App {
         );
 
         let mut graphics_context = block_on(async { GraphicsContext::new(window.clone()).await });
-        let mut canvas = graphics_context.get_canvas();
+
+        graphics_context.load_image("test.png").unwrap();
 
         // Render to the window before showing it to avoid flashing when
         // creating the window for the first time.
+        let mut canvas = graphics_context.get_canvas();
         canvas.begin(Color::BLACK);
         graphics_context
             .render(smallvec![(window.id(), canvas)])
@@ -122,6 +124,7 @@ impl ApplicationHandler for App {
                 let mut canvas = graphics.get_canvas();
 
                 canvas.begin(Color::srgb(0.1, 0.2, 0.3, 1.0));
+
                 canvas.draw(Primitive::new(100.0, 100.0, 50.0, 50.0, Color::WHITE));
                 canvas.draw(Primitive::new(200.0, 200.0, 50.0, 50.0, Color::WHITE));
                 canvas.draw(Primitive::new(300.0, 300.0, 50.0, 50.0, Color::WHITE));
