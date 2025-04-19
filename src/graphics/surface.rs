@@ -138,17 +138,29 @@ impl Surface {
         );
 
         let output = tracing::info_span!("get_current_texture").in_scope(|| {
-            match self.surface.get_current_texture() {
-                Ok(output) => Ok(output),
-                Err(e) => match e {
-                    wgpu::SurfaceError::Timeout => Err(RenderError::TimedOut),
-                    wgpu::SurfaceError::OutOfMemory => Err(RenderError::OutOfMemory),
-                    wgpu::SurfaceError::Other => Err(RenderError::Unknown),
-                    wgpu::SurfaceError::Outdated | wgpu::SurfaceError::Lost => {
-                        self.resize_if_necessary(device);
-                        Ok(self.surface.get_current_texture().unwrap())
-                    }
-                },
+            let mut attempts = 0;
+
+            let mut output = self.surface.get_current_texture();
+
+            loop {
+                if attempts > 3 {
+                    break Err(RenderError::TimedOut);
+                }
+
+                match output {
+                    Ok(output) => break Ok(output),
+                    Err(e) => match e {
+                        wgpu::SurfaceError::Timeout => break Err(RenderError::TimedOut),
+                        wgpu::SurfaceError::OutOfMemory => break Err(RenderError::OutOfMemory),
+                        wgpu::SurfaceError::Other => break Err(RenderError::Unknown),
+                        wgpu::SurfaceError::Outdated | wgpu::SurfaceError::Lost => {
+                            self.resize_if_necessary(device);
+                            output = self.surface.get_current_texture();
+                        }
+                    },
+                }
+
+                attempts += 1;
             }
         })?;
 
