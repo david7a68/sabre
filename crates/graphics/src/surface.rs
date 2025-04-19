@@ -6,9 +6,9 @@ use tracing::instrument;
 use winit::window::Window;
 use winit::window::WindowId;
 
-use crate::graphics::Canvas;
-use crate::graphics::draw::DrawCommand;
-use crate::graphics::pipeline::DrawInfo;
+use crate::Canvas;
+use crate::draw::DrawCommand;
+use crate::pipeline::DrawInfo;
 
 use super::draw::GpuPrimitive;
 use super::pipeline::DrawBuffer;

@@ -1,3 +1,4 @@
+use workspace_hack as _;
+
 pub mod app;
-pub mod color;
-pub mod graphics;
+pub use graphics;

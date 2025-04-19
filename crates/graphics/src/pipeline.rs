@@ -8,7 +8,7 @@ use bytemuck::Zeroable;
 use tracing::info;
 use wgpu::include_wgsl;
 
-use crate::graphics::draw::GpuPrimitive;
+use crate::draw::GpuPrimitive;
 
 use super::texture_manager::StoredTexture;
 
