@@ -2,7 +2,6 @@ use std::sync::Arc;
 
 use tracing::debug;
 use tracing::info;
-use winit::dpi::PhysicalSize;
 use winit::window::Window;
 use winit::window::WindowId;
 
@@ -100,8 +99,18 @@ impl Surface {
     }
 
     #[tracing::instrument(skip(self))]
-    pub fn resize(&mut self, device: &wgpu::Device, new_size: PhysicalSize<u32>) {
+    pub fn resize_if_necessary(&mut self, device: &wgpu::Device) {
+        let new_size = self.window.inner_size();
+
+        if self.surface_config.width == new_size.width
+            && self.surface_config.height == new_size.height
+        {
+            return;
+        }
+
         if new_size.width > 0 && new_size.height > 0 {
+            debug!("Recreating lost or outdated surface. New size: {new_size:?}",);
+
             self.surface_config.width = new_size.width;
             self.surface_config.height = new_size.height;
             self.surface.configure(device, &self.surface_config);
@@ -134,9 +143,7 @@ impl Surface {
                     wgpu::SurfaceError::OutOfMemory => Err(RenderError::OutOfMemory),
                     wgpu::SurfaceError::Other => Err(RenderError::Unknown),
                     wgpu::SurfaceError::Outdated | wgpu::SurfaceError::Lost => {
-                        let size = self.window.inner_size();
-                        debug!("Recreating lost or outdated surface. New size: {size:?}",);
-                        self.resize(device, size);
+                        self.resize_if_necessary(device);
                         Ok(self.surface.get_current_texture().unwrap())
                     }
                 },
@@ -204,6 +211,8 @@ impl Surface {
                 }
             }
         }
+
+        self.frame_counter += 1;
 
         Ok((output, encoder.finish()))
     }

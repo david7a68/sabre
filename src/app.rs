@@ -98,12 +98,7 @@ impl ApplicationHandler for App {
                     self.windows.retain(|rc| rc.id() != window_id);
                 }
             }
-            WindowEvent::Resized(physical_size) => {
-                self.graphics
-                    .as_mut()
-                    .unwrap()
-                    .resize_surface(window_id, physical_size);
-            }
+            WindowEvent::Resized(_) => {}
             WindowEvent::CloseRequested => {
                 self.windows.retain(|rc| rc.id() != window_id);
                 self.graphics.as_mut().unwrap().destroy_surface(window_id);

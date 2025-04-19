@@ -92,7 +92,7 @@ impl GraphicsContext {
                 label: Some("Device"),
                 required_features: features,
                 required_limits: wgpu::Limits::default(),
-                memory_hints: wgpu::MemoryHints::default(),
+                memory_hints: wgpu::MemoryHints::MemoryUsage,
                 trace: wgpu::Trace::Off,
             })
             .await
@@ -137,14 +137,6 @@ impl GraphicsContext {
         ));
     }
 
-    pub fn resize_surface(&mut self, window_id: WindowId, size: winit::dpi::PhysicalSize<u32>) {
-        if let Some(window) = self.windows.iter_mut().find(|w| w.window_id() == window_id) {
-            window.resize(&self.device, size);
-        } else {
-            warn!("Window not found, skipping resize.");
-        }
-    }
-
     pub fn destroy_surface(&mut self, window_id: WindowId) {
         if let Some(index) = self.windows.iter().position(|w| w.window_id() == window_id) {
             self.windows.remove(index);
@@ -186,6 +178,8 @@ impl GraphicsContext {
                 warn!("Window not found, skipping render.");
                 continue;
             };
+
+            window.resize_if_necessary(&self.device);
 
             let (target, command_buffer) =
                 window.write_commands(&self.queue, &self.device, &canvas)?;
