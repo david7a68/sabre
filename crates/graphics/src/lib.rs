@@ -8,7 +8,9 @@ use tracing::instrument;
 use tracing::warn;
 use winit::window::Window;
 use winit::window::WindowId;
+use workspace_hack as _;
 
+pub use color::Color;
 pub use draw::Canvas;
 pub use draw::Primitive;
 pub use texture_manager::Texture;
@@ -21,6 +23,7 @@ use self::surface::RenderError;
 use self::surface::Surface;
 use self::texture_manager::TextureManager;
 
+mod color;
 mod draw;
 mod pipeline;
 mod surface;
@@ -82,18 +85,10 @@ impl GraphicsContext {
 
         info!("Adapter: {:?}", adapter.get_info());
 
-        let mut features = wgpu::Features::empty();
-
-        if cfg!(feature = "profile") {
-            features |= wgpu::Features::TIMESTAMP_QUERY_INSIDE_ENCODERS;
-            features |= wgpu::Features::TIMESTAMP_QUERY_INSIDE_PASSES;
-            features |= wgpu::Features::TIMESTAMP_QUERY;
-        }
-
         let (device, queue) = adapter
             .request_device(&wgpu::DeviceDescriptor {
                 label: Some("Device"),
-                required_features: features,
+                required_features: wgpu::Features::empty(),
                 required_limits: wgpu::Limits::default(),
                 memory_hints: wgpu::MemoryHints::MemoryUsage,
                 trace: wgpu::Trace::Off,

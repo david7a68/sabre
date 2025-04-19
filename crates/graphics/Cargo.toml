@@ -1,0 +1,20 @@
+[package]
+name = "graphics"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+workspace-hack = { version = "0.1", path = "../workspace-hack" }
+
+bytemuck = { workspace = true }
+color = { workspace = true }
+futures = { workspace = true }
+glamour = { workspace = true }
+image = { workspace = true, features = ["jpeg", "png"] }
+memmap2 = { workspace = true }
+smallvec = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+tracing-tracy = { workspace = true }
+wgpu = { workspace = true, features = ["static-dxc"] }
+winit = { workspace = true }

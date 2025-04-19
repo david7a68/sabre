@@ -1,7 +1,38 @@
-[package]
-name = "sabre"
+[workspace]
+members = ["crates/graphics", "crates/workspace-hack"]
+
+[workspace.package]
 version = "0.1.0"
 edition = "2024"
+
+[workspace.lints.clippy]
+dbg_macro = "warn"
+
+[workspace.lints.rust]
+unused_crate_dependencies = "warn"
+
+[workspace.dependencies]
+bytemuck = "1"
+color = "0.2"
+futures = "0.3"
+glamour = "0.16"
+image = "0.25"
+memmap2 = "0.9.5"
+smallvec = { version = "1.15", features = [
+    "const_generics",
+    "const_new",
+    "union",
+] }
+tokio = "1.44"
+tracing = "0.1"
+tracing-tracy = { version = "0.11", default-features = false }
+wgpu = "25"
+winit = "0.30"
+
+[package]
+name = "sabre"
+version.workspace = true
+edition.workspace = true
 
 [profile.release]
 lto = "thin"
@@ -11,33 +42,20 @@ debug = "limited"
 profile = ["tracing-tracy/enable"]
 
 [dependencies]
-bytemuck = "1"
-color = "0.2"
-futures = "0.3"
-glamour = "0.16"
-image = { version = "0.25", default-features = false, features = [
-    "jpeg",
-    "png",
-    "rayon",
-] }
-memmap2 = "0.9.5"
-smallvec = { version = "1.15.0", features = [
-    "const_generics",
-    "const_new",
-    "union",
-] }
-tokio = { version = "1.44", features = [
-    "parking_lot",
-    "rt-multi-thread",
-    "sync",
-] }
-tracing = "0.1"
+workspace-hack = { version = "0.1", path = "crates/workspace-hack" }
+
+graphics = { path = "crates/graphics" }
+
+futures = { workspace = true }
+smallvec = { workspace = true }
+tokio = { workspace = true, features = ["parking_lot", "rt-multi-thread"] }
+tracing = { workspace = true }
 tracing-subscriber = { version = "0.3", features = [
     "env-filter",
     "parking_lot",
     "smallvec",
 ] }
-tracing-tracy = { version = "0.11", default-features = false, features = [
+tracing-tracy = { workspace = true, features = [
     "broadcast",
     "callstack-inlines",
     "code-transfer",
@@ -48,5 +66,4 @@ tracing-tracy = { version = "0.11", default-features = false, features = [
     "sampling",
     "system-tracing",
 ] }
-wgpu = { version = "25", features = ["static-dxc"] }
-winit = "0.30"
+winit = { workspace = true }

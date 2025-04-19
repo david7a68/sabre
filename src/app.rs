@@ -17,7 +17,7 @@ use winit::platform::windows::WindowAttributesExtWindows;
 use winit::window::Window;
 use winit::window::WindowId;
 
-use crate::color::Color;
+use crate::graphics::Color;
 use crate::graphics::GraphicsContext;
 use crate::graphics::Primitive;
 use crate::graphics::Texture;
