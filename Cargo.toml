@@ -8,15 +8,45 @@ lto = "thin"
 debug = "limited"
 
 [features]
-profile = ["tracy/enable"]
+profile = ["tracing-tracy/enable"]
 
 [dependencies]
 bytemuck = "1"
 color = "0.2"
-env_logger = "0.11"
 futures = "0.3"
 glamour = "0.16"
-log = "0.4"
-wgpu = { version = "24", features = ["static-dxc"] }
-tracy = { version = "1", features = ["wgpu"], package = "tracy_full" }
+image = { version = "0.25", default-features = false, features = [
+    "jpeg",
+    "png",
+    "rayon",
+] }
+memmap2 = "0.9.5"
+smallvec = { version = "1.15.0", features = [
+    "const_generics",
+    "const_new",
+    "union",
+] }
+tokio = { version = "1.44", features = [
+    "parking_lot",
+    "rt-multi-thread",
+    "sync",
+] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = [
+    "env-filter",
+    "parking_lot",
+    "smallvec",
+] }
+tracing-tracy = { version = "0.11", default-features = false, features = [
+    "broadcast",
+    "callstack-inlines",
+    "code-transfer",
+    "context-switch-tracing",
+    "fibers",
+    "ondemand",
+    "only-localhost",
+    "sampling",
+    "system-tracing",
+] }
+wgpu = { version = "25", features = ["static-dxc"] }
 winit = "0.30"

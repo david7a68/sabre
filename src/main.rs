@@ -1,22 +1,41 @@
-use winit::event_loop::ControlFlow;
-use winit::event_loop::EventLoop;
-use winit::platform::windows::EventLoopBuilderExtWindows;
+use tracing::Level;
+use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::util::SubscriberInitExt;
 
 use sabre::app::App;
 
+#[derive(Default)]
+struct TracyConfig(tracing_subscriber::fmt::format::DefaultFields);
+
+impl tracing_tracy::Config for TracyConfig {
+    type Formatter = tracing_subscriber::fmt::format::DefaultFields;
+
+    fn formatter(&self) -> &Self::Formatter {
+        &self.0
+    }
+
+    fn stack_depth(&self, _: &tracing::metadata::Metadata<'_>) -> u16 {
+        10
+    }
+}
+
 fn main() {
-    env_logger::builder()
-        .format_source_path(true)
-        .format_timestamp_micros()
-        .filter_module("wgpu_core", log::LevelFilter::Info)
-        .filter_module("wgpu_hal", log::LevelFilter::Warn)
-        .filter_module("naga", log::LevelFilter::Warn)
+    let env_filter = tracing_subscriber::EnvFilter::try_from_default_env().ok();
+    let def_filter = env_filter.is_none().then(|| {
+        tracing_subscriber::filter::Targets::new().with_targets([
+            ("wgpu_core", Level::WARN),
+            ("wgpu_hal", Level::WARN),
+            ("wgpu", Level::WARN),
+            ("sabre", Level::DEBUG),
+        ])
+    });
+
+    tracing_subscriber::registry()
+        .with(tracing_subscriber::fmt::layer().pretty())
+        .with(tracing_tracy::TracyLayer::new(TracyConfig::default()))
+        .with(env_filter)
+        .with(def_filter)
         .init();
 
-    let event_loop = EventLoop::builder().with_dpi_aware(true).build().unwrap();
-
-    event_loop.set_control_flow(ControlFlow::Wait);
-
-    let mut app = App::new();
-    event_loop.run_app(&mut app).unwrap();
+    App::new().run();
 }

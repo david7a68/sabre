@@ -1,16 +1,27 @@
+use std::collections::HashMap;
+use std::path::Path;
+use std::sync::mpsc;
+
 use bytemuck::Pod;
 use bytemuck::Zeroable;
 
 use crate::color::Color;
 
+use super::texture_manager::Texture;
+use super::texture_manager::TextureId;
+use super::texture_manager::TextureLoadError;
+use super::texture_manager::TextureManager;
+
 const VERTICES_PER_PRIMITIVE: u32 = 6;
 
-#[repr(C)]
-#[derive(Clone, Copy, Debug, Default, Pod, Zeroable)]
+#[derive(Debug)]
 pub struct Primitive {
     pub point: [f32; 2],
     pub size: [f32; 2],
     pub color: Color,
+
+    pub uvwh: Option<[f32; 4]>,
+    pub texture: Option<Texture>,
 }
 
 impl Primitive {
@@ -19,59 +30,147 @@ impl Primitive {
             point: [x, y],
             size: [width, height],
             color,
+            uvwh: None,
+            texture: None,
         }
     }
+
+    pub fn with_texture(mut self, texture: Texture, rect: impl Into<Option<[f32; 4]>>) -> Self {
+        self.uvwh = rect.into();
+        self.texture = Some(texture);
+        self
+    }
+}
+
+#[repr(C, align(16))]
+#[derive(Clone, Copy, Debug, Default, Pod, Zeroable)]
+pub(crate) struct GpuPrimitive {
+    pub point: [f32; 2],
+    pub size: [f32; 2],
+    pub uvwh: [f32; 4],
+    pub color: Color,
 }
 
 #[derive(Clone, Copy, Debug)]
 pub enum DrawCommand {
-    Draw { num_vertices: u32 },
+    Draw {
+        texture: TextureId,
+        num_vertices: u32,
+    },
 }
 
-#[derive(Debug, Default)]
-pub struct Canvas {
+#[derive(Default)]
+pub(crate) struct CanvasStorage {
     clear_color: Option<Color>,
     commands: Vec<DrawCommand>,
-    primitives: Vec<Primitive>,
+    primitives: Vec<GpuPrimitive>,
+
+    textures: HashMap<TextureId, Texture>,
+}
+
+pub struct Canvas {
+    storage: CanvasStorage,
+    texture_manager: TextureManager,
+    return_sender: mpsc::Sender<CanvasStorage>,
 }
 
 impl Canvas {
-    pub fn new() -> Self {
+    pub(super) fn new(
+        mut storage: CanvasStorage,
+        texture_manager: TextureManager,
+        return_sender: mpsc::Sender<CanvasStorage>,
+    ) -> Self {
+        storage.clear_color = None;
+        storage.commands.clear();
+        storage.primitives.clear();
+        storage.textures.clear();
+
+        storage.commands.push(DrawCommand::Draw {
+            texture: TextureId::default(),
+            num_vertices: 0,
+        });
+
+        let white_pixel = texture_manager.white_pixel();
+        storage.textures.insert(white_pixel.id(), white_pixel);
+
         Self {
-            clear_color: None,
-            commands: Vec::new(),
-            primitives: Vec::new(),
+            storage,
+            texture_manager,
+            return_sender,
         }
     }
 
-    pub fn primitives(&self) -> &[Primitive] {
-        &self.primitives
+    pub(crate) fn primitives(&self) -> &[GpuPrimitive] {
+        &self.storage.primitives
     }
 
     pub fn commands(&self) -> &[DrawCommand] {
-        &self.commands
+        &self.storage.commands
+    }
+
+    pub fn texture(&self, id: TextureId) -> Option<&Texture> {
+        self.storage.textures.get(&id)
     }
 
     pub fn clear_color(&self) -> Option<Color> {
-        self.clear_color
+        self.storage.clear_color
     }
 
-    pub fn begin(&mut self, clear_color: impl Into<Option<Color>>) {
-        self.commands.clear();
-        self.primitives.clear();
+    pub fn clear(&mut self, clear_color: impl Into<Option<Color>>) {
+        self.storage.clear_color = clear_color.into();
+    }
 
-        self.clear_color = clear_color.into();
+    pub fn load_texture(&mut self, path: impl AsRef<Path>) -> Result<Texture, TextureLoadError> {
+        self.texture_manager.load(path)
     }
 
     pub fn draw(&mut self, primitive: Primitive) {
-        if let Some(DrawCommand::Draw { num_vertices }) = self.commands.last_mut() {
+        let Primitive {
+            point,
+            size,
+            color,
+            uvwh,
+            texture,
+        } = primitive;
+
+        let uvwh = uvwh.unwrap_or([0.0, 0.0, 1.0, 1.0]);
+        let texture = texture.unwrap_or_else(|| self.texture_manager.white_pixel());
+
+        let DrawCommand::Draw {
+            texture: prev_texture,
+            num_vertices,
+        } = self.storage.commands.last_mut().unwrap();
+
+        if *prev_texture == texture.id() {
             *num_vertices += VERTICES_PER_PRIMITIVE;
         } else {
-            self.commands.push(DrawCommand::Draw {
+            self.storage.textures.insert(texture.id(), texture.clone());
+
+            self.storage.commands.push(DrawCommand::Draw {
+                texture: texture.id(),
                 num_vertices: VERTICES_PER_PRIMITIVE,
             });
         }
 
-        self.primitives.push(primitive);
+        let prim = GpuPrimitive {
+            point,
+            size,
+            uvwh,
+            color,
+        };
+
+        self.storage.primitives.push(prim);
+    }
+}
+
+impl Drop for Canvas {
+    fn drop(&mut self) {
+        if self
+            .return_sender
+            .send(std::mem::take(&mut self.storage))
+            .is_err()
+        {
+            tracing::warn!("Failed to send canvas storage back to the pool");
+        }
     }
 }

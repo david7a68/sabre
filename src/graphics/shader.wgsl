@@ -5,19 +5,18 @@ struct DrawInfo {
 struct Rect {
     min: vec2f,
     max: vec2f,
+    uvwh: vec4f,
     color: vec4f,
 }
 
 struct VertexOutput {
     @builtin(position) clip_position: vec4<f32>,
     @location(0) color: vec4f,
+    @location(1) uv: vec2f,
 };
 
-@group(0) @binding(0)
-var<uniform> draw_info: DrawInfo;
-
-@group(1) @binding(0)
-var<storage, read> rects: array<Rect>;
+@group(0) @binding(0) var<uniform> draw_info: DrawInfo;
+@group(1) @binding(0) var<storage, read> rects: array<Rect>;
 
 @vertex
 fn vs_main(
@@ -34,14 +33,21 @@ fn vs_main(
     out.clip_position = to_clip_coords(vertex_position);
     out.color = rects[rect_index].color;
 
+    let uvwh = rects[rect_index].uvwh;
+    out.uv = uvwh.xy + uvwh.zw * CORNER_LOOKUP[vertex_index];
+    out.uv = vec2f(out.uv.x, 1.0 - out.uv.y); // flip y
+
     return out;
 }
+
+@group(2) @binding(0) var basic_sampler: sampler;
+@group(3) @binding(0) var texture: texture_2d<f32>;
 
 @fragment
 fn fs_main(
     in: VertexOutput
 ) -> @location(0) vec4f {
-    return in.color;    
+    return in.color * textureSample(texture, basic_sampler, in.uv);
 }
 
 /// 2----1  5
@@ -56,6 +62,22 @@ const CORNER_LOOKUP: array<vec2f, 6> = array<vec2f, 6>(
     vec2f(0.0, 0.0),
     vec2f(1.0, 0.0),
     vec2f(1.0, 1.0),
+);
+
+/// Same as corner lookup but flipped vertically and horizontally
+///
+/// 4----3  0
+/// |   / / |
+/// |  / /  |
+/// | / /   |
+/// 5  1----2
+const UV_LOOKUP: array<vec2f, 6> = array<vec2f, 6>(
+    vec2f(1.0, 0.0),
+    vec2f(0.0, 1.0),
+    vec2f(1.0, 1.0),
+    vec2f(1.0, 0.0),
+    vec2f(0.0, 0.0),
+    vec2f(0.0, 1.0),
 );
 
 fn to_clip_coords(position: vec2f) -> vec4f {
