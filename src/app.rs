@@ -3,6 +3,7 @@ use std::time::Duration;
 
 use futures::executor::block_on;
 use smallvec::smallvec;
+use tracing::instrument;
 use winit::application::ApplicationHandler;
 use winit::event::WindowEvent;
 use winit::event_loop::ActiveEventLoop;
@@ -48,6 +49,7 @@ impl App {
 }
 
 impl ApplicationHandler for App {
+    #[instrument(skip_all)]
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         let window = Arc::new(
             event_loop
@@ -61,12 +63,12 @@ impl ApplicationHandler for App {
 
         let mut graphics_context = block_on(async { GraphicsContext::new(window.clone()).await });
 
-        graphics_context.load_image("test.png").unwrap();
+        // graphics_context.load_image("test.png").unwrap();
 
         // Render to the window before showing it to avoid flashing when
         // creating the window for the first time.
         let mut canvas = graphics_context.get_canvas();
-        canvas.begin(Color::BLACK);
+        canvas.clear(Color::BLACK);
         graphics_context
             .render(smallvec![(window.id(), canvas)])
             .unwrap();
@@ -77,11 +79,13 @@ impl ApplicationHandler for App {
         self.graphics = Some(graphics_context);
     }
 
+    #[instrument(skip_all)]
     fn suspended(&mut self, _: &ActiveEventLoop) {
         self.windows.clear();
         self.graphics = None;
     }
 
+    #[instrument(skip(self, event_loop))]
     fn window_event(
         &mut self,
         event_loop: &ActiveEventLoop,
@@ -118,8 +122,7 @@ impl ApplicationHandler for App {
                 let graphics = self.graphics.as_mut().unwrap();
                 let mut canvas = graphics.get_canvas();
 
-                canvas.begin(Color::srgb(0.1, 0.2, 0.3, 1.0));
-
+                canvas.clear(Color::srgb(0.1, 0.2, 0.3, 1.0));
                 canvas.draw(Primitive::new(100.0, 100.0, 50.0, 50.0, Color::WHITE));
                 canvas.draw(Primitive::new(200.0, 200.0, 50.0, 50.0, Color::WHITE));
                 canvas.draw(Primitive::new(300.0, 300.0, 50.0, 50.0, Color::WHITE));

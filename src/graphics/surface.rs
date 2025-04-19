@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use tracing::debug;
 use tracing::info;
+use tracing::instrument;
 use winit::window::Window;
 use winit::window::WindowId;
 
@@ -32,6 +33,7 @@ pub struct Surface {
 }
 
 impl Surface {
+    #[instrument(skip_all)]
     pub(crate) fn new(
         window: Arc<Window>,
         surface: wgpu::Surface<'static>,
@@ -80,7 +82,7 @@ impl Surface {
 
         surface.configure(device, &config);
 
-        let render_pipeline = pipeline_cache.get_pipeline(format);
+        let render_pipeline = pipeline_cache.get(format);
 
         let frames_in_flight = [Frame::new(&render_pipeline), Frame::new(&render_pipeline)];
 
@@ -98,7 +100,7 @@ impl Surface {
         self.window.id()
     }
 
-    #[tracing::instrument(skip(self))]
+    #[instrument(skip(self, device))]
     pub fn resize_if_necessary(&mut self, device: &wgpu::Device) {
         let new_size = self.window.inner_size();
 
@@ -121,7 +123,7 @@ impl Surface {
         self.window.pre_present_notify();
     }
 
-    #[tracing::instrument(skip_all)]
+    #[instrument(skip_all)]
     pub(crate) fn write_commands(
         &mut self,
         queue: &wgpu::Queue,
@@ -170,7 +172,7 @@ impl Surface {
             wgpu::LoadOp::Load
         };
 
-        {
+        tracing::info_span!("render_pass").in_scope(|| {
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("Render Pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -203,14 +205,28 @@ impl Surface {
             let mut vertex_offset = 0;
             for command in canvas.commands() {
                 match command {
-                    DrawCommand::Draw { num_vertices } => {
+                    DrawCommand::Draw {
+                        texture,
+                        num_vertices,
+                    } => {
                         debug!("Drawing vertices from {vertex_offset} to {num_vertices}");
-                        render_pass.draw(vertex_offset..vertex_offset + *num_vertices, 0..1);
-                        vertex_offset += *num_vertices;
+
+                        let Some(texture) = canvas.texture(*texture).and_then(|t| t.get()) else {
+                            debug!("Texture not found: {texture:?}");
+                            continue;
+                        };
+
+                        if texture.is_ready {
+                            self.render_pipeline
+                                .bind_texture(&mut render_pass, &texture);
+
+                            render_pass.draw(vertex_offset..vertex_offset + *num_vertices, 0..1);
+                            vertex_offset += *num_vertices;
+                        }
                     }
                 }
             }
-        }
+        });
 
         self.frame_counter += 1;
 

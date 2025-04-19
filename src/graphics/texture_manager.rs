@@ -11,6 +11,7 @@ use image::ImageReader;
 use tracing::field::Empty;
 use tracing::info;
 use tracing::info_span;
+use tracing::instrument;
 
 #[derive(Debug)]
 pub enum TextureLoadError {
@@ -33,13 +34,16 @@ impl From<image::ImageError> for TextureLoadError {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+/// A unique identifier for a texture.
+///
+/// `TextureId::default()` points to the white pixel texture used if a texture
+/// is not otherwise needed.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub struct TextureId {
     pub index: u32,
     pub version: u32,
 }
 
-#[derive(Clone)]
 pub struct Texture {
     index: u32,
     version: u32,
@@ -55,6 +59,17 @@ impl Texture {
         TextureId {
             index: self.index,
             version: self.version,
+        }
+    }
+
+    pub fn get(&self) -> Option<StoredTexture> {
+        let inner = self.manager.borrow();
+        let slot = &inner.textures[self.index as usize];
+
+        if slot.version == self.version {
+            slot.texture.clone()
+        } else {
+            None
         }
     }
 }
@@ -74,11 +89,35 @@ impl Hash for Texture {
     }
 }
 
+impl Clone for Texture {
+    fn clone(&self) -> Self {
+        let mut inner = self.manager.borrow_mut();
+        let slot = &mut inner.textures[self.index as usize];
+        slot.refcounts += 1;
+
+        info!("Cloning texture handle. Refcount: {}", slot.refcounts);
+
+        Texture {
+            manager: self.manager.clone(),
+            ..*self
+        }
+    }
+}
+
 impl Drop for Texture {
     fn drop(&mut self) {
         let mut inner = self.manager.borrow_mut();
+
         inner.release(self.index);
     }
+}
+
+#[derive(Clone)]
+pub struct StoredTexture {
+    pub texture: wgpu::Texture,
+    pub is_ready: bool,
+    pub view: wgpu::TextureView,
+    pub bind_group: wgpu::BindGroup,
 }
 
 #[derive(Clone)]
@@ -89,10 +128,18 @@ pub(crate) struct TextureManager {
     device: wgpu::Device,
 
     ready_sender: mpsc::Sender<TextureId>,
+
+    /// The bind group layout that we use for textures. Storing it here allows
+    /// us to construct bind groups for our textures once.
+    texture_bind_group_layout: wgpu::BindGroupLayout,
 }
 
 impl TextureManager {
-    pub fn new(queue: wgpu::Queue, device: wgpu::Device) -> Self {
+    pub fn new(
+        queue: wgpu::Queue,
+        device: wgpu::Device,
+        texture_bind_group_layout: wgpu::BindGroupLayout,
+    ) -> Self {
         let (ready_sender, ready_receiver) = mpsc::channel();
 
         let inner = TextureManagerInner {
@@ -101,14 +148,143 @@ impl TextureManager {
             ready_receiver,
         };
 
-        Self {
+        let this = Self {
             queue,
             device,
             inner: Rc::new(RefCell::new(inner)),
             ready_sender,
+            texture_bind_group_layout,
+        };
+
+        let white_pixel = this.from_memory(
+            &[255, 255, 255, 255],
+            1,
+            wgpu::TextureFormat::Rgba8Unorm,
+            Some("White Pixel"),
+        );
+
+        // Always keep a reference to the white pixel texture.
+        std::mem::forget(white_pixel);
+
+        this
+    }
+
+    pub fn white_pixel(&self) -> Texture {
+        let mut inner = self.inner.borrow_mut();
+
+        let slot = &mut inner.textures[0];
+        slot.refcounts += 1;
+
+        Texture {
+            index: 0,
+            version: 0,
+            width: 1,
+            height: 1,
+            manager: self.inner.clone(),
         }
     }
 
+    #[instrument(skip(self, data))]
+    pub fn from_memory(
+        &self,
+        data: &[u8],
+        width: u32,
+        format: wgpu::TextureFormat,
+        name: Option<&str>,
+    ) -> Texture {
+        let mut inner = self.inner.borrow_mut();
+
+        let bytes_per_row = width * bytes_per_pixel(format);
+        let height = data.len() as u32 / bytes_per_row;
+
+        assert!(
+            data.len() as u32 % bytes_per_row == 0,
+            "Data length is not a multiple of width and pixel size: data.len() = {}, width = {}, bytes per pixel = {}",
+            data.len(),
+            width,
+            bytes_per_pixel(format)
+        );
+
+        let texture = self.device.create_texture(&wgpu::TextureDescriptor {
+            label: name,
+            size: wgpu::Extent3d {
+                width,
+                height,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba8UnormSrgb,
+            usage: wgpu::TextureUsages::COPY_DST | wgpu::TextureUsages::TEXTURE_BINDING,
+            view_formats: &[],
+        });
+
+        let (index, version, slot) = if let Some(free_slot_idx) = inner.free_slots.pop() {
+            let slot = &mut inner.textures[free_slot_idx as usize];
+            (free_slot_idx, slot.version, slot)
+        } else {
+            let index = inner.textures.len() as u32;
+            inner.textures.push(TextureSlot::default());
+            (index, 0, inner.textures.last_mut().unwrap())
+        };
+
+        // 1 reference. We don't care about the loader thread because the
+        // texture itself is also refcounted by wgpu.
+        slot.refcounts = 1;
+        slot.texture = {
+            let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+            let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: None,
+                layout: &self.texture_bind_group_layout,
+                entries: &[wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&view),
+                }],
+            });
+
+            Some(StoredTexture {
+                is_ready: false,
+                texture: texture.clone(),
+                view,
+                bind_group,
+            })
+        };
+
+        self.queue.write_texture(
+            wgpu::TexelCopyTextureInfo {
+                texture: &texture,
+                mip_level: 0,
+                origin: wgpu::Origin3d { x: 0, y: 0, z: 0 },
+                aspect: wgpu::TextureAspect::All,
+            },
+            data,
+            wgpu::TexelCopyBufferLayout {
+                offset: 0,
+                bytes_per_row: Some(bytes_per_row),
+                rows_per_image: Some(height),
+            },
+            wgpu::Extent3d {
+                width,
+                height,
+                depth_or_array_layers: 1,
+            },
+        );
+
+        self.ready_sender
+            .send(TextureId { index, version })
+            .unwrap();
+
+        Texture {
+            index,
+            version,
+            width: width as u16,
+            height: height as u16,
+            manager: self.inner.clone(),
+        }
+    }
+
+    #[instrument(skip(self), fields(path = %path.as_ref().display()))]
     pub fn load(&self, path: impl AsRef<Path>) -> Result<Texture, TextureLoadError> {
         let start_time = std::time::Instant::now();
 
@@ -152,7 +328,24 @@ impl TextureManager {
         // 1 reference. We don't care about the loader thread because the
         // texture itself is also refcounted by wgpu.
         slot.refcounts = 1;
-        slot.texture = Some(texture.clone());
+        slot.texture = {
+            let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+            let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: None,
+                layout: &self.texture_bind_group_layout,
+                entries: &[wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&view),
+                }],
+            });
+
+            Some(StoredTexture {
+                is_ready: false,
+                texture: texture.clone(),
+                view,
+                bind_group,
+            })
+        };
 
         tokio::task::spawn_blocking({
             let span = info_span!(
@@ -232,7 +425,7 @@ impl TextureManager {
             let slot = &mut inner.textures[texture_id.index as usize];
 
             if slot.version == texture_id.version {
-                slot.is_copied = true;
+                slot.texture.as_mut().unwrap().is_ready = true;
             }
         }
     }
@@ -249,6 +442,8 @@ impl TextureManagerInner {
         let slot = &mut self.textures[slot_index as usize];
         slot.refcounts -= 1;
 
+        info!("Dropping texture handle. Refcount: {}", slot.refcounts);
+
         if slot.refcounts == 0 {
             slot.version += 1;
             slot.texture = None;
@@ -260,7 +455,13 @@ impl TextureManagerInner {
 #[derive(Default)]
 struct TextureSlot {
     version: u32,
-    texture: Option<wgpu::Texture>,
-    is_copied: bool,
+    texture: Option<StoredTexture>,
     refcounts: u32,
+}
+
+fn bytes_per_pixel(format: wgpu::TextureFormat) -> u32 {
+    match format {
+        wgpu::TextureFormat::Rgba8Unorm | wgpu::TextureFormat::Rgba8UnormSrgb => 4,
+        _ => unimplemented!(),
+    }
 }

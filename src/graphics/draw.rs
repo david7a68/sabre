@@ -49,9 +49,7 @@ impl Primitive {
             uvwh: self.texture.as_ref().map_or([0.0; 4], |texture| {
                 [texture.uv[0], texture.uv[1], texture.wh[0], texture.wh[1]]
             }),
-            texture_id: 0,
             color: self.color,
-            padding: [0; 3],
         }
     }
 }
@@ -63,13 +61,14 @@ pub(crate) struct GpuPrimitive {
     pub size: [f32; 2],
     pub uvwh: [f32; 4],
     pub color: Color,
-    pub texture_id: u32,
-    pub padding: [u32; 3],
 }
 
 #[derive(Clone, Copy, Debug)]
 pub enum DrawCommand {
-    Draw { num_vertices: u32 },
+    Draw {
+        texture: TextureId,
+        num_vertices: u32,
+    },
 }
 
 #[derive(Default)]
@@ -78,8 +77,7 @@ pub(crate) struct CanvasStorage {
     commands: Vec<DrawCommand>,
     primitives: Vec<GpuPrimitive>,
 
-    textures: Vec<Texture>,
-    texture_map: HashMap<TextureId, u16>,
+    textures: HashMap<TextureId, Texture>,
 }
 
 pub struct Canvas {
@@ -90,10 +88,23 @@ pub struct Canvas {
 
 impl Canvas {
     pub(super) fn new(
-        storage: CanvasStorage,
+        mut storage: CanvasStorage,
         texture_manager: TextureManager,
         return_sender: mpsc::Sender<CanvasStorage>,
     ) -> Self {
+        storage.clear_color = None;
+        storage.commands.clear();
+        storage.primitives.clear();
+        storage.textures.clear();
+
+        storage.commands.push(DrawCommand::Draw {
+            texture: TextureId::default(),
+            num_vertices: 0,
+        });
+
+        let white_pixel = texture_manager.white_pixel();
+        storage.textures.insert(white_pixel.id(), white_pixel);
+
         Self {
             storage,
             texture_manager,
@@ -109,14 +120,15 @@ impl Canvas {
         &self.storage.commands
     }
 
+    pub fn texture(&self, id: TextureId) -> Option<&Texture> {
+        self.storage.textures.get(&id)
+    }
+
     pub fn clear_color(&self) -> Option<Color> {
         self.storage.clear_color
     }
 
-    pub fn begin(&mut self, clear_color: impl Into<Option<Color>>) {
-        self.storage.commands.clear();
-        self.storage.primitives.clear();
-
+    pub fn clear(&mut self, clear_color: impl Into<Option<Color>>) {
         self.storage.clear_color = clear_color.into();
     }
 
@@ -124,30 +136,32 @@ impl Canvas {
         self.texture_manager.load(path)
     }
 
-    pub fn draw(&mut self, primitive: Primitive) {
-        if let Some(DrawCommand::Draw { num_vertices }) = self.storage.commands.last_mut() {
+    pub fn draw(&mut self, mut primitive: Primitive) {
+        let texture = primitive.texture.take().unwrap_or(DrawTexture {
+            uv: [0.0, 0.0],
+            wh: [1.0, 1.0],
+            texture: self.texture_manager.white_pixel(),
+        });
+
+        let DrawCommand::Draw {
+            texture: prev_texture,
+            num_vertices,
+        } = self.storage.commands.last_mut().unwrap();
+
+        if *prev_texture == texture.texture.id() {
             *num_vertices += VERTICES_PER_PRIMITIVE;
         } else {
+            self.storage
+                .textures
+                .insert(texture.texture.id(), texture.texture.clone());
+
             self.storage.commands.push(DrawCommand::Draw {
+                texture: texture.texture.id(),
                 num_vertices: VERTICES_PER_PRIMITIVE,
             });
         }
 
-        let mut gpu_primitive = primitive.extract();
-
-        gpu_primitive.texture_id = primitive.texture.map_or(0, |texture| {
-            let id = texture.texture.id();
-            if let Some(index) = self.storage.texture_map.get(&id) {
-                *index as u32
-            } else {
-                let index = self.storage.textures.len() as u16;
-                self.storage.textures.push(texture.texture.clone());
-                self.storage.texture_map.insert(id, index);
-                index as u32
-            }
-        });
-
-        self.storage.primitives.push(gpu_primitive);
+        self.storage.primitives.push(primitive.extract());
     }
 }
 

@@ -4,6 +4,7 @@ use std::sync::mpsc;
 
 use smallvec::SmallVec;
 use tracing::info;
+use tracing::instrument;
 use tracing::warn;
 use winit::window::Window;
 use winit::window::WindowId;
@@ -44,6 +45,7 @@ pub struct GraphicsContext {
 }
 
 impl GraphicsContext {
+    #[instrument(skip(window))]
     pub async fn new(window: Arc<Window>) -> Self {
         info!("Creating graphics context");
 
@@ -100,7 +102,11 @@ impl GraphicsContext {
 
         let render_pipelines = Arc::new(RenderPipelineCache::new(device.clone()));
 
-        let textures = TextureManager::new(queue.clone(), device.clone());
+        let textures = TextureManager::new(
+            queue.clone(),
+            device.clone(),
+            render_pipelines.texture_bind_group_layout().clone(),
+        );
 
         let (canvas_reclaim_sender, canvas_reclaim_receiver) = mpsc::channel();
 
@@ -126,6 +132,7 @@ impl GraphicsContext {
         }
     }
 
+    #[instrument(skip(self))]
     pub fn init_surface(&mut self, window: Arc<Window>) {
         let surface = self.instance.create_surface(window.clone()).unwrap();
         self.windows.push(Surface::new(
@@ -137,6 +144,7 @@ impl GraphicsContext {
         ));
     }
 
+    #[instrument(skip(self))]
     pub fn destroy_surface(&mut self, window_id: WindowId) {
         if let Some(index) = self.windows.iter().position(|w| w.window_id() == window_id) {
             self.windows.remove(index);
@@ -145,10 +153,12 @@ impl GraphicsContext {
         }
     }
 
+    #[instrument(skip(self, path), fields(path = %path.as_ref().display()))]
     pub fn load_image(&mut self, path: impl AsRef<Path>) -> Result<Texture, TextureLoadError> {
         self.textures.load(path)
     }
 
+    #[instrument(skip(self))]
     pub fn get_canvas(&mut self) -> Canvas {
         let storage = self
             .canvas_reclaim_receiver
@@ -163,7 +173,7 @@ impl GraphicsContext {
         )
     }
 
-    #[tracing::instrument(skip(self, targets))]
+    #[instrument(skip(self, targets))]
     pub fn render(
         &mut self,
         targets: SmallVec<[(WindowId, Canvas); 2]>,
