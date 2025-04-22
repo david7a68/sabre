@@ -221,16 +221,20 @@ impl Surface {
                         texture,
                         num_vertices,
                     } => {
-                        debug!("Drawing vertices from {vertex_offset} to {num_vertices}");
+                        debug!(
+                            texture = ?texture,
+                            "Drawing vertices from {vertex_offset} to {}",
+                            vertex_offset + num_vertices
+                        );
 
-                        let Some(texture) = canvas.texture(*texture).and_then(|t| t.get()) else {
+                        let Some(texture) = canvas.texture(*texture) else {
                             debug!("Texture not found: {texture:?}");
                             continue;
                         };
 
-                        if texture.is_ready {
+                        if texture.is_ready() {
                             self.render_pipeline
-                                .bind_texture(&mut render_pass, &texture);
+                                .bind_texture(&mut render_pass, &texture.storage());
 
                             render_pass.draw(vertex_offset..vertex_offset + *num_vertices, 0..1);
                             vertex_offset += *num_vertices;

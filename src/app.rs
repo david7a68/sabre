@@ -26,6 +26,7 @@ pub struct App {
     graphics: Option<GraphicsContext>,
     windows: Vec<Arc<Window>>,
     texture: Option<Texture>,
+    texture2: Option<Texture>,
 }
 
 impl App {
@@ -35,6 +36,7 @@ impl App {
             graphics: None,
             windows: vec![],
             texture: None,
+            texture2: None,
         }
     }
 }
@@ -68,6 +70,7 @@ impl ApplicationHandler for App {
         let mut graphics_context = block_on(async { GraphicsContext::new(window.clone()).await });
 
         self.texture = Some(graphics_context.load_image("scratch/test.png").unwrap());
+        self.texture2 = Some(graphics_context.load_image("scratch/test2.png").unwrap());
 
         // Render to the window before showing it to avoid flashing when
         // creating the window for the first time.
@@ -136,6 +139,10 @@ impl ApplicationHandler for App {
                 canvas.draw(
                     Primitive::new(200.0, 50.0, 400.0, 450.0, Color::WHITE)
                         .with_texture(self.texture.clone().unwrap(), None),
+                );
+                canvas.draw(
+                    Primitive::new(200.0, 50.0, 300.0, 100.0, Color::WHITE)
+                        .with_texture(self.texture2.clone().unwrap(), None),
                 );
 
                 graphics.render(smallvec![(window.id(), canvas)]).unwrap();

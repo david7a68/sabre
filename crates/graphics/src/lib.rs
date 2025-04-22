@@ -1,4 +1,6 @@
+use std::cell::RefCell;
 use std::path::Path;
+use std::rc::Rc;
 use std::sync::Arc;
 use std::sync::mpsc;
 
@@ -13,21 +15,21 @@ use workspace_hack as _;
 pub use color::Color;
 pub use draw::Canvas;
 pub use draw::Primitive;
-pub use texture_manager::Texture;
-pub use texture_manager::TextureId;
-pub use texture_manager::TextureLoadError;
+pub use texture::Texture;
+pub use texture::TextureId;
+pub use texture::TextureLoadError;
 
 use self::draw::CanvasStorage;
 use self::pipeline::RenderPipelineCache;
 use self::surface::RenderError;
 use self::surface::Surface;
-use self::texture_manager::TextureManager;
+use self::texture::TextureManager;
 
 mod color;
 mod draw;
 mod pipeline;
 mod surface;
-mod texture_manager;
+mod texture;
 
 pub struct GraphicsContext {
     pub instance: wgpu::Instance,
@@ -36,7 +38,7 @@ pub struct GraphicsContext {
     pub queue: wgpu::Queue,
 
     windows: Vec<Surface>,
-    textures: TextureManager,
+    textures: Rc<RefCell<TextureManager>>,
 
     /// Send canvas storage back to the pool.
     canvas_reclaim_sender: mpsc::Sender<CanvasStorage>,
@@ -121,7 +123,7 @@ impl GraphicsContext {
             queue,
 
             windows,
-            textures,
+            textures: Rc::new(RefCell::new(textures)),
             canvas_reclaim_sender,
             canvas_reclaim_receiver,
             render_pipelines,
@@ -151,7 +153,7 @@ impl GraphicsContext {
 
     #[instrument(skip(self, path), fields(path = %path.as_ref().display()))]
     pub fn load_image(&mut self, path: impl AsRef<Path>) -> Result<Texture, TextureLoadError> {
-        self.textures.load(path)
+        self.textures.borrow_mut().load(path)
     }
 
     #[instrument(skip(self))]
@@ -177,7 +179,7 @@ impl GraphicsContext {
         let mut command_buffers = SmallVec::<[_; 2]>::new();
         let mut presents = SmallVec::<[_; 2]>::new();
 
-        self.textures.flush();
+        self.textures.borrow_mut().flush();
 
         for (window_id, canvas) in targets {
             let Some(window) = self.windows.iter_mut().find(|w| w.window_id() == window_id) else {
@@ -209,6 +211,8 @@ impl GraphicsContext {
                 target.present();
             }
         });
+
+        self.textures.borrow_mut().end_frame();
 
         tracing_tracy::client::frame_mark();
 
