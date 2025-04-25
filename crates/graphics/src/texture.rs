@@ -177,8 +177,8 @@ struct TextureManagerInner {
     queue: wgpu::Queue,
     device: wgpu::Device,
 
-    ready_sender: mpsc::Sender<(TextureId, wgpu::TextureFormat)>,
-    ready_receiver: mpsc::Receiver<(TextureId, wgpu::TextureFormat)>,
+    ready_sender: mpsc::Sender<TextureId>,
+    ready_receiver: mpsc::Receiver<TextureId>,
 
     /// The bind group layout that we use for textures. Storing it here allows
     /// us to construct bind groups for our textures once.
@@ -260,7 +260,16 @@ impl TextureManagerInner {
         if let Some(usage) = texture_map.get_mut(id) {
             usage.refcount -= 1;
             if usage.refcount == 0 {
-                texture_map.remove(id);
+                let usage = texture_map.remove(id).unwrap();
+
+                let storage = match usage.format {
+                    wgpu::TextureFormat::Rgba8Unorm => &self.rgba_textures,
+                    wgpu::TextureFormat::Rgba8UnormSrgb => &self.srgba_textures,
+                    wgpu::TextureFormat::R8Unorm => &self.alpha_textures,
+                    _ => unreachable!(),
+                };
+
+                storage.borrow_mut().release(usage.storage, usage.atlas_id);
             }
         }
     }
@@ -287,6 +296,7 @@ impl TextureManagerInner {
         Some(callback(usage))
     }
 
+    #[instrument(skip(self, data))]
     pub fn from_memory(
         self: &Rc<Self>,
         data: &[u8],
@@ -294,12 +304,6 @@ impl TextureManagerInner {
         format: wgpu::TextureFormat,
         name: Option<&str>,
     ) -> Texture {
-        info!(
-            name = name,
-            format = ?format,
-            "Loading texture from memory",
-        );
-
         let bytes_per_row = width as usize * bytes_per_pixel(format);
         let height = (data.len() / bytes_per_row)
             .try_into()
@@ -327,8 +331,6 @@ impl TextureManagerInner {
         let uvwh = usage.uvwh;
         let texture_id = self.texture_map.borrow_mut().insert(usage);
 
-        debug!("Created texture: {texture_id:?}");
-
         self.queue.write_texture(
             wgpu::TexelCopyTextureInfo {
                 texture: &texture,
@@ -353,7 +355,17 @@ impl TextureManagerInner {
             },
         );
 
-        self.ready_sender.send((texture_id, format)).unwrap();
+        self.ready_sender.send(texture_id).unwrap();
+
+        info!(
+            x = rectangle.x_range().start,
+            y = rectangle.y_range().start,
+            width = rectangle.width(),
+            height = rectangle.height(),
+            uvwh = ?uvwh,
+            texture_id = ?texture_id,
+            "Loaded texture from memory"
+        );
 
         Texture {
             id: texture_id,
@@ -363,6 +375,7 @@ impl TextureManagerInner {
         }
     }
 
+    #[instrument(skip(self, path), fields(path = %path.as_ref().display()))]
     fn load(self: &Rc<Self>, path: impl AsRef<Path>) -> Result<Texture, TextureLoadError> {
         info!("Loading texture from file: {:?}", path.as_ref().display());
 
@@ -384,11 +397,8 @@ impl TextureManagerInner {
             )
         };
 
-        let (mut manager, texture_format) = match color_type {
-            image::ColorType::Rgba8 => (
-                self.srgba_textures.borrow_mut(),
-                wgpu::TextureFormat::Rgba8UnormSrgb,
-            ),
+        let mut manager = match color_type {
+            image::ColorType::Rgba8 => self.srgba_textures.borrow_mut(),
             other => unimplemented!("Unsupported color type: {:?}", other),
         };
 
@@ -401,18 +411,6 @@ impl TextureManagerInner {
 
         let uvwh = usage.uvwh;
         let texture_id = self.texture_map.borrow_mut().insert(usage);
-
-        debug!(
-            x = rectangle.x_range().start,
-            y = rectangle.y_range().start,
-            width = rectangle.width(),
-            height = rectangle.height(),
-            u = uvwh[0],
-            v = uvwh[1],
-            w = uvwh[2],
-            h = uvwh[3],
-            "Created texture: {texture_id:?}"
-        );
 
         tokio::task::spawn_blocking({
             let span = info_span!(
@@ -469,11 +467,15 @@ impl TextureManagerInner {
                     },
                 );
 
-                ready.send((texture_id, texture_format)).unwrap();
+                ready.send(texture_id).unwrap();
 
                 info!(
-                    "Texture loaded after {} ms",
-                    start_time.elapsed().as_secs_f32() * 1000.0
+                    x = rectangle.x_range().start,
+                    y = rectangle.y_range().start,
+                    uvwh = ?uvwh,
+                    texture_id = ?texture_id,
+                    load_time = ?start_time.elapsed(),
+                    "Loaded texture from file"
                 );
             }
         });
@@ -487,7 +489,7 @@ impl TextureManagerInner {
     }
 
     fn flush(self: &Rc<Self>) {
-        while let Ok((texture_id, format)) = self.ready_receiver.try_recv() {
+        while let Ok(texture_id) = self.ready_receiver.try_recv() {
             if let Some(usage) = self.texture_map.borrow_mut().get_mut(texture_id) {
                 usage.is_ready = true;
                 debug!(texture_id = ?texture_id, "Texture is ready: {texture_id:?}");
@@ -525,8 +527,9 @@ impl FormattedTextureManager {
     }
 
     /// Release a reference for the given texture.
-    fn release(&mut self, storage: StorageId) {
+    fn release(&mut self, storage: StorageId, node: AllocId) {
         let storage = self.storage.get_mut(storage).unwrap();
+        storage.atlas.deallocate(node);
         storage.refcount -= 1;
     }
 
@@ -606,14 +609,12 @@ impl FormattedTextureManager {
             (storage_id, texture, atlas_size, allocation)
         })();
 
-        let u = (rectangle.x_range().start as f32 + 0.5) / atlas_rect.width as f32;
-        let v = (rectangle.y_range().start as f32 + 0.5) / atlas_rect.height as f32;
-        let w = (rectangle.width() as f32 - 1.0) / atlas_rect.width as f32;
-        let h = (rectangle.height() as f32 - 1.0) / atlas_rect.height as f32;
-
-        let uvwh = [u, v, w, h];
-
-        debug!(uvwh = ?uvwh, "Allocated texture coordinates");
+        // Inset the rectangle by 0.5 pixels to avoid sampling bleed.
+        let uv_rect = rectangle.cast::<f32>().inflate(-0.5, -0.5);
+        let u = uv_rect.x_range().start / atlas_rect.width as f32;
+        let v = uv_rect.y_range().start / atlas_rect.height as f32;
+        let w = uv_rect.width() / atlas_rect.width as f32;
+        let h = uv_rect.height() / atlas_rect.height as f32;
 
         (
             texture,
@@ -623,7 +624,7 @@ impl FormattedTextureManager {
                 refcount: 1,
                 atlas_id: id,
                 format: self.format,
-                uvwh,
+                uvwh: [u, v, w, h],
             },
             rectangle,
         )

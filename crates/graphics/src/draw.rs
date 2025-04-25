@@ -56,7 +56,7 @@ pub(crate) struct GpuPrimitive {
 #[derive(Clone, Copy, Debug)]
 pub enum DrawCommand {
     Draw {
-        texture: TextureId,
+        texture_id: TextureId,
         num_vertices: u32,
     },
 }
@@ -90,7 +90,7 @@ impl Canvas {
         let white_pixel = texture_manager.borrow().white_pixel();
 
         storage.commands.push(DrawCommand::Draw {
-            texture: white_pixel.id(),
+            texture_id: white_pixel.id(),
             num_vertices: 0,
         });
         storage.textures.insert(white_pixel.id(), white_pixel);
@@ -148,13 +148,8 @@ impl Canvas {
             ]
         };
 
-        tracing::debug!(
-            texture_id = ?texture.id(),
-            uvwh = ?[uvwh[0], uvwh[1], uvwh[2], uvwh[3]],
-            "Drawing primitive: {point:?} {size:?} {color:?}");
-
         let DrawCommand::Draw {
-            texture: prev_texture,
+            texture_id: prev_texture,
             num_vertices,
         } = self.storage.commands.last_mut().unwrap();
 
@@ -164,7 +159,7 @@ impl Canvas {
             self.storage.textures.insert(texture.id(), texture.clone());
 
             self.storage.commands.push(DrawCommand::Draw {
-                texture: texture.id(),
+                texture_id: texture.id(),
                 num_vertices: VERTICES_PER_PRIMITIVE,
             });
         }

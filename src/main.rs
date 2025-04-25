@@ -27,8 +27,8 @@ fn main() {
             .with_targets([
                 ("naga", Level::WARN),
                 ("wgpu_core", Level::WARN),
-                ("wgpu_hal", Level::INFO),
-                ("wgpu", Level::INFO),
+                ("wgpu_hal", Level::WARN),
+                ("wgpu", Level::WARN),
             ])
     });
 
