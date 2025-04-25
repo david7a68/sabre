@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
 use tracing::debug;
-use tracing::info;
 use tracing::instrument;
+use tracing::trace;
 use winit::window::Window;
 use winit::window::WindowId;
 
@@ -111,7 +111,7 @@ impl Surface {
         }
 
         if new_size.width > 0 && new_size.height > 0 {
-            debug!("Recreating lost or outdated surface. New size: {new_size:?}",);
+            trace!("Recreating lost or outdated surface. New size: {new_size:?}",);
 
             self.surface_config.width = new_size.width;
             self.surface_config.height = new_size.height;
@@ -123,20 +123,20 @@ impl Surface {
         self.window.pre_present_notify();
     }
 
-    #[instrument(skip_all)]
+    #[instrument(
+        skip_all,
+        fields(
+            frame_id = self.frame_counter,
+            num_primitives = canvas.primitives().len(),
+            num_commands = canvas.commands().len()
+        )
+    )]
     pub(crate) fn write_commands(
         &mut self,
         queue: &wgpu::Queue,
         device: &wgpu::Device,
         canvas: &Canvas,
     ) -> Result<(wgpu::SurfaceTexture, wgpu::CommandBuffer), RenderError> {
-        info!(
-            "Rendering frame {} with {} primitives and {} commands",
-            self.frame_counter,
-            canvas.primitives().len(),
-            canvas.commands().len(),
-        );
-
         let output = tracing::info_span!("get_current_texture").in_scope(|| {
             let mut attempts = 0;
 
@@ -218,19 +218,20 @@ impl Surface {
             for command in canvas.commands() {
                 match command {
                     DrawCommand::Draw {
-                        texture,
+                        texture_id,
                         num_vertices,
                     } => {
-                        debug!("Drawing vertices from {vertex_offset} to {num_vertices}");
-
-                        let Some(texture) = canvas.texture(*texture).and_then(|t| t.get()) else {
-                            debug!("Texture not found: {texture:?}");
+                        let Some(texture) = canvas.texture(*texture_id) else {
+                            debug!(
+                                texture_id = ?texture_id,
+                                "Texture not found, skipping primitives"
+                            );
                             continue;
                         };
 
-                        if texture.is_ready {
+                        if texture.is_ready() {
                             self.render_pipeline
-                                .bind_texture(&mut render_pass, &texture);
+                                .bind_texture(&mut render_pass, &texture.storage());
 
                             render_pass.draw(vertex_offset..vertex_offset + *num_vertices, 0..1);
                             vertex_offset += *num_vertices;

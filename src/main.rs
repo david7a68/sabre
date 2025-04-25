@@ -22,12 +22,14 @@ impl tracing_tracy::Config for TracyConfig {
 fn main() {
     let env_filter = tracing_subscriber::EnvFilter::try_from_default_env().ok();
     let def_filter = env_filter.is_none().then(|| {
-        tracing_subscriber::filter::Targets::new().with_targets([
-            ("wgpu_core", Level::WARN),
-            ("wgpu_hal", Level::WARN),
-            ("wgpu", Level::WARN),
-            ("sabre", Level::DEBUG),
-        ])
+        tracing_subscriber::filter::Targets::new()
+            .with_default(Level::DEBUG)
+            .with_targets([
+                ("naga", Level::WARN),
+                ("wgpu_core", Level::WARN),
+                ("wgpu_hal", Level::WARN),
+                ("wgpu", Level::WARN),
+            ])
     });
 
     tracing_subscriber::registry()

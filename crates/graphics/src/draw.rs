@@ -1,5 +1,7 @@
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::path::Path;
+use std::rc::Rc;
 use std::sync::mpsc;
 
 use bytemuck::Pod;
@@ -7,10 +9,10 @@ use bytemuck::Zeroable;
 
 use crate::color::Color;
 
-use super::texture_manager::Texture;
-use super::texture_manager::TextureId;
-use super::texture_manager::TextureLoadError;
-use super::texture_manager::TextureManager;
+use super::texture::Texture;
+use super::texture::TextureId;
+use super::texture::TextureLoadError;
+use super::texture::TextureManager;
 
 const VERTICES_PER_PRIMITIVE: u32 = 6;
 
@@ -54,7 +56,7 @@ pub(crate) struct GpuPrimitive {
 #[derive(Clone, Copy, Debug)]
 pub enum DrawCommand {
     Draw {
-        texture: TextureId,
+        texture_id: TextureId,
         num_vertices: u32,
     },
 }
@@ -70,14 +72,14 @@ pub(crate) struct CanvasStorage {
 
 pub struct Canvas {
     storage: CanvasStorage,
-    texture_manager: TextureManager,
+    texture_manager: Rc<RefCell<TextureManager>>,
     return_sender: mpsc::Sender<CanvasStorage>,
 }
 
 impl Canvas {
     pub(super) fn new(
         mut storage: CanvasStorage,
-        texture_manager: TextureManager,
+        texture_manager: Rc<RefCell<TextureManager>>,
         return_sender: mpsc::Sender<CanvasStorage>,
     ) -> Self {
         storage.clear_color = None;
@@ -85,12 +87,12 @@ impl Canvas {
         storage.primitives.clear();
         storage.textures.clear();
 
+        let white_pixel = texture_manager.borrow().white_pixel();
+
         storage.commands.push(DrawCommand::Draw {
-            texture: TextureId::default(),
+            texture_id: white_pixel.id(),
             num_vertices: 0,
         });
-
-        let white_pixel = texture_manager.white_pixel();
         storage.textures.insert(white_pixel.id(), white_pixel);
 
         Self {
@@ -121,7 +123,7 @@ impl Canvas {
     }
 
     pub fn load_texture(&mut self, path: impl AsRef<Path>) -> Result<Texture, TextureLoadError> {
-        self.texture_manager.load(path)
+        self.texture_manager.borrow_mut().load(path)
     }
 
     pub fn draw(&mut self, primitive: Primitive) {
@@ -133,11 +135,21 @@ impl Canvas {
             texture,
         } = primitive;
 
-        let uvwh = uvwh.unwrap_or([0.0, 0.0, 1.0, 1.0]);
-        let texture = texture.unwrap_or_else(|| self.texture_manager.white_pixel());
+        let texture = texture.unwrap_or_else(|| self.texture_manager.borrow().white_pixel());
+        let uvwh = {
+            let original = uvwh.unwrap_or([0.0, 0.0, 1.0, 1.0]);
+            let textured = texture.uvwh();
+
+            [
+                original[0] + textured[0],
+                original[1] + textured[1],
+                original[2] * textured[2],
+                original[3] * textured[3],
+            ]
+        };
 
         let DrawCommand::Draw {
-            texture: prev_texture,
+            texture_id: prev_texture,
             num_vertices,
         } = self.storage.commands.last_mut().unwrap();
 
@@ -147,7 +159,7 @@ impl Canvas {
             self.storage.textures.insert(texture.id(), texture.clone());
 
             self.storage.commands.push(DrawCommand::Draw {
-                texture: texture.id(),
+                texture_id: texture.id(),
                 num_vertices: VERTICES_PER_PRIMITIVE,
             });
         }
