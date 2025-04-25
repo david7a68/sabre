@@ -31,6 +31,7 @@ pub struct App {
 
 impl App {
     #[expect(clippy::new_without_default)]
+    #[must_use]
     pub fn new() -> Self {
         Self {
             graphics: None,

@@ -57,22 +57,27 @@ pub struct Texture {
 }
 
 impl Texture {
+    #[must_use]
     pub fn id(&self) -> TextureId {
         self.id
     }
 
+    #[must_use]
     pub fn format(&self) -> wgpu::TextureFormat {
         self.format
     }
 
+    #[must_use]
     pub fn uvwh(&self) -> [f32; 4] {
         self.uvwh
     }
 
+    #[must_use]
     pub fn is_ready(&self) -> bool {
         self.manager.inspect(|usage| usage.is_ready).unwrap()
     }
 
+    #[must_use]
     pub fn storage(&self) -> TextureStorage {
         self.manager.get_storage(self.id).unwrap()
     }
@@ -457,7 +462,7 @@ impl TextureManagerInner {
                     &temp,
                     wgpu::TexelCopyBufferLayout {
                         offset: 0,
-                        bytes_per_row: Some(width * bytes_per_pixel as u32),
+                        bytes_per_row: Some(width * u32::from(bytes_per_pixel)),
                         rows_per_image: Some(height),
                     },
                     wgpu::Extent3d {
@@ -542,11 +547,11 @@ impl FormattedTextureManager {
         bind_group_layout: &wgpu::BindGroupLayout,
     ) -> (wgpu::Texture, TextureUsage, Box2D<i32>) {
         // If we reach here, we need to allocate a new texture storage.
-        let atlas_width = 1024.max(width as u32);
-        let atlas_height = 1024.max(height as u32);
+        let atlas_width = 4096.max(width);
+        let atlas_height = 4096.max(height);
 
         let (storage_id, texture, atlas_rect, Allocation { id, rectangle }) = (|| {
-            for (storage_id, storage) in self.storage.iter_mut() {
+            for (storage_id, storage) in &mut self.storage {
                 if let Some(allocation) = storage.atlas.allocate(size2(width.into(), height.into()))
                 {
                     storage.refcount += 1;
@@ -562,8 +567,8 @@ impl FormattedTextureManager {
             let texture = device.create_texture(&wgpu::TextureDescriptor {
                 label: Some("Atlas Texture"),
                 size: wgpu::Extent3d {
-                    width: atlas_width,
-                    height: atlas_height,
+                    width: atlas_width.into(),
+                    height: atlas_height.into(),
                     depth_or_array_layers: 1,
                 },
                 mip_level_count: 1,
@@ -573,8 +578,6 @@ impl FormattedTextureManager {
                 usage: wgpu::TextureUsages::COPY_DST | wgpu::TextureUsages::TEXTURE_BINDING,
                 view_formats: &[],
             });
-
-            debug!(format = ?self.format, "Allocating a new storage texture");
 
             let texture_view = texture.create_view(&wgpu::TextureViewDescriptor::default());
             let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -586,10 +589,7 @@ impl FormattedTextureManager {
                 }],
             });
 
-            let atlas_size = size2(
-                atlas_width.try_into().unwrap(),
-                atlas_height.try_into().unwrap(),
-            );
+            let atlas_size = size2(atlas_width.into(), atlas_height.into());
 
             let mut storage = TextureStorage {
                 refcount: 1,
