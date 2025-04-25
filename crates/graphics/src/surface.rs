@@ -24,8 +24,8 @@ pub enum RenderError {
 
 pub struct Surface {
     window: Arc<Window>,
-    surface: wgpu::Surface<'static>,
-    surface_config: wgpu::SurfaceConfiguration,
+    config: wgpu::SurfaceConfiguration,
+    handle: wgpu::Surface<'static>,
 
     frame_counter: u64,
     render_pipeline: RenderPipeline,
@@ -46,7 +46,7 @@ impl Surface {
         let format = caps
             .formats
             .first()
-            .cloned()
+            .copied()
             .expect("Surface incompatible with selected adapter!");
 
         let present_mode = {
@@ -88,8 +88,8 @@ impl Surface {
 
         Self {
             window,
-            surface,
-            surface_config: config,
+            config,
+            handle: surface,
             frame_counter: 0,
             render_pipeline,
             frames_in_flight,
@@ -104,18 +104,16 @@ impl Surface {
     pub fn resize_if_necessary(&mut self, device: &wgpu::Device) {
         let new_size = self.window.inner_size();
 
-        if self.surface_config.width == new_size.width
-            && self.surface_config.height == new_size.height
-        {
+        if self.config.width == new_size.width && self.config.height == new_size.height {
             return;
         }
 
         if new_size.width > 0 && new_size.height > 0 {
             trace!("Recreating lost or outdated surface. New size: {new_size:?}",);
 
-            self.surface_config.width = new_size.width;
-            self.surface_config.height = new_size.height;
-            self.surface.configure(device, &self.surface_config);
+            self.config.width = new_size.width;
+            self.config.height = new_size.height;
+            self.handle.configure(device, &self.config);
         }
     }
 
@@ -140,7 +138,7 @@ impl Surface {
         let output = tracing::info_span!("get_current_texture").in_scope(|| {
             let mut attempts = 0;
 
-            let mut output = self.surface.get_current_texture();
+            let mut output = self.handle.get_current_texture();
 
             loop {
                 if attempts > 3 {
@@ -155,7 +153,7 @@ impl Surface {
                         wgpu::SurfaceError::Other => break Err(RenderError::Unknown),
                         wgpu::SurfaceError::Outdated | wgpu::SurfaceError::Lost => {
                             self.resize_if_necessary(device);
-                            output = self.surface.get_current_texture();
+                            output = self.handle.get_current_texture();
                         }
                     },
                 }
@@ -206,7 +204,7 @@ impl Surface {
                 queue,
                 &mut render_pass,
                 &DrawInfo {
-                    viewport_size: [self.surface_config.width, self.surface_config.height],
+                    viewport_size: [self.config.width, self.config.height],
                 },
             );
 

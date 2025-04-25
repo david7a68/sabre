@@ -27,6 +27,7 @@ pub struct Primitive {
 }
 
 impl Primitive {
+    #[must_use]
     pub fn new(x: f32, y: f32, width: f32, height: f32, color: Color) -> Self {
         Self {
             point: [x, y],
@@ -37,6 +38,7 @@ impl Primitive {
         }
     }
 
+    #[must_use]
     pub fn with_texture(mut self, texture: Texture, rect: impl Into<Option<[f32; 4]>>) -> Self {
         self.uvwh = rect.into();
         self.texture = Some(texture);
@@ -102,18 +104,22 @@ impl Canvas {
         }
     }
 
+    #[must_use]
     pub(crate) fn primitives(&self) -> &[GpuPrimitive] {
         &self.storage.primitives
     }
 
+    #[must_use]
     pub fn commands(&self) -> &[DrawCommand] {
         &self.storage.commands
     }
 
+    #[must_use]
     pub fn texture(&self, id: TextureId) -> Option<&Texture> {
         self.storage.textures.get(&id)
     }
 
+    #[must_use]
     pub fn clear_color(&self) -> Option<Color> {
         self.storage.clear_color
     }
