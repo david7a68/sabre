@@ -19,12 +19,14 @@ glamour = "0.17"
 guillotiere = "0.6"
 image = "0.25"
 memmap2 = "0.9"
+parley = "0.3"
 slotmap = "1"
 smallvec = { version = "1.15", features = [
     "const_generics",
     "const_new",
     "union",
 ] }
+swash = "0.2"
 tokio = "1.44"
 tracing = "0.1"
 tracing-tracy = { version = "0.11", default-features = false }

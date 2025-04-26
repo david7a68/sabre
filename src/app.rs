@@ -2,6 +2,8 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use futures::executor::block_on;
+use graphics::TextPrimitive;
+use graphics::TextStyle;
 use smallvec::smallvec;
 use tracing::info;
 use tracing::instrument;
@@ -155,6 +157,13 @@ impl ApplicationHandler for App {
                     Primitive::new(200.0, 50.0, 300.0, 100.0, Color::WHITE)
                         .with_texture(self.texture2.clone().unwrap(), None),
                 );
+                // canvas.draw_text(TextPrimitive::new(
+                //     "Hello world!",
+                //     &TextStyle::default(),
+                //     100.0,
+                //     700.0,
+                //     Color::WHITE,
+                // ));
 
                 graphics.render(smallvec![(window.id(), canvas)]).unwrap();
             }

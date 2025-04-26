@@ -3,7 +3,7 @@ use bytemuck::Zeroable;
 
 // All colors are in linear sRGB space.
 #[repr(C)]
-#[derive(Clone, Copy, Debug, Default, Pod, Zeroable)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Pod, Zeroable)]
 pub struct Color {
     pub r: f32,
     pub g: f32,

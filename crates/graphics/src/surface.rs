@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use tracing::debug;
@@ -216,25 +217,41 @@ impl Surface {
 
             let mut vertex_offset = 0;
             let mut stashed_vertices = 0;
-            let mut prev_storage_id = StorageId::default();
-            let mut prev_storage: Option<TextureStorage> = None;
+
+            let mut prev_color_storage: Option<TextureStorage> = None;
+            let mut prev_color_storage_id = StorageId::default();
+
+            let mut prev_alpha_storage: Option<TextureStorage> = None;
+            let mut prev_alpha_storage_id = StorageId::default();
+
+            let mut bind_groups = HashMap::<(StorageId, StorageId), wgpu::BindGroup>::new();
 
             for command in canvas.commands() {
                 match command {
                     DrawCommand::Draw {
-                        texture_id,
+                        color_texture_id,
+                        alpha_texture_id,
                         num_vertices,
                     } => {
-                        let Some(texture) = canvas.texture(*texture_id) else {
+                        let Some(color_texture) = canvas.texture(*color_texture_id) else {
                             debug!(
-                                texture_id = ?texture_id,
+                                texture_id = ?color_texture_id,
                                 "Texture not found, skipping primitives"
                             );
                             continue;
                         };
 
-                        let is_ready = texture.is_ready();
-                        let is_same_storage = texture.storage_id() == prev_storage_id;
+                        let Some(alpha_texture) = canvas.texture(*alpha_texture_id) else {
+                            debug!(
+                                texture_id = ?alpha_texture_id,
+                                "Texture not found, skipping primitives"
+                            );
+                            continue;
+                        };
+
+                        let is_ready = color_texture.is_ready() && alpha_texture.is_ready();
+                        let is_same_storage = color_texture.storage_id() == prev_color_storage_id
+                            && alpha_texture.storage_id() == prev_alpha_storage_id;
 
                         if is_ready && is_same_storage {
                             stashed_vertices += *num_vertices;
@@ -242,35 +259,55 @@ impl Surface {
                         }
 
                         if !is_ready {
-                            debug!("Texture {texture_id:?} not ready, skipping primitives");
+                            debug!("Texture {color_texture_id:?} not ready, skipping primitives");
                             vertex_offset += *num_vertices;
                             continue;
                         }
 
-                        debug_assert_ne!(texture.storage_id(), StorageId::default());
-                        debug_assert_ne!(texture.storage_id(), prev_storage_id);
+                        debug_assert_ne!(color_texture.storage_id(), StorageId::default());
+                        debug_assert_ne!(color_texture.storage_id(), prev_color_storage_id);
 
                         // Draw the previous batch of vertices and start a new one.
                         if stashed_vertices > 0 {
-                            self.render_pipeline.bind_texture(
-                                &mut render_pass,
-                                prev_storage.take().unwrap().bind_group(),
-                            );
+                            let bind_group = bind_groups
+                                .entry((prev_color_storage_id, prev_alpha_storage_id))
+                                .or_insert_with(|| {
+                                    self.render_pipeline.create_texure_bind_group(
+                                        color_texture.storage().texture_view(),
+                                        alpha_texture.storage().texture_view(),
+                                    )
+                                });
+
+                            self.render_pipeline
+                                .bind_texture(&mut render_pass, bind_group);
 
                             render_pass.draw(vertex_offset..vertex_offset + stashed_vertices, 0..1);
                             vertex_offset += stashed_vertices;
                         }
 
-                        prev_storage_id = texture.storage_id();
                         stashed_vertices = *num_vertices;
-                        prev_storage = Some(texture.storage());
+
+                        prev_color_storage = Some(color_texture.storage());
+                        prev_color_storage_id = color_texture.storage_id();
+
+                        prev_alpha_storage = Some(alpha_texture.storage());
+                        prev_alpha_storage_id = alpha_texture.storage_id();
                     }
                 }
             }
 
             if stashed_vertices > 0 {
+                let bind_group = bind_groups
+                    .entry((prev_color_storage_id, prev_alpha_storage_id))
+                    .or_insert_with(|| {
+                        self.render_pipeline.create_texure_bind_group(
+                            prev_color_storage.unwrap().texture_view(),
+                            prev_alpha_storage.unwrap().texture_view(),
+                        )
+                    });
+
                 self.render_pipeline
-                    .bind_texture(&mut render_pass, prev_storage.take().unwrap().bind_group());
+                    .bind_texture(&mut render_pass, bind_group);
 
                 render_pass.draw(vertex_offset..vertex_offset + stashed_vertices, 0..1);
             }

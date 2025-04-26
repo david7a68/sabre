@@ -107,6 +107,7 @@ pub(crate) struct RenderPipeline {
     pub sampler_bind_group: wgpu::BindGroup,
     pub draw_info_bind_group_layout: wgpu::BindGroupLayout,
     pub primitive_bind_group_layout: wgpu::BindGroupLayout,
+    pub texture_bind_group_layout: wgpu::BindGroupLayout,
 }
 
 impl RenderPipeline {
@@ -130,9 +131,35 @@ impl RenderPipeline {
         )
     }
 
-    pub fn bind_texture(&self, render_pass: &mut wgpu::RenderPass, texture: &wgpu::BindGroup) {
+    pub fn create_texure_bind_group(
+        &self,
+        color_texture: &wgpu::TextureView,
+        alpha_texture: &wgpu::TextureView,
+    ) -> wgpu::BindGroup {
+        self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("Texture Bind Group"),
+            layout: &self.texture_bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(color_texture),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::TextureView(alpha_texture),
+                },
+            ],
+        })
+    }
+
+    pub fn bind_texture(
+        &self,
+        render_pass: &mut wgpu::RenderPass,
+        texture_bind_group: &wgpu::BindGroup,
+    ) {
         render_pass.set_bind_group(2, &self.sampler_bind_group, &[]);
-        render_pass.set_bind_group(3, texture, &[]);
+
+        render_pass.set_bind_group(3, texture_bind_group, &[]);
     }
 }
 
@@ -155,7 +182,6 @@ pub(crate) struct RenderPipelineCache {
     sampler_bind_group: wgpu::BindGroup,
 
     content_bind_group_layout: wgpu::BindGroupLayout,
-    // sampler_bind_group_layout: wgpu::BindGroupLayout,
     texture_bind_group_layout: wgpu::BindGroupLayout,
     viewport_bind_group_layout: wgpu::BindGroupLayout,
 
@@ -210,16 +236,28 @@ impl RenderPipelineCache {
         let texture_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                 label: Some("Texture Bind Group Layout"),
-                entries: &[wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Texture {
-                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                        view_dimension: wgpu::TextureViewDimension::D2,
-                        multisampled: false,
+                entries: &[
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Texture {
+                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                            view_dimension: wgpu::TextureViewDimension::D2,
+                            multisampled: false,
+                        },
+                        count: None,
                     },
-                    count: None,
-                }],
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 1,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Texture {
+                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                            view_dimension: wgpu::TextureViewDimension::D2,
+                            multisampled: false,
+                        },
+                        count: None,
+                    },
+                ],
             });
 
         let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -259,7 +297,6 @@ impl RenderPipelineCache {
             diffuse_sampler,
             sampler_bind_group,
             content_bind_group_layout,
-            // sampler_bind_group_layout,
             texture_bind_group_layout,
             viewport_bind_group_layout,
             pipelines: Mutex::new(HashMap::new()),
@@ -321,14 +358,11 @@ impl RenderPipelineCache {
             sampler_bind_group: self.sampler_bind_group.clone(),
             draw_info_bind_group_layout: self.viewport_bind_group_layout.clone(),
             primitive_bind_group_layout: self.content_bind_group_layout.clone(),
+            texture_bind_group_layout: self.texture_bind_group_layout.clone(),
         };
 
         pipelines.insert(format, pipeline.clone());
 
         pipeline
-    }
-
-    pub fn texture_bind_group_layout(&self) -> &wgpu::BindGroupLayout {
-        &self.texture_bind_group_layout
     }
 }

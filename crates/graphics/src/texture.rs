@@ -135,7 +135,6 @@ pub struct TextureStorage {
     refcount: u32,
     atlas: AtlasAllocator,
     texture: wgpu::Texture,
-    bind_group: wgpu::BindGroup,
     texture_view: wgpu::TextureView,
 }
 
@@ -144,32 +143,29 @@ impl TextureStorage {
         &self.texture
     }
 
-    pub fn bind_group(&self) -> &wgpu::BindGroup {
-        &self.bind_group
-    }
-
     pub fn texture_view(&self) -> &wgpu::TextureView {
         &self.texture_view
     }
 }
 
+#[derive(Clone)]
 pub struct TextureManager {
     inner: Rc<TextureManagerInner>,
 }
 
 impl TextureManager {
-    pub fn new(
-        queue: wgpu::Queue,
-        device: wgpu::Device,
-        texture_bind_group_layout: wgpu::BindGroupLayout,
-    ) -> Self {
+    pub fn new(queue: wgpu::Queue, device: wgpu::Device) -> Self {
         Self {
-            inner: TextureManagerInner::new(queue, device, texture_bind_group_layout),
+            inner: TextureManagerInner::new(queue, device),
         }
     }
 
     pub fn white_pixel(&self) -> Texture {
         self.inner.white_pixel()
+    }
+
+    pub fn opaque_pixel(&self) -> Texture {
+        self.inner.opaque_pixel()
     }
 
     #[instrument(skip(self, data))]
@@ -184,21 +180,23 @@ impl TextureManager {
     }
 
     #[instrument(skip(self), fields(path = %path.as_ref().display()))]
-    pub fn load(&mut self, path: impl AsRef<Path>) -> Result<Texture, TextureLoadError> {
+    pub fn load(&self, path: impl AsRef<Path>) -> Result<Texture, TextureLoadError> {
         self.inner.load(path)
     }
 
-    pub fn flush(&mut self) {
+    pub fn flush(&self) {
         self.inner.flush();
     }
 
-    pub fn end_frame(&mut self) {
+    pub fn end_frame(&self) {
         self.inner.end_frame();
     }
 }
 
 struct TextureManagerInner {
     white_pixel: Cell<TextureId>,
+    opaque_pixel: Cell<TextureId>,
+
     texture_map: RefCell<SlotMap<TextureId, TextureUsage>>,
     rgba_textures: RefCell<FormattedTextureManager>,
     srgba_textures: RefCell<FormattedTextureManager>,
@@ -209,18 +207,10 @@ struct TextureManagerInner {
 
     ready_sender: mpsc::Sender<TextureId>,
     ready_receiver: mpsc::Receiver<TextureId>,
-
-    /// The bind group layout that we use for textures. Storing it here allows
-    /// us to construct bind groups for our textures once.
-    texture_bind_group_layout: wgpu::BindGroupLayout,
 }
 
 impl TextureManagerInner {
-    fn new(
-        queue: wgpu::Queue,
-        device: wgpu::Device,
-        texture_bind_group_layout: wgpu::BindGroupLayout,
-    ) -> Rc<Self> {
+    fn new(queue: wgpu::Queue, device: wgpu::Device) -> Rc<Self> {
         let rgba_textures = FormattedTextureManager {
             format: wgpu::TextureFormat::Rgba8Unorm,
             storage: SlotMap::with_key(),
@@ -240,6 +230,7 @@ impl TextureManagerInner {
 
         let this = Rc::new(TextureManagerInner {
             white_pixel: Cell::new(TextureId::default()),
+            opaque_pixel: Cell::new(TextureId::default()),
             texture_map: RefCell::new(SlotMap::with_key()),
             rgba_textures: RefCell::new(rgba_textures),
             srgba_textures: RefCell::new(srgba_textures),
@@ -248,11 +239,9 @@ impl TextureManagerInner {
             device,
             ready_sender,
             ready_receiver,
-            texture_bind_group_layout,
         });
 
-        // Set up the white pixel (technically 2x2 to avoid bleed) and forget it
-        // so that its refcount is never 0.
+        // Set up the white pixel and forget it so that its refcount is never 0.
         let white_pixel = this.from_memory(
             &[255, 255, 255, 255],
             1,
@@ -263,11 +252,26 @@ impl TextureManagerInner {
         this.white_pixel.set(white_pixel.id());
         std::mem::forget(white_pixel);
 
+        // Set up the opaque pixel and forget it so that its refcount is never 0.
+        let opaque_pixel = this.from_memory(
+            &[255],
+            1,
+            wgpu::TextureFormat::R8Unorm,
+            Some("Opaque Pixel"),
+        );
+
+        this.opaque_pixel.set(opaque_pixel.id());
+        std::mem::forget(opaque_pixel);
+
         this
     }
 
     fn white_pixel(self: &Rc<Self>) -> Texture {
         self.get(self.white_pixel.get()).unwrap()
+    }
+
+    fn opaque_pixel(self: &Rc<Self>) -> Texture {
+        self.get(self.opaque_pixel.get()).unwrap()
     }
 
     fn get(self: &Rc<Self>, id: TextureId) -> Option<Texture> {
@@ -361,12 +365,23 @@ impl TextureManagerInner {
         }
         .borrow_mut();
 
-        let (texture, usage, rectangle) =
-            manager.allocate(width, height, &self.device, &self.texture_bind_group_layout);
+        let (texture, usage, rectangle) = manager.allocate(width, height, &self.device);
 
         let uvwh = usage.uvwh;
         let storage_id = usage.storage;
         let texture_id = self.texture_map.borrow_mut().insert(usage);
+
+        info!("bytes_per_row = {bytes_per_row}, bytes = {}", data.len());
+
+        info!(
+            x = rectangle.x_range().start,
+            y = rectangle.y_range().start,
+            width = rectangle.width(),
+            height = rectangle.height(),
+            uvwh = ?uvwh,
+            texture_id = ?texture_id,
+            "Loaded texture from memory"
+        );
 
         self.queue.write_texture(
             wgpu::TexelCopyTextureInfo {
@@ -393,16 +408,6 @@ impl TextureManagerInner {
         );
 
         self.ready_sender.send(texture_id).unwrap();
-
-        info!(
-            x = rectangle.x_range().start,
-            y = rectangle.y_range().start,
-            width = rectangle.width(),
-            height = rectangle.height(),
-            uvwh = ?uvwh,
-            texture_id = ?texture_id,
-            "Loaded texture from memory"
-        );
 
         Texture {
             id: texture_id,
@@ -446,7 +451,6 @@ impl TextureManagerInner {
             width.try_into().unwrap(),
             height.try_into().unwrap(),
             &self.device,
-            &self.texture_bind_group_layout,
         );
 
         let uvwh = usage.uvwh;
@@ -575,13 +579,12 @@ impl FormattedTextureManager {
         storage.refcount -= 1;
     }
 
-    #[instrument(skip(self, device, bind_group_layout))]
+    #[instrument(skip(self, device))]
     fn allocate(
         &mut self,
         width: u16,
         height: u16,
         device: &wgpu::Device,
-        bind_group_layout: &wgpu::BindGroupLayout,
     ) -> (wgpu::Texture, TextureUsage, Box2D<i32>) {
         let alloc_size = size2(width.into(), height.into());
 
@@ -612,20 +615,12 @@ impl FormattedTextureManager {
                 mip_level_count: 1,
                 sample_count: 1,
                 dimension: wgpu::TextureDimension::D2,
-                format: wgpu::TextureFormat::Rgba8UnormSrgb,
+                format: self.format,
                 usage: wgpu::TextureUsages::COPY_DST | wgpu::TextureUsages::TEXTURE_BINDING,
                 view_formats: &[],
             });
 
             let texture_view = texture.create_view(&wgpu::TextureViewDescriptor::default());
-            let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-                label: None,
-                layout: bind_group_layout,
-                entries: &[wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: wgpu::BindingResource::TextureView(&texture_view),
-                }],
-            });
 
             let atlas_size = size2(atlas_width.into(), atlas_height.into());
 
@@ -633,7 +628,6 @@ impl FormattedTextureManager {
                 refcount: 1,
                 atlas: AtlasAllocator::new(atlas_size),
                 texture: texture.clone(),
-                bind_group,
                 texture_view,
             };
 
@@ -671,6 +665,7 @@ impl FormattedTextureManager {
 fn bytes_per_pixel(format: wgpu::TextureFormat) -> usize {
     match format {
         wgpu::TextureFormat::Rgba8Unorm | wgpu::TextureFormat::Rgba8UnormSrgb => 4,
+        wgpu::TextureFormat::R8Unorm => 1,
         _ => unimplemented!(),
     }
 }
