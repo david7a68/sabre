@@ -24,7 +24,25 @@ use tracing::instrument;
 new_key_type! {
     pub struct TextureId;
 
-    struct StorageId;
+    struct RawStorageId;
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct StorageId {
+    id: RawStorageId,
+    format: wgpu::TextureFormat,
+}
+
+impl Default for StorageId {
+    fn default() -> Self {
+        // The format we choose here is not important because the
+        // `RawStorageId::default()` means that the `StorageId` will never be
+        // valid anyway.
+        Self {
+            id: RawStorageId::default(),
+            format: wgpu::TextureFormat::Rgba8UnormSrgb,
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -50,8 +68,8 @@ impl From<image::ImageError> for TextureLoadError {
 
 pub struct Texture {
     id: TextureId,
+    storage_id: StorageId,
     uvwh: [f32; 4],
-    format: wgpu::TextureFormat,
 
     manager: Rc<TextureManagerInner>,
 }
@@ -62,9 +80,13 @@ impl Texture {
         self.id
     }
 
+    pub(crate) fn storage_id(&self) -> StorageId {
+        self.storage_id
+    }
+
     #[must_use]
     pub fn format(&self) -> wgpu::TextureFormat {
-        self.format
+        self.storage_id.format
     }
 
     #[must_use]
@@ -74,7 +96,9 @@ impl Texture {
 
     #[must_use]
     pub fn is_ready(&self) -> bool {
-        self.manager.inspect(|usage| usage.is_ready).unwrap()
+        self.manager
+            .inspect(self.id, |usage| usage.is_ready)
+            .unwrap()
     }
 
     #[must_use]
@@ -99,8 +123,9 @@ impl std::fmt::Debug for Texture {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Texture")
             .field("id", &self.id)
+            .field("storage_id", &self.storage_id.id)
             .field("uvwh", &self.uvwh)
-            .field("format", &self.format)
+            .field("format", &self.storage_id.format)
             .finish()
     }
 }
@@ -253,8 +278,8 @@ impl TextureManagerInner {
 
         Some(Texture {
             id,
+            storage_id: usage.storage,
             uvwh: usage.uvwh,
-            format: usage.format,
             manager: self.clone(),
         })
     }
@@ -274,7 +299,9 @@ impl TextureManagerInner {
                     _ => unreachable!(),
                 };
 
-                storage.borrow_mut().release(usage.storage, usage.atlas_id);
+                storage
+                    .borrow_mut()
+                    .release(usage.storage.id, usage.atlas_id);
             }
         }
     }
@@ -292,12 +319,16 @@ impl TextureManagerInner {
         }
         .borrow();
 
-        storage.storage.get(usage.storage).cloned()
+        storage.storage.get(usage.storage.id).cloned()
     }
 
-    pub fn inspect<T>(self: &Rc<Self>, callback: impl Fn(&TextureUsage) -> T) -> Option<T> {
+    pub fn inspect<T>(
+        self: &Rc<Self>,
+        texture: TextureId,
+        callback: impl Fn(&TextureUsage) -> T,
+    ) -> Option<T> {
         let texture_map = self.texture_map.borrow();
-        let usage = texture_map.get(self.white_pixel.get())?;
+        let usage = texture_map.get(texture)?;
         Some(callback(usage))
     }
 
@@ -334,6 +365,7 @@ impl TextureManagerInner {
             manager.allocate(width, height, &self.device, &self.texture_bind_group_layout);
 
         let uvwh = usage.uvwh;
+        let storage_id = usage.storage;
         let texture_id = self.texture_map.borrow_mut().insert(usage);
 
         self.queue.write_texture(
@@ -374,8 +406,8 @@ impl TextureManagerInner {
 
         Texture {
             id: texture_id,
+            storage_id,
             uvwh,
-            format,
             manager: self.clone(),
         }
     }
@@ -402,8 +434,11 @@ impl TextureManagerInner {
             )
         };
 
-        let mut manager = match color_type {
-            image::ColorType::Rgba8 => self.srgba_textures.borrow_mut(),
+        let (format, mut manager) = match color_type {
+            image::ColorType::Rgba8 => (
+                wgpu::TextureFormat::Rgba8UnormSrgb,
+                self.srgba_textures.borrow_mut(),
+            ),
             other => unimplemented!("Unsupported color type: {:?}", other),
         };
 
@@ -415,6 +450,7 @@ impl TextureManagerInner {
         );
 
         let uvwh = usage.uvwh;
+        let storage_id = usage.storage;
         let texture_id = self.texture_map.borrow_mut().insert(usage);
 
         tokio::task::spawn_blocking({
@@ -480,6 +516,7 @@ impl TextureManagerInner {
                     uvwh = ?uvwh,
                     texture_id = ?texture_id,
                     load_time = ?start_time.elapsed(),
+                    format = ?format,
                     "Loaded texture from file"
                 );
             }
@@ -487,7 +524,7 @@ impl TextureManagerInner {
 
         Ok(Texture {
             id: texture_id,
-            format: wgpu::TextureFormat::Rgba8UnormSrgb,
+            storage_id,
             uvwh,
             manager: self.clone(),
         })
@@ -521,7 +558,7 @@ struct TextureUsage {
 
 struct FormattedTextureManager {
     format: wgpu::TextureFormat,
-    storage: SlotMap<StorageId, TextureStorage>,
+    storage: SlotMap<RawStorageId, TextureStorage>,
 }
 
 impl FormattedTextureManager {
@@ -532,7 +569,7 @@ impl FormattedTextureManager {
     }
 
     /// Release a reference for the given texture.
-    fn release(&mut self, storage: StorageId, node: AllocId) {
+    fn release(&mut self, storage: RawStorageId, node: AllocId) {
         let storage = self.storage.get_mut(storage).unwrap();
         storage.atlas.deallocate(node);
         storage.refcount -= 1;
@@ -546,16 +583,13 @@ impl FormattedTextureManager {
         device: &wgpu::Device,
         bind_group_layout: &wgpu::BindGroupLayout,
     ) -> (wgpu::Texture, TextureUsage, Box2D<i32>) {
-        // If we reach here, we need to allocate a new texture storage.
-        let atlas_width = 4096.max(width);
-        let atlas_height = 4096.max(height);
+        let alloc_size = size2(width.into(), height.into());
 
-        let (storage_id, texture, atlas_rect, Allocation { id, rectangle }) = (|| {
+        let (storage_id, texture, atlas_rect, Allocation { id, rectangle }) = 'alloc: {
             for (storage_id, storage) in &mut self.storage {
-                if let Some(allocation) = storage.atlas.allocate(size2(width.into(), height.into()))
-                {
+                if let Some(allocation) = storage.atlas.allocate(alloc_size) {
                     storage.refcount += 1;
-                    return (
+                    break 'alloc (
                         storage_id,
                         storage.texture.clone(),
                         storage.atlas.size(),
@@ -563,6 +597,10 @@ impl FormattedTextureManager {
                     );
                 }
             }
+
+            // If we reach here, we need to allocate a new texture storage.
+            let atlas_width = 4096.max(width);
+            let atlas_height = 4096.max(height);
 
             let texture = device.create_texture(&wgpu::TextureDescriptor {
                 label: Some("Atlas Texture"),
@@ -599,15 +637,11 @@ impl FormattedTextureManager {
                 texture_view,
             };
 
-            let allocation = storage
-                .atlas
-                .allocate(size2(width.into(), height.into()))
-                .unwrap();
-
+            let allocation = storage.atlas.allocate(alloc_size).unwrap();
             let storage_id = self.storage.insert(storage);
 
             (storage_id, texture, atlas_size, allocation)
-        })();
+        };
 
         // Inset the rectangle by 0.5 pixels to avoid sampling bleed.
         let uv_rect = rectangle.cast::<f32>().inflate(-0.5, -0.5);
@@ -619,7 +653,10 @@ impl FormattedTextureManager {
         (
             texture,
             TextureUsage {
-                storage: storage_id,
+                storage: StorageId {
+                    id: storage_id,
+                    format: self.format,
+                },
                 is_ready: false,
                 refcount: 1,
                 atlas_id: id,

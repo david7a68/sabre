@@ -107,6 +107,16 @@ impl ApplicationHandler for App {
                 event,
                 is_synthetic: _,
             } => {
+                if event.logical_key == Key::Named(NamedKey::Space) && event.state.is_pressed() {
+                    let window = self
+                        .windows
+                        .iter_mut()
+                        .find(|rc| rc.id() == window_id)
+                        .unwrap();
+
+                    window.request_redraw();
+                }
+
                 if event.logical_key == Key::Named(NamedKey::Escape) && event.state.is_pressed() {
                     self.windows.retain(|rc| rc.id() != window_id);
                 }

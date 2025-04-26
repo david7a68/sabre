@@ -10,8 +10,6 @@ use wgpu::include_wgsl;
 
 use crate::draw::GpuPrimitive;
 
-use super::texture::TextureStorage;
-
 const SHADER: wgpu::ShaderModuleDescriptor = include_wgsl!("shader.wgsl");
 
 #[repr(C)]
@@ -132,9 +130,9 @@ impl RenderPipeline {
         )
     }
 
-    pub fn bind_texture(&self, render_pass: &mut wgpu::RenderPass, texture: &TextureStorage) {
+    pub fn bind_texture(&self, render_pass: &mut wgpu::RenderPass, texture: &wgpu::BindGroup) {
         render_pass.set_bind_group(2, &self.sampler_bind_group, &[]);
-        render_pass.set_bind_group(3, texture.bind_group(), &[]);
+        render_pass.set_bind_group(3, texture, &[]);
     }
 }
 

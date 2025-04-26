@@ -9,6 +9,8 @@ use winit::window::WindowId;
 use crate::Canvas;
 use crate::draw::DrawCommand;
 use crate::pipeline::DrawInfo;
+use crate::texture::StorageId;
+use crate::texture::TextureStorage;
 
 use super::draw::GpuPrimitive;
 use super::pipeline::DrawBuffer;
@@ -213,6 +215,10 @@ impl Surface {
                 .bind_and_update(queue, device, &mut render_pass, canvas.primitives());
 
             let mut vertex_offset = 0;
+            let mut stashed_vertices = 0;
+            let mut prev_storage_id = StorageId::default();
+            let mut prev_storage: Option<TextureStorage> = None;
+
             for command in canvas.commands() {
                 match command {
                     DrawCommand::Draw {
@@ -227,15 +233,46 @@ impl Surface {
                             continue;
                         };
 
-                        if texture.is_ready() {
-                            self.render_pipeline
-                                .bind_texture(&mut render_pass, &texture.storage());
+                        let is_ready = texture.is_ready();
+                        let is_same_storage = texture.storage_id() == prev_storage_id;
 
-                            render_pass.draw(vertex_offset..vertex_offset + *num_vertices, 0..1);
-                            vertex_offset += *num_vertices;
+                        if is_ready && is_same_storage {
+                            stashed_vertices += *num_vertices;
+                            continue;
                         }
+
+                        if !is_ready {
+                            debug!("Texture {texture_id:?} not ready, skipping primitives");
+                            vertex_offset += *num_vertices;
+                            continue;
+                        }
+
+                        debug_assert_ne!(texture.storage_id(), StorageId::default());
+                        debug_assert_ne!(texture.storage_id(), prev_storage_id);
+
+                        // Draw the previous batch of vertices and start a new one.
+                        if stashed_vertices > 0 {
+                            self.render_pipeline.bind_texture(
+                                &mut render_pass,
+                                prev_storage.take().unwrap().bind_group(),
+                            );
+
+                            render_pass.draw(vertex_offset..vertex_offset + stashed_vertices, 0..1);
+                            vertex_offset += stashed_vertices;
+                        }
+
+                        prev_storage_id = texture.storage_id();
+                        stashed_vertices = *num_vertices;
+                        prev_storage = Some(texture.storage());
                     }
                 }
+            }
+
+            if stashed_vertices > 0 {
+                self.render_pipeline
+                    .bind_texture(&mut render_pass, prev_storage.take().unwrap().bind_group());
+
+                render_pass.draw(vertex_offset..vertex_offset + stashed_vertices, 0..1);
             }
         });
 
