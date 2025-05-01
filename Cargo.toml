@@ -13,7 +13,7 @@ unused_crate_dependencies = "warn"
 
 [workspace.dependencies]
 bytemuck = "1"
-color = "0.2"
+color = "0.3"
 futures = "0.3"
 glamour = "0.16"
 guillotiere = "0.6"
