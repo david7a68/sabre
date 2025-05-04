@@ -2,26 +2,32 @@ use std::borrow::Cow;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
+use std::hash::Hash;
+use std::hash::Hasher;
 use std::rc::Rc;
 
 use parley::AlignmentOptions;
 use parley::FontContext;
 use parley::FontStack;
+use parley::Glyph;
 use parley::GlyphRun;
 use parley::Layout;
 use parley::LayoutContext;
 use parley::PositionedLayoutItem;
 use parley::StyleProperty;
-use swash::CacheKey;
 use swash::FontRef;
 use swash::GlyphId;
 use swash::scale::Render;
 use swash::scale::ScaleContext;
+use swash::scale::Scaler;
 use swash::scale::Source;
 use swash::scale::StrikeWith;
 use swash::scale::image::Content;
 use swash::scale::image::Image;
+use swash::zeno::Format;
 use swash::zeno::Vector;
+use tracing::debug;
+use tracing::instrument;
 
 use crate::Color;
 use crate::Primitive;
@@ -39,7 +45,7 @@ pub struct TextStyle {
 impl Default for TextStyle {
     fn default() -> Self {
         Self {
-            font_stack: FontStack::Source(Cow::Borrowed("Arial, sans-serif")),
+            font_stack: FontStack::Source(Cow::Borrowed("system-ui")),
             font_size: 16.0,
             align: parley::Alignment::Start,
         }
@@ -103,6 +109,7 @@ impl TextSystemInner {
     }
 
     #[allow(clippy::too_many_arguments)]
+    #[instrument(skip(self, canvas, textures, style))]
     pub fn simple_layout(
         &mut self,
         canvas: &mut CanvasStorage,
@@ -126,10 +133,11 @@ impl TextSystemInner {
             .align(max_width, style.align, AlignmentOptions::default());
 
         let layout: &Layout<Color> = &self.quick_layout;
+
         for line in layout.lines() {
             for item in line.items() {
                 match item {
-                    PositionedLayoutItem::GlyphRun(glyphs) => draw_run(
+                    PositionedLayoutItem::GlyphRun(glyphs) => draw_glyph_run(
                         &mut self.scaler_cx,
                         &mut self.glyph_cache,
                         canvas,
@@ -144,25 +152,36 @@ impl TextSystemInner {
     }
 }
 
-fn quant_float_4(value: f32) -> (u8, f32) {
-    let quant = (value * 40.0).round();
-    (quant as u8, quant / 40.0)
+#[derive(Clone, Copy, Debug)]
+struct SubpixelAlignment {
+    step: u8,
+    offset: f32,
 }
 
-fn draw_run(
+impl SubpixelAlignment {
+    fn new(value: f32) -> Self {
+        let scaled = value.fract() * 3.0;
+        let step = (scaled.round() % 3.0) as u8;
+        let offset = scaled / 3.0;
+
+        Self { step, offset }
+    }
+}
+
+fn draw_glyph_run(
     scaler_cx: &mut ScaleContext,
     glyph_cache: &mut HashMap<GlyphCacheKey, GlyphCacheEntry>,
     canvas: &mut CanvasStorage,
     textures: &TextureManager,
-    glyphs: &GlyphRun<Color>,
+    glyph_run: &GlyphRun<Color>,
     origin: [f32; 2],
 ) {
-    let mut run_x = glyphs.offset() + origin[0];
-    let run_y = glyphs.baseline() + origin[1];
-    let style = glyphs.style();
+    let mut run_x = glyph_run.offset() + origin[0];
+    let run_y = glyph_run.baseline() + origin[1];
+    let style = glyph_run.style();
     let color = style.brush;
 
-    let run = glyphs.run();
+    let run = glyph_run.run();
 
     // Resolve properties of the Run
     let font = run.font();
@@ -171,6 +190,7 @@ fn draw_run(
 
     // Convert from parley::Font to swash::FontRef
     let font_ref = FontRef::from_index(font.data.as_ref(), font.index as usize).unwrap();
+
     let mut scaler = scaler_cx
         .builder(font_ref)
         .size(font_size)
@@ -180,46 +200,40 @@ fn draw_run(
 
     let mut temp_glyph = Image::new();
 
-    for glyph in glyphs.glyphs() {
+    for glyph in glyph_run.glyphs() {
         let x = run_x + glyph.x;
-        let y = run_y + glyph.y;
+        let y = run_y - glyph.y;
         run_x += glyph.advance;
 
         // figure out which glyph offset variant to use
-        let (x_variant, x_offset) = quant_float_4(glyph.x);
-        let (y_variant, y_offset) = quant_float_4(glyph.y);
+        let x_placement = SubpixelAlignment::new(x);
+        let y_placement = SubpixelAlignment::new(y);
 
-        match glyph_cache.entry(GlyphCacheKey {
-            font: font_ref.key,
+        let key = GlyphCacheKey {
+            font_id: font.data.id(),
             glyph: glyph.id,
-            x_variant,
-            y_variant,
+            x_variant: x_placement.step,
+            y_variant: y_placement.step,
             size: font_size as u8,
-        }) {
-            Entry::Occupied(occupied_entry) => {
-                let entry = occupied_entry.get();
-                canvas.draw(
-                    textures,
-                    Primitive::new(x, y, entry.width as f32, entry.height as f32, color)
-                        .with_mask(entry.texture.clone(), None),
-                );
-            }
+        };
+
+        debug!(key = ?key, hash = {
+            let mut hasher = std::collections::hash_map::DefaultHasher::new();
+            key.hash(&mut hasher);
+            hasher.finish()
+        });
+
+        let entry = match glyph_cache.entry(key) {
+            Entry::Occupied(occupied_entry) => occupied_entry.into_mut(),
             Entry::Vacant(vacant_entry) => {
-                temp_glyph.clear();
-
-                let success = Render::new(&[
-                    Source::Bitmap(StrikeWith::BestFit),
-                    Source::ColorBitmap(StrikeWith::BestFit),
-                    Source::Outline,
-                ])
-                .format(swash::zeno::Format::Alpha)
-                .offset(Vector::new(x_offset, y_offset))
-                .render_into(&mut scaler, glyph.id, &mut temp_glyph);
-
-                assert!(success);
-
-                if temp_glyph.placement.height == 0 || temp_glyph.placement.width == 0 {
-                    // This is a zero-height glyph, so we can skip it.
+                if !draw_glyph(
+                    &mut temp_glyph,
+                    &mut scaler,
+                    glyph,
+                    x_placement,
+                    y_placement,
+                ) {
+                    debug!("Skipping 0-height glyph: {:?}", glyph.id);
                     continue;
                 }
 
@@ -233,28 +247,73 @@ fn draw_run(
                     &temp_glyph.data,
                     temp_glyph.placement.width as u16,
                     format,
-                    None,
                 );
 
-                let entry = vacant_entry.insert(GlyphCacheEntry {
+                vacant_entry.insert(GlyphCacheEntry {
                     texture,
                     width: temp_glyph.placement.width as u8,
                     height: temp_glyph.placement.height as u8,
-                });
-
-                canvas.draw(
-                    textures,
-                    Primitive::new(x, y, entry.width as f32, entry.height as f32, color)
-                        .with_mask(entry.texture.clone(), None),
-                );
+                })
             }
-        }
+        };
+
+        canvas.draw(
+            textures,
+            Primitive::new(
+                x.floor() + x_placement.offset,
+                y.floor() + y_placement.offset,
+                entry.width as f32,
+                entry.height as f32,
+                color,
+            )
+            .with_mask(entry.texture.clone()),
+        );
+
+        debug!(count = glyph_cache.len());
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+fn draw_glyph(
+    image: &mut Image,
+    scaler: &mut Scaler,
+    glyph: Glyph,
+    x: SubpixelAlignment,
+    y: SubpixelAlignment,
+) -> bool {
+    let offset = Vector::new(x.offset, y.offset);
+
+    image.clear();
+    let success = Render::new(&[
+        Source::ColorOutline(0),
+        Source::ColorBitmap(StrikeWith::BestFit),
+        Source::Bitmap(StrikeWith::BestFit),
+        Source::Outline,
+    ])
+    .format(Format::Alpha)
+    .offset(offset)
+    .render_into(scaler, glyph.id, image);
+
+    assert!(success);
+
+    debug!(
+        glyph = ?glyph,
+        source = ?image.source,
+        content = ?image.content,
+        placement = ?image.placement,
+        data_len = image.data.len(),
+    );
+
+    if image.placement.height == 0 {
+        debug!("Skipping 0-height glyph: {:?}", glyph.id);
+        return false;
+    }
+
+    true
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 struct GlyphCacheKey {
-    font: CacheKey,
+    font_id: u64,
     glyph: GlyphId,
     x_variant: u8,
     y_variant: u8,

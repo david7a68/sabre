@@ -2,11 +2,9 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::sync::mpsc;
 
-use bytemuck::Pod;
-use bytemuck::Zeroable;
-
 use crate::TextStyle;
 use crate::color::Color;
+use crate::pipeline::GpuPrimitive;
 use crate::text::TextSystem;
 
 use super::texture::Texture;
@@ -22,10 +20,7 @@ pub struct Primitive {
     pub size: [f32; 2],
     pub color: Color,
 
-    pub color_uvwh: Option<[f32; 4]>,
     pub color_texture: Option<Texture>,
-
-    pub alpha_uvwh: Option<[f32; 4]>,
     pub alpha_texture: Option<Texture>,
 }
 
@@ -36,22 +31,18 @@ impl Primitive {
             point: [x, y],
             size: [width, height],
             color,
-            color_uvwh: None,
             color_texture: None,
-            alpha_uvwh: None,
             alpha_texture: None,
         }
     }
 
     #[must_use]
-    pub fn with_texture(mut self, texture: Texture, rect: impl Into<Option<[f32; 4]>>) -> Self {
-        self.color_uvwh = rect.into();
+    pub fn with_texture(mut self, texture: Texture) -> Self {
         self.color_texture = Some(texture);
         self
     }
 
-    pub fn with_mask(mut self, texture: Texture, rect: impl Into<Option<[f32; 4]>>) -> Self {
-        self.alpha_uvwh = rect.into();
+    pub fn with_mask(mut self, texture: Texture) -> Self {
         self.alpha_texture = Some(texture);
         self
     }
@@ -66,7 +57,6 @@ pub struct TextPrimitive<'a> {
     pub point: [f32; 2],
     pub color: Color,
 
-    pub color_uvwh: Option<[f32; 4]>,
     pub color_texture: Option<Texture>,
 }
 
@@ -78,7 +68,6 @@ impl<'a> TextPrimitive<'a> {
             max_width: None,
             point: [x, y],
             color,
-            color_uvwh: None,
             color_texture: None,
         }
     }
@@ -88,25 +77,14 @@ impl<'a> TextPrimitive<'a> {
         self
     }
 
-    pub fn with_texture(mut self, texture: Texture, rect: impl Into<Option<[f32; 4]>>) -> Self {
-        self.color_uvwh = rect.into();
+    pub fn with_texture(mut self, texture: Texture) -> Self {
         self.color_texture = Some(texture);
         self
     }
 }
 
-#[repr(C, align(16))]
-#[derive(Clone, Copy, Debug, Default, Pod, Zeroable)]
-pub(crate) struct GpuPrimitive {
-    pub point: [f32; 2],
-    pub size: [f32; 2],
-    pub color_tint: Color,
-    pub color_uvwh: [f32; 4],
-    pub alpha_uvwh: [f32; 4],
-}
-
 #[derive(Clone, Copy, Debug)]
-pub enum DrawCommand {
+pub(crate) enum DrawCommand {
     Draw {
         color_texture_id: TextureId,
         alpha_texture_id: TextureId,
@@ -158,7 +136,7 @@ impl Canvas {
     }
 
     #[must_use]
-    pub fn commands(&self) -> &[DrawCommand] {
+    pub(crate) fn commands(&self) -> &[DrawCommand] {
         &self.storage.commands
     }
 
@@ -224,75 +202,45 @@ impl CanvasStorage {
             point,
             size,
             color: color_tint,
-            color_uvwh,
             color_texture,
-            alpha_uvwh,
             alpha_texture,
         } = primitive;
 
         let color_texture = color_texture.unwrap_or_else(|| texture_manager.white_pixel());
-        let color_uvwh = {
-            let original = color_uvwh.unwrap_or([0.0, 0.0, 1.0, 1.0]);
-            let textured = color_texture.uvwh();
-
-            [
-                original[0] + textured[0],
-                original[1] + textured[1],
-                original[2] * textured[2],
-                original[3] * textured[3],
-            ]
-        };
+        let color_uvwh = color_texture.uvwh();
 
         let alpha_texture = alpha_texture.unwrap_or_else(|| texture_manager.opaque_pixel());
-        let alpha_uvwh = {
-            let original = alpha_uvwh.unwrap_or([0.0, 0.0, 1.0, 1.0]);
-            let textured = alpha_texture.uvwh();
+        let alpha_uvwh = alpha_texture.uvwh();
 
-            [
-                original[0] + textured[0],
-                original[1] + textured[1],
-                original[2] * textured[2],
-                original[3] * textured[3],
-            ]
-        };
+        self.primitives.push(GpuPrimitive {
+            point,
+            size,
+            color_uvwh,
+            color_tint,
+            alpha_uvwh,
+        });
 
         let DrawCommand::Draw {
-            color_texture_id: prev_color_texture,
-            alpha_texture_id: prev_alpha_texture,
+            color_texture_id: prev_color_texture_id,
+            alpha_texture_id: prev_alpha_texture_id,
             num_vertices,
         } = self.commands.last_mut().unwrap();
 
-        let is_same_color_texture = *prev_color_texture == color_texture.id();
-        let is_same_alpha_texture = *prev_alpha_texture == alpha_texture.id();
+        self.textures
+            .insert(color_texture.id(), color_texture.clone());
+        self.textures
+            .insert(alpha_texture.id(), alpha_texture.clone());
 
-        if is_same_color_texture && is_same_alpha_texture {
+        if color_texture.id() == *prev_alpha_texture_id
+            && alpha_texture.id() == *prev_color_texture_id
+        {
             *num_vertices += VERTICES_PER_PRIMITIVE;
         } else {
-            if !is_same_color_texture {
-                self.textures
-                    .insert(color_texture.id(), color_texture.clone());
-            }
-
-            if !is_same_alpha_texture {
-                self.textures
-                    .insert(alpha_texture.id(), alpha_texture.clone());
-            }
-
             self.commands.push(DrawCommand::Draw {
                 color_texture_id: color_texture.id(),
                 alpha_texture_id: alpha_texture.id(),
                 num_vertices: VERTICES_PER_PRIMITIVE,
             });
         }
-
-        let prim = GpuPrimitive {
-            point,
-            size,
-            color_uvwh,
-            color_tint,
-            alpha_uvwh,
-        };
-
-        self.primitives.push(prim);
     }
 }

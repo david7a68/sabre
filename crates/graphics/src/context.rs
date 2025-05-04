@@ -210,3 +210,11 @@ impl GraphicsContext {
         Ok(())
     }
 }
+
+impl Drop for GraphicsContext {
+    fn drop(&mut self) {
+        info!("Dropping graphics context");
+
+        self.textures.end_frame();
+    }
+}

@@ -3,8 +3,8 @@ struct DrawInfo {
 }
 
 struct Rect {
-    min: vec2f,
-    max: vec2f,
+    point: vec2f,
+    extent: vec2f,
     color_tint: vec4f,
     color_uvwh: vec4f,
     alpha_uvwh: vec4f,
@@ -18,7 +18,7 @@ struct VertexOutput {
 };
 
 @group(0) @binding(0) var<uniform> draw_info: DrawInfo;
-@group(1) @binding(0) var<storage, read> rects: array<Rect>;
+@group(0) @binding(1) var<storage, read> rects: array<Rect>;
 
 @vertex
 fn vs_main(
@@ -28,7 +28,7 @@ fn vs_main(
     let rect = rects[rect_index];
 
     let vertex_index = in_vertex_index % 6;
-    let vertex_position = rect.min + rect.max * CORNER_LOOKUP[vertex_index];
+    let vertex_position = rect.point + rect.extent * CORNER_LOOKUP[vertex_index];
 
     var out: VertexOutput;
 
@@ -46,17 +46,20 @@ fn vs_main(
     return out;
 }
 
-@group(2) @binding(0) var basic_sampler: sampler;
-@group(3) @binding(0) var color_texture: texture_2d<f32>;
-@group(3) @binding(1) var alpha_texture: texture_2d<f32>;
+@group(1) @binding(0) var basic_sampler: sampler;
+@group(2) @binding(0) var color_texture: texture_2d<f32>;
+@group(2) @binding(1) var alpha_texture: texture_2d<f32>;
 
 @fragment
 fn fs_main(
     in: VertexOutput
 ) -> @location(0) vec4f {
-    return in.color_tint
-        * textureSample(color_texture, basic_sampler, in.color_uv)
-        * vec4f(1.0, 1.0, 1.0, textureSample(alpha_texture, basic_sampler, in.alpha_uv).r);
+    var color = in.color_tint
+        * textureSample(color_texture, basic_sampler, in.color_uv);
+
+    color.a = textureSample(alpha_texture, basic_sampler, in.alpha_uv).r;
+
+    return color;
 }
 
 /// 2----1  5

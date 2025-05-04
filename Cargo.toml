@@ -50,6 +50,9 @@ workspace-hack = { version = "0.1", path = "crates/workspace-hack" }
 
 graphics = { path = "crates/graphics" }
 
+color-backtrace = { version = "0.7", default-features = false, features = [
+    "use-btparse-crate",
+] }
 futures = { workspace = true }
 smallvec = { workspace = true }
 tokio = { workspace = true, features = ["parking_lot", "rt-multi-thread"] }

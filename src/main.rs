@@ -20,6 +20,8 @@ impl tracing_tracy::Config for TracyConfig {
 }
 
 fn main() {
+    color_backtrace::install();
+
     let env_filter = tracing_subscriber::EnvFilter::try_from_default_env().ok();
     let def_filter = env_filter.is_none().then(|| {
         tracing_subscriber::filter::Targets::new()

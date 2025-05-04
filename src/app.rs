@@ -151,19 +151,23 @@ impl ApplicationHandler for App {
                 canvas.draw(Primitive::new(100.0, 400.0, 50.0, 50.0, Color::WHITE));
                 canvas.draw(
                     Primitive::new(200.0, 50.0, 400.0, 450.0, Color::WHITE)
-                        .with_texture(self.texture.clone().unwrap(), None),
+                        .with_texture(self.texture.clone().unwrap()),
                 );
                 canvas.draw(
                     Primitive::new(200.0, 50.0, 300.0, 100.0, Color::WHITE)
-                        .with_texture(self.texture2.clone().unwrap(), None),
+                        .with_texture(self.texture2.clone().unwrap()),
                 );
-                // canvas.draw_text(TextPrimitive::new(
-                //     "Hello world!",
-                //     &TextStyle::default(),
-                //     100.0,
-                //     700.0,
-                //     Color::WHITE,
-                // ));
+                canvas.draw_text(
+                    TextPrimitive::new(
+                        // "Hello world!",
+                        "H",
+                        &TextStyle::default(),
+                        100.0,
+                        470.0,
+                        Color::BLACK,
+                    )
+                    .with_max_width(200.),
+                );
 
                 graphics.render(smallvec![(window.id(), canvas)]).unwrap();
             }

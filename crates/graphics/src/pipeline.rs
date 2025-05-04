@@ -1,136 +1,25 @@
 use std::collections::HashMap;
-use std::marker::PhantomData;
 use std::sync::Mutex;
 
-use bytemuck::NoUninit;
 use bytemuck::Pod;
 use bytemuck::Zeroable;
 use tracing::info;
 use wgpu::include_wgsl;
 
-use crate::draw::GpuPrimitive;
+use crate::Color;
 
 const SHADER: wgpu::ShaderModuleDescriptor = include_wgsl!("shader.wgsl");
-
-#[repr(C)]
-#[derive(Clone, Copy, Debug, Pod, Zeroable)]
-pub struct DrawInfo {
-    pub viewport_size: [u32; 2],
-}
-
-pub struct DrawBuffer<T: ?Sized> {
-    buffer: wgpu::Buffer,
-    binding: wgpu::BindGroup,
-    bind_group: u32,
-    phantom: PhantomData<fn(&T) -> ()>,
-}
-
-impl<T: ?Sized> DrawBuffer<T> {
-    fn new(
-        device: &wgpu::Device,
-        usage: wgpu::BufferUsages,
-        size: u64,
-        bind_group: u32,
-        bind_group_layout: &wgpu::BindGroupLayout,
-    ) -> Self {
-        let buffer = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("Draw Info Uniforms"),
-            size,
-            usage,
-            mapped_at_creation: false,
-        });
-
-        let binding = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("Draw Info Bind Group"),
-            layout: bind_group_layout,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: buffer.as_entire_binding(),
-            }],
-        });
-
-        Self {
-            buffer,
-            binding,
-            bind_group,
-            phantom: PhantomData,
-        }
-    }
-}
-
-impl<T: NoUninit> DrawBuffer<T> {
-    pub fn bind_and_update(
-        &self,
-        queue: &wgpu::Queue,
-        render_pass: &mut wgpu::RenderPass,
-        contents: &T,
-    ) {
-        queue.write_buffer(&self.buffer, 0, bytemuck::bytes_of(contents));
-        render_pass.set_bind_group(self.bind_group, &self.binding, &[]);
-    }
-}
-
-impl<T: NoUninit> DrawBuffer<[T]> {
-    pub fn ensure_capacity(&mut self, device: &wgpu::Device, capacity: u64) {
-        if self.buffer.size() >= capacity * std::mem::size_of::<T>() as u64 {
-            return;
-        }
-
-        self.buffer = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("Draw Info Uniforms"),
-            size: capacity * std::mem::size_of::<T>() as u64,
-            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::STORAGE,
-            mapped_at_creation: false,
-        });
-    }
-
-    pub fn bind_and_update(
-        &mut self,
-        queue: &wgpu::Queue,
-        device: &wgpu::Device,
-        render_pass: &mut wgpu::RenderPass,
-        contents: &[T],
-    ) {
-        let contents = bytemuck::cast_slice(contents);
-
-        self.ensure_capacity(device, contents.len() as u64);
-
-        queue.write_buffer(&self.buffer, 0, contents);
-        render_pass.set_bind_group(self.bind_group, &self.binding, &[]);
-    }
-}
 
 #[derive(Clone)]
 pub(crate) struct RenderPipeline {
     pub device: wgpu::Device,
     pub pipeline: wgpu::RenderPipeline,
     pub sampler_bind_group: wgpu::BindGroup,
-    pub draw_info_bind_group_layout: wgpu::BindGroupLayout,
-    pub primitive_bind_group_layout: wgpu::BindGroupLayout,
+    pub draw_data_layout: wgpu::BindGroupLayout,
     pub texture_bind_group_layout: wgpu::BindGroupLayout,
 }
 
 impl RenderPipeline {
-    pub fn create_draw_info_uniforms(&self) -> DrawBuffer<DrawInfo> {
-        DrawBuffer::new(
-            &self.device,
-            wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::UNIFORM,
-            std::mem::size_of::<DrawInfo>() as u64,
-            0,
-            &self.draw_info_bind_group_layout,
-        )
-    }
-
-    pub fn create_primitive_buffer(&self) -> DrawBuffer<[GpuPrimitive]> {
-        DrawBuffer::new(
-            &self.device,
-            wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
-            std::mem::size_of::<GpuPrimitive>() as u64 * 1024,
-            1,
-            &self.primitive_bind_group_layout,
-        )
-    }
-
     pub fn create_texure_bind_group(
         &self,
         color_texture: &wgpu::TextureView,
@@ -152,14 +41,107 @@ impl RenderPipeline {
         })
     }
 
+    pub fn create_duffer(&self) -> DrawBuffer {
+        DrawBuffer::new(&self.device, &self.draw_data_layout, 1024)
+    }
+
     pub fn bind_texture(
         &self,
         render_pass: &mut wgpu::RenderPass,
         texture_bind_group: &wgpu::BindGroup,
     ) {
-        render_pass.set_bind_group(2, &self.sampler_bind_group, &[]);
+        render_pass.set_bind_group(1, &self.sampler_bind_group, &[]);
+        render_pass.set_bind_group(2, texture_bind_group, &[]);
+    }
+}
 
-        render_pass.set_bind_group(3, texture_bind_group, &[]);
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Pod, Zeroable)]
+pub struct DrawUniforms {
+    pub viewport_size: [u32; 2],
+}
+
+#[repr(C, align(16))]
+#[derive(Clone, Copy, Debug, Default, Pod, Zeroable)]
+pub(crate) struct GpuPrimitive {
+    pub point: [f32; 2],
+    pub size: [f32; 2],
+    pub color_tint: Color,
+    pub color_uvwh: [f32; 4],
+    pub alpha_uvwh: [f32; 4],
+}
+
+pub struct DrawBuffer {
+    bind_group: wgpu::BindGroup,
+    uniform_buffer: wgpu::Buffer,
+    primitive_buffer: wgpu::Buffer,
+}
+
+impl DrawBuffer {
+    pub fn new(
+        device: &wgpu::Device,
+        bind_group_layout: &wgpu::BindGroupLayout,
+        prim_capacity: usize,
+    ) -> Self {
+        let uniform_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("Uniform Buffer"),
+            size: std::mem::size_of::<DrawUniforms>() as u64,
+            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::UNIFORM,
+            mapped_at_creation: false,
+        });
+
+        let primitive_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("Primitive Buffer"),
+            size: (std::mem::size_of::<GpuPrimitive>() * prim_capacity) as u64,
+            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::STORAGE,
+            mapped_at_creation: false,
+        });
+
+        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("Uniform Bindings"),
+            layout: bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: uniform_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: primitive_buffer.as_entire_binding(),
+                },
+            ],
+        });
+
+        Self {
+            bind_group,
+            uniform_buffer,
+            primitive_buffer,
+        }
+    }
+
+    pub fn upload_and_bind(
+        &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        render_pass: &mut wgpu::RenderPass,
+        draw_info: DrawUniforms,
+        primitives: &[GpuPrimitive],
+    ) {
+        let required_size = std::mem::size_of_val(primitives) as u64;
+        if self.primitive_buffer.size() < required_size {
+            self.primitive_buffer.destroy();
+            self.primitive_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("Draw Info Uniforms"),
+                size: required_size,
+                usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::STORAGE,
+                mapped_at_creation: false,
+            });
+        }
+
+        queue.write_buffer(&self.uniform_buffer, 0, bytemuck::bytes_of(&draw_info));
+        queue.write_buffer(&self.primitive_buffer, 0, bytemuck::cast_slice(primitives));
+
+        render_pass.set_bind_group(0, &self.bind_group, &[]);
     }
 }
 
@@ -181,9 +163,8 @@ pub(crate) struct RenderPipelineCache {
     diffuse_sampler: wgpu::Sampler,
     sampler_bind_group: wgpu::BindGroup,
 
-    content_bind_group_layout: wgpu::BindGroupLayout,
+    draw_data_layout: wgpu::BindGroupLayout,
     texture_bind_group_layout: wgpu::BindGroupLayout,
-    viewport_bind_group_layout: wgpu::BindGroupLayout,
 
     pipelines: Mutex<HashMap<wgpu::TextureFormat, RenderPipeline>>,
 }
@@ -192,10 +173,10 @@ impl RenderPipelineCache {
     pub fn new(device: wgpu::Device) -> Self {
         let shader = device.create_shader_module(SHADER);
 
-        let viewport_bind_group_layout =
-            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                label: Some("Draw Info Bind Group Layout"),
-                entries: &[wgpu::BindGroupLayoutEntry {
+        let draw_data_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("Draw Info Bind Group Layout"),
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
                     binding: 0,
                     visibility: wgpu::ShaderStages::VERTEX,
                     ty: wgpu::BindingType::Buffer {
@@ -204,14 +185,9 @@ impl RenderPipelineCache {
                         min_binding_size: None,
                     },
                     count: None,
-                }],
-            });
-
-        let content_bind_group_layout =
-            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                label: Some("Content Bind Group Layout"),
-                entries: &[wgpu::BindGroupLayoutEntry {
-                    binding: 0,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
                     visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
                     ty: wgpu::BindingType::Buffer {
                         ty: wgpu::BufferBindingType::Storage { read_only: true },
@@ -219,8 +195,9 @@ impl RenderPipelineCache {
                         min_binding_size: None,
                     },
                     count: None,
-                }],
-            });
+                },
+            ],
+        });
 
         let sampler_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -263,8 +240,7 @@ impl RenderPipelineCache {
         let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("Render Pipeline Layout"),
             bind_group_layouts: &[
-                &viewport_bind_group_layout,
-                &content_bind_group_layout,
+                &draw_data_layout,
                 &sampler_bind_group_layout,
                 &texture_bind_group_layout,
             ],
@@ -296,9 +272,8 @@ impl RenderPipelineCache {
             layout,
             diffuse_sampler,
             sampler_bind_group,
-            content_bind_group_layout,
+            draw_data_layout,
             texture_bind_group_layout,
-            viewport_bind_group_layout,
             pipelines: Mutex::new(HashMap::new()),
         }
     }
@@ -344,7 +319,14 @@ impl RenderPipelineCache {
                     compilation_options: wgpu::PipelineCompilationOptions::default(),
                     targets: &[Some(wgpu::ColorTargetState {
                         format,
-                        blend: Some(wgpu::BlendState::REPLACE),
+                        blend: Some(wgpu::BlendState {
+                            color: wgpu::BlendComponent {
+                                src_factor: wgpu::BlendFactor::SrcAlpha,
+                                dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
+                                operation: wgpu::BlendOperation::Add,
+                            },
+                            alpha: wgpu::BlendComponent::OVER,
+                        }),
                         write_mask: wgpu::ColorWrites::ALL,
                     })],
                 }),
@@ -356,8 +338,7 @@ impl RenderPipelineCache {
             device: self.device.clone(),
             pipeline: render_pipeline,
             sampler_bind_group: self.sampler_bind_group.clone(),
-            draw_info_bind_group_layout: self.viewport_bind_group_layout.clone(),
-            primitive_bind_group_layout: self.content_bind_group_layout.clone(),
+            draw_data_layout: self.draw_data_layout.clone(),
             texture_bind_group_layout: self.texture_bind_group_layout.clone(),
         };
 
