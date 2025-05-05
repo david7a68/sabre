@@ -159,8 +159,7 @@ impl ApplicationHandler for App {
                 );
                 canvas.draw_text(
                     TextPrimitive::new(
-                        // "Hello world!",
-                        "H",
+                        "Hello world!",
                         &TextStyle::default(),
                         100.0,
                         470.0,
