@@ -231,8 +231,8 @@ impl CanvasStorage {
         self.textures
             .insert(alpha_texture.id(), alpha_texture.clone());
 
-        if color_texture.id() == *prev_alpha_texture_id
-            && alpha_texture.id() == *prev_color_texture_id
+        if color_texture.id() == *prev_color_texture_id
+            && alpha_texture.id() == *prev_alpha_texture_id
         {
             *num_vertices += VERTICES_PER_PRIMITIVE;
         } else {
