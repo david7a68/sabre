@@ -19,12 +19,14 @@ glamour = "0.17"
 guillotiere = "0.6"
 image = "0.25"
 memmap2 = "0.9"
+parley = "0.3"
 slotmap = "1"
 smallvec = { version = "1.15", features = [
     "const_generics",
     "const_new",
     "union",
 ] }
+swash = "0.2"
 tokio = "1.44"
 tracing = "0.1"
 tracing-tracy = { version = "0.11", default-features = false }
@@ -48,6 +50,9 @@ workspace-hack = { version = "0.1", path = "crates/workspace-hack" }
 
 graphics = { path = "crates/graphics" }
 
+color-backtrace = { version = "0.7", default-features = false, features = [
+    "use-btparse-crate",
+] }
 futures = { workspace = true }
 smallvec = { workspace = true }
 tokio = { workspace = true, features = ["parking_lot", "rt-multi-thread"] }

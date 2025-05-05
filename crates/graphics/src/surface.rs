@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use tracing::debug;
@@ -8,14 +9,11 @@ use winit::window::WindowId;
 
 use crate::Canvas;
 use crate::draw::DrawCommand;
-use crate::pipeline::DrawInfo;
+use crate::pipeline::DrawBuffer;
+use crate::pipeline::DrawUniforms;
+use crate::pipeline::RenderPipeline;
+use crate::pipeline::RenderPipelineCache;
 use crate::texture::StorageId;
-use crate::texture::TextureStorage;
-
-use super::draw::GpuPrimitive;
-use super::pipeline::DrawBuffer;
-use super::pipeline::RenderPipeline;
-use super::pipeline::RenderPipelineCache;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RenderError {
@@ -202,77 +200,78 @@ impl Surface {
 
             render_pass.set_pipeline(&self.render_pipeline.pipeline);
 
-            frame.draw_uniforms.bind_and_update(
+            frame.draw_buffer.upload_and_bind(
+                device,
                 queue,
                 &mut render_pass,
-                &DrawInfo {
+                DrawUniforms {
                     viewport_size: [self.config.width, self.config.height],
                 },
+                canvas.primitives(),
             );
 
-            frame
-                .primitives
-                .bind_and_update(queue, device, &mut render_pass, canvas.primitives());
-
             let mut vertex_offset = 0;
-            let mut stashed_vertices = 0;
-            let mut prev_storage_id = StorageId::default();
-            let mut prev_storage: Option<TextureStorage> = None;
+            let mut bind_groups = HashMap::<(StorageId, StorageId), wgpu::BindGroup>::new();
+
+            tracing::info!(primitives = ?canvas.primitives());
 
             for command in canvas.commands() {
                 match command {
                     DrawCommand::Draw {
-                        texture_id,
+                        color_texture_id,
+                        alpha_texture_id,
                         num_vertices,
                     } => {
-                        let Some(texture) = canvas.texture(*texture_id) else {
+                        let Some(color_texture) = canvas.texture(*color_texture_id) else {
                             debug!(
-                                texture_id = ?texture_id,
-                                "Texture not found, skipping primitives"
+                                texture_id = ?color_texture_id,
+                                "Color texture not found, skipping primitives"
                             );
                             continue;
                         };
 
-                        let is_ready = texture.is_ready();
-                        let is_same_storage = texture.storage_id() == prev_storage_id;
-
-                        if is_ready && is_same_storage {
-                            stashed_vertices += *num_vertices;
+                        let Some(alpha_texture) = canvas.texture(*alpha_texture_id) else {
+                            debug!(
+                                texture_id = ?alpha_texture_id,
+                                "Alpha texture not found, skipping primitives"
+                            );
                             continue;
-                        }
+                        };
 
+                        let is_ready = color_texture.is_ready() && alpha_texture.is_ready();
                         if !is_ready {
-                            debug!("Texture {texture_id:?} not ready, skipping primitives");
+                            debug!(
+                                skipped_vertices = num_vertices,
+                                "Texture {color_texture_id:?} not ready, skipping primitives"
+                            );
+
                             vertex_offset += *num_vertices;
                             continue;
                         }
 
-                        debug_assert_ne!(texture.storage_id(), StorageId::default());
-                        debug_assert_ne!(texture.storage_id(), prev_storage_id);
-
                         // Draw the previous batch of vertices and start a new one.
-                        if stashed_vertices > 0 {
-                            self.render_pipeline.bind_texture(
-                                &mut render_pass,
-                                prev_storage.take().unwrap().bind_group(),
-                            );
+                        tracing::info!(
+                            color_texture_id = ?color_texture_id,
+                            alpha_texture_id = ?alpha_texture_id,
+                            "batch!"
+                        );
 
-                            render_pass.draw(vertex_offset..vertex_offset + stashed_vertices, 0..1);
-                            vertex_offset += stashed_vertices;
-                        }
+                        let bind_group = bind_groups
+                            .entry((color_texture.storage_id(), alpha_texture.storage_id()))
+                            .or_insert_with(|| {
+                                self.render_pipeline.create_texure_bind_group(
+                                    color_texture.texture_view(),
+                                    alpha_texture.texture_view(),
+                                )
+                            });
 
-                        prev_storage_id = texture.storage_id();
-                        stashed_vertices = *num_vertices;
-                        prev_storage = Some(texture.storage());
+                        self.render_pipeline
+                            .bind_texture(&mut render_pass, bind_group);
+
+                        render_pass.draw(vertex_offset..vertex_offset + *num_vertices, 0..1);
+                        vertex_offset += *num_vertices;
                     }
                 }
-            }
-
-            if stashed_vertices > 0 {
-                self.render_pipeline
-                    .bind_texture(&mut render_pass, prev_storage.take().unwrap().bind_group());
-
-                render_pass.draw(vertex_offset..vertex_offset + stashed_vertices, 0..1);
             }
         });
 
@@ -283,18 +282,13 @@ impl Surface {
 }
 
 struct Frame {
-    draw_uniforms: DrawBuffer<DrawInfo>,
-    primitives: DrawBuffer<[GpuPrimitive]>,
+    draw_buffer: DrawBuffer,
 }
 
 impl Frame {
     fn new(render_pipeline: &RenderPipeline) -> Self {
-        let draw_uniforms = render_pipeline.create_draw_info_uniforms();
-        let primitives = render_pipeline.create_primitive_buffer();
-
         Self {
-            draw_uniforms,
-            primitives,
+            draw_buffer: render_pipeline.create_duffer(),
         }
     }
 }

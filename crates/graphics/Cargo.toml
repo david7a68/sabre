@@ -13,7 +13,9 @@ glamour = { workspace = true }
 guillotiere = { workspace = true }
 image = { workspace = true, features = ["jpeg", "png"] }
 memmap2 = { workspace = true }
+parley = { workspace = true }
 slotmap = { workspace = true }
+swash = { workspace = true }
 smallvec = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
