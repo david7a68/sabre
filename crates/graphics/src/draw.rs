@@ -230,7 +230,7 @@ impl CanvasStorage {
             .unwrap_or(texture_manager.opaque_pixel());
         let alpha_uvwh = alpha_texture.uvwh();
 
-        if !color_texture.is_ready() | !alpha_texture.is_ready() {
+        if !color_texture.is_ready() || !alpha_texture.is_ready() {
             self.has_unready_textures = true;
             return;
         }
