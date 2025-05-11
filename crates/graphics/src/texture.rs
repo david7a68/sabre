@@ -135,21 +135,31 @@ impl std::fmt::Debug for Texture {
 #[derive(Clone)]
 pub struct TextureManager {
     inner: Rc<TextureManagerInner>,
+
+    white_pixel: Texture,
+    opaque_pixel: Texture,
 }
 
 impl TextureManager {
     pub fn new(queue: wgpu::Queue, device: wgpu::Device) -> Self {
+        let inner = TextureManagerInner::new(queue, device);
+
+        let white_pixel = inner.white_pixel();
+        let opaque_pixel = inner.opaque_pixel();
+
         Self {
-            inner: TextureManagerInner::new(queue, device),
+            inner,
+            white_pixel,
+            opaque_pixel,
         }
     }
 
-    pub fn white_pixel(&self) -> Texture {
-        self.inner.white_pixel()
+    pub fn white_pixel(&self) -> &Texture {
+        &self.white_pixel
     }
 
-    pub fn opaque_pixel(&self) -> Texture {
-        self.inner.opaque_pixel()
+    pub fn opaque_pixel(&self) -> &Texture {
+        &self.opaque_pixel
     }
 
     #[instrument(skip(self, data))]
@@ -249,8 +259,6 @@ impl TextureManagerInner {
         let usage = texture_map.get_mut(id)?;
         usage.refcount += 1;
 
-        debug!(texture_id = ?id, num_references = usage.refcount, "Acquiring reference to texture");
-
         Some(Texture {
             id,
             storage_id: usage.storage,
@@ -293,11 +301,6 @@ impl TextureManagerInner {
         let texture_map = self.texture_map.get_mut();
 
         if let Some(usage) = texture_map.get_mut(id) {
-            debug!(
-                num_references = usage.refcount - 1,
-                "Releasing texture handle"
-            );
-
             usage.refcount -= 1;
             if usage.refcount == 0 {
                 let usage = texture_map.remove(id).unwrap();
@@ -407,8 +410,6 @@ impl TextureManagerInner {
     }
 
     fn load(self: &Rc<Self>, path: impl AsRef<Path>) -> Result<Texture, TextureLoadError> {
-        info!("Loading texture from file: {:?}", path.as_ref().display());
-
         let start_time = std::time::Instant::now();
 
         let path = path.as_ref();
@@ -448,7 +449,7 @@ impl TextureManagerInner {
 
         tokio::task::spawn_blocking({
             let span = info_span!(
-                "Texture load",
+                "Loading texture from file",
                 path = %path.display(),
                 texture_id = debug(texture_id),
                 width = width,
@@ -528,7 +529,6 @@ impl TextureManagerInner {
         while let Ok(texture_id) = self.ready_receiver.try_recv() {
             if let Some(usage) = self.texture_map.borrow_mut().get_mut(texture_id) {
                 usage.is_ready = true;
-                debug!(texture_id = ?texture_id, "Texture is ready: {texture_id:?}");
             }
         }
     }
@@ -601,8 +601,6 @@ impl FormattedTextureManager {
     /// Call once per frame to clean up resources and perform any necessary
     /// housekeeping.
     fn end_frame(&mut self) {
-        info!(count = self.storage.len(), format = ?self.format, "Cleaning up texture storage");
-
         self.storage.retain(|id, storage| {
             if storage.refcount == 0 {
                 warn!(storage = ?id, format = ?self.format, "Dropping texture atlas storage");

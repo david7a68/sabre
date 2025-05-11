@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use tracing::debug;
 use tracing::instrument;
 use tracing::trace;
 use winit::window::Window;
@@ -213,55 +212,22 @@ impl Surface {
             let mut vertex_offset = 0;
             let mut bind_groups = HashMap::<(StorageId, StorageId), wgpu::BindGroup>::new();
 
-            tracing::info!(primitives = ?canvas.primitives());
-
             for command in canvas.commands() {
                 match command {
                     DrawCommand::Draw {
-                        color_texture_id,
-                        alpha_texture_id,
+                        color_storage_id,
+                        alpha_storage_id,
                         num_vertices,
                     } => {
-                        let Some(color_texture) = canvas.texture(*color_texture_id) else {
-                            debug!(
-                                texture_id = ?color_texture_id,
-                                "Color texture not found, skipping primitives"
-                            );
-                            continue;
-                        };
-
-                        let Some(alpha_texture) = canvas.texture(*alpha_texture_id) else {
-                            debug!(
-                                texture_id = ?alpha_texture_id,
-                                "Alpha texture not found, skipping primitives"
-                            );
-                            continue;
-                        };
-
-                        let is_ready = color_texture.is_ready() && alpha_texture.is_ready();
-                        if !is_ready {
-                            debug!(
-                                skipped_vertices = num_vertices,
-                                "Texture {color_texture_id:?} not ready, skipping primitives"
-                            );
-
-                            vertex_offset += *num_vertices;
-                            continue;
-                        }
-
-                        // Draw the previous batch of vertices and start a new one.
-                        tracing::info!(
-                            color_texture_id = ?color_texture_id,
-                            alpha_texture_id = ?alpha_texture_id,
-                            "batch!"
-                        );
+                        let color_texture_view = canvas.texture_view(*color_storage_id).unwrap();
+                        let alpha_texture_view = canvas.texture_view(*alpha_storage_id).unwrap();
 
                         let bind_group = bind_groups
-                            .entry((color_texture.storage_id(), alpha_texture.storage_id()))
+                            .entry((*color_storage_id, *alpha_storage_id))
                             .or_insert_with(|| {
                                 self.render_pipeline.create_texure_bind_group(
-                                    color_texture.texture_view(),
-                                    alpha_texture.texture_view(),
+                                    color_texture_view,
+                                    alpha_texture_view,
                                 )
                             });
 

@@ -6,9 +6,9 @@ use crate::TextStyle;
 use crate::color::Color;
 use crate::pipeline::GpuPrimitive;
 use crate::text::TextSystem;
+use crate::texture::StorageId;
 
 use super::texture::Texture;
-use super::texture::TextureId;
 use super::texture::TextureLoadError;
 use super::texture::TextureManager;
 
@@ -86,8 +86,8 @@ impl<'a> TextPrimitive<'a> {
 #[derive(Clone, Copy, Debug)]
 pub(crate) enum DrawCommand {
     Draw {
-        color_texture_id: TextureId,
-        alpha_texture_id: TextureId,
+        color_storage_id: StorageId,
+        alpha_storage_id: StorageId,
         num_vertices: u32,
     },
 }
@@ -110,17 +110,24 @@ impl Canvas {
         storage.commands.clear();
         storage.primitives.clear();
         storage.textures.clear();
+        storage.has_unready_textures = false;
 
         let white_pixel = texture_manager.white_pixel();
         let opaque_pixel = texture_manager.opaque_pixel();
 
         storage.commands.push(DrawCommand::Draw {
-            color_texture_id: white_pixel.id(),
-            alpha_texture_id: opaque_pixel.id(),
+            color_storage_id: white_pixel.storage_id(),
+            alpha_storage_id: opaque_pixel.storage_id(),
             num_vertices: 0,
         });
-        storage.textures.insert(white_pixel.id(), white_pixel);
-        storage.textures.insert(opaque_pixel.id(), opaque_pixel);
+
+        storage
+            .textures
+            .insert(white_pixel.storage_id(), white_pixel.texture_view().clone());
+        storage.textures.insert(
+            opaque_pixel.storage_id(),
+            opaque_pixel.texture_view().clone(),
+        );
 
         Self {
             storage,
@@ -128,6 +135,11 @@ impl Canvas {
             texture_manager,
             return_sender,
         }
+    }
+
+    #[must_use]
+    pub fn has_unready_textures(&self) -> bool {
+        self.storage.has_unready_textures
     }
 
     #[must_use]
@@ -141,7 +153,7 @@ impl Canvas {
     }
 
     #[must_use]
-    pub fn texture(&self, id: TextureId) -> Option<&Texture> {
+    pub fn texture_view(&self, id: StorageId) -> Option<&wgpu::TextureView> {
         self.storage.textures.get(&id)
     }
 
@@ -193,11 +205,13 @@ pub(crate) struct CanvasStorage {
     commands: Vec<DrawCommand>,
     primitives: Vec<GpuPrimitive>,
 
-    textures: HashMap<TextureId, Texture>,
+    textures: HashMap<StorageId, wgpu::TextureView>,
+
+    has_unready_textures: bool,
 }
 
 impl CanvasStorage {
-    pub fn draw(&mut self, texture_manager: &TextureManager, primitive: Primitive) {
+    pub(crate) fn draw(&mut self, texture_manager: &TextureManager, primitive: Primitive) {
         let Primitive {
             point,
             size,
@@ -206,11 +220,20 @@ impl CanvasStorage {
             alpha_texture,
         } = primitive;
 
-        let color_texture = color_texture.unwrap_or_else(|| texture_manager.white_pixel());
+        let color_texture = color_texture
+            .as_ref()
+            .unwrap_or(texture_manager.white_pixel());
         let color_uvwh = color_texture.uvwh();
 
-        let alpha_texture = alpha_texture.unwrap_or_else(|| texture_manager.opaque_pixel());
+        let alpha_texture = alpha_texture
+            .as_ref()
+            .unwrap_or(texture_manager.opaque_pixel());
         let alpha_uvwh = alpha_texture.uvwh();
+
+        if !color_texture.is_ready() || !alpha_texture.is_ready() {
+            self.has_unready_textures = true;
+            return;
+        }
 
         self.primitives.push(GpuPrimitive {
             point,
@@ -221,24 +244,29 @@ impl CanvasStorage {
         });
 
         let DrawCommand::Draw {
-            color_texture_id: prev_color_texture_id,
-            alpha_texture_id: prev_alpha_texture_id,
+            color_storage_id: prev_color_texture_id,
+            alpha_storage_id: prev_alpha_texture_id,
             num_vertices,
         } = self.commands.last_mut().unwrap();
 
-        self.textures
-            .insert(color_texture.id(), color_texture.clone());
-        self.textures
-            .insert(alpha_texture.id(), alpha_texture.clone());
+        self.textures.insert(
+            color_texture.storage_id(),
+            color_texture.texture_view().clone(),
+        );
 
-        if color_texture.id() == *prev_color_texture_id
-            && alpha_texture.id() == *prev_alpha_texture_id
+        self.textures.insert(
+            alpha_texture.storage_id(),
+            alpha_texture.texture_view().clone(),
+        );
+
+        if color_texture.storage_id() == *prev_color_texture_id
+            && alpha_texture.storage_id() == *prev_alpha_texture_id
         {
             *num_vertices += VERTICES_PER_PRIMITIVE;
         } else {
             self.commands.push(DrawCommand::Draw {
-                color_texture_id: color_texture.id(),
-                alpha_texture_id: alpha_texture.id(),
+                color_storage_id: color_texture.storage_id(),
+                alpha_storage_id: alpha_texture.storage_id(),
                 num_vertices: VERTICES_PER_PRIMITIVE,
             });
         }

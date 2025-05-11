@@ -168,6 +168,10 @@ impl ApplicationHandler for App {
                     .with_max_width(200.),
                 );
 
+                if canvas.has_unready_textures() {
+                    window.request_redraw();
+                }
+
                 graphics.render(smallvec![(window.id(), canvas)]).unwrap();
             }
             _ => (),
