@@ -3,13 +3,11 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
 use std::hash::Hash;
-use std::hash::Hasher;
 use std::rc::Rc;
 
 use parley::AlignmentOptions;
 use parley::FontContext;
 use parley::FontStack;
-use parley::Glyph;
 use parley::GlyphRun;
 use parley::Layout;
 use parley::LayoutContext;
@@ -19,7 +17,6 @@ use swash::FontRef;
 use swash::GlyphId;
 use swash::scale::Render;
 use swash::scale::ScaleContext;
-use swash::scale::Scaler;
 use swash::scale::Source;
 use swash::scale::StrikeWith;
 use swash::scale::image::Content;
@@ -217,22 +214,26 @@ fn draw_glyph_run(
             size: font_size as u8,
         };
 
-        debug!(key = ?key, hash = {
-            let mut hasher = std::collections::hash_map::DefaultHasher::new();
-            key.hash(&mut hasher);
-            hasher.finish()
-        });
-
         let entry = match glyph_cache.entry(key) {
             Entry::Occupied(occupied_entry) => occupied_entry.into_mut(),
             Entry::Vacant(vacant_entry) => {
-                if !draw_glyph(
-                    &mut temp_glyph,
-                    &mut scaler,
-                    glyph,
-                    x_placement,
-                    y_placement,
-                ) {
+                temp_glyph.clear();
+
+                let offset = Vector::new(x_placement.offset, y_placement.offset);
+
+                let success = Render::new(&[
+                    Source::ColorOutline(0),
+                    Source::ColorBitmap(StrikeWith::BestFit),
+                    Source::Bitmap(StrikeWith::BestFit),
+                    Source::Outline,
+                ])
+                .format(Format::Alpha)
+                .offset(offset)
+                .render_into(&mut scaler, glyph.id, &mut temp_glyph);
+
+                assert!(success);
+
+                if temp_glyph.placement.height == 0 {
                     debug!("Skipping 0-height glyph: {:?}", glyph.id);
                     continue;
                 }
@@ -271,44 +272,6 @@ fn draw_glyph_run(
 
         debug!(count = glyph_cache.len());
     }
-}
-
-fn draw_glyph(
-    image: &mut Image,
-    scaler: &mut Scaler,
-    glyph: Glyph,
-    x: SubpixelAlignment,
-    y: SubpixelAlignment,
-) -> bool {
-    let offset = Vector::new(x.offset, y.offset);
-
-    image.clear();
-    let success = Render::new(&[
-        Source::ColorOutline(0),
-        Source::ColorBitmap(StrikeWith::BestFit),
-        Source::Bitmap(StrikeWith::BestFit),
-        Source::Outline,
-    ])
-    .format(Format::Alpha)
-    .offset(offset)
-    .render_into(scaler, glyph.id, image);
-
-    assert!(success);
-
-    debug!(
-        glyph = ?glyph,
-        source = ?image.source,
-        content = ?image.content,
-        placement = ?image.placement,
-        data_len = image.data.len(),
-    );
-
-    if image.placement.height == 0 {
-        debug!("Skipping 0-height glyph: {:?}", glyph.id);
-        return false;
-    }
-
-    true
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
