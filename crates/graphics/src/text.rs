@@ -23,7 +23,6 @@ use swash::scale::image::Content;
 use swash::scale::image::Image;
 use swash::zeno::Format;
 use swash::zeno::Vector;
-use tracing::debug;
 use tracing::instrument;
 
 use crate::Color;
@@ -234,7 +233,6 @@ fn draw_glyph_run(
                 assert!(success);
 
                 if temp_glyph.placement.height == 0 {
-                    debug!("Skipping 0-height glyph: {:?}", glyph.id);
                     continue;
                 }
 
@@ -269,8 +267,6 @@ fn draw_glyph_run(
             )
             .with_mask(entry.texture.clone()),
         );
-
-        debug!(count = glyph_cache.len());
     }
 }
 

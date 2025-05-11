@@ -410,8 +410,6 @@ impl TextureManagerInner {
     }
 
     fn load(self: &Rc<Self>, path: impl AsRef<Path>) -> Result<Texture, TextureLoadError> {
-        info!("Loading texture from file: {:?}", path.as_ref().display());
-
         let start_time = std::time::Instant::now();
 
         let path = path.as_ref();
@@ -451,7 +449,7 @@ impl TextureManagerInner {
 
         tokio::task::spawn_blocking({
             let span = info_span!(
-                "Texture load",
+                "Loading texture from file",
                 path = %path.display(),
                 texture_id = debug(texture_id),
                 width = width,
@@ -531,7 +529,6 @@ impl TextureManagerInner {
         while let Ok(texture_id) = self.ready_receiver.try_recv() {
             if let Some(usage) = self.texture_map.borrow_mut().get_mut(texture_id) {
                 usage.is_ready = true;
-                debug!(texture_id = ?texture_id, "Texture is ready: {texture_id:?}");
             }
         }
     }

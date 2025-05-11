@@ -110,6 +110,7 @@ impl Canvas {
         storage.commands.clear();
         storage.primitives.clear();
         storage.textures.clear();
+        storage.has_unready_textures = false;
 
         let white_pixel = texture_manager.white_pixel();
         let opaque_pixel = texture_manager.opaque_pixel();
@@ -134,6 +135,11 @@ impl Canvas {
             texture_manager,
             return_sender,
         }
+    }
+
+    #[must_use]
+    pub fn has_unready_textures(&self) -> bool {
+        self.storage.has_unready_textures
     }
 
     #[must_use]
@@ -200,10 +206,12 @@ pub(crate) struct CanvasStorage {
     primitives: Vec<GpuPrimitive>,
 
     textures: HashMap<StorageId, wgpu::TextureView>,
+
+    has_unready_textures: bool,
 }
 
 impl CanvasStorage {
-    pub fn draw(&mut self, texture_manager: &TextureManager, primitive: Primitive) {
+    pub(crate) fn draw(&mut self, texture_manager: &TextureManager, primitive: Primitive) {
         let Primitive {
             point,
             size,
@@ -223,6 +231,7 @@ impl CanvasStorage {
         let alpha_uvwh = alpha_texture.uvwh();
 
         if !color_texture.is_ready() | !alpha_texture.is_ready() {
+            self.has_unready_textures = true;
             return;
         }
 

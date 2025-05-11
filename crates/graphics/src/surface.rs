@@ -212,8 +212,6 @@ impl Surface {
             let mut vertex_offset = 0;
             let mut bind_groups = HashMap::<(StorageId, StorageId), wgpu::BindGroup>::new();
 
-            tracing::info!(primitives = ?canvas.primitives());
-
             for command in canvas.commands() {
                 match command {
                     DrawCommand::Draw {
