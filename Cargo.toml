@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/graphics", "crates/workspace-hack"]
+members = ["crates/graphics", "crates/ui_base", "crates/workspace-hack"]
 
 [workspace.package]
 version = "0.1.0"
@@ -12,6 +12,10 @@ dbg_macro = "warn"
 unused_crate_dependencies = "warn"
 
 [workspace.dependencies]
+# Internal dependencies
+graphics = { path = "crates/graphics" }
+
+# External dependencies
 bytemuck = "1"
 color = "0.3"
 futures = "0.3"
@@ -49,6 +53,7 @@ profile = ["tracing-tracy/enable"]
 workspace-hack = { version = "0.1", path = "crates/workspace-hack" }
 
 graphics = { path = "crates/graphics" }
+ui_base = { path = "crates/ui_base" }
 
 color-backtrace = { version = "0.7", default-features = false, features = [
     "use-btparse-crate",

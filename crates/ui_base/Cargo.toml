@@ -1,0 +1,14 @@
+[package]
+name = "ui_base"
+version.workspace = true
+edition.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+graphics = { workspace = true }
+workspace-hack = { version = "0.1", path = "../workspace-hack" }
+
+smallvec = { workspace = true }
+tracing = { workspace = true }

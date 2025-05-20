@@ -7,7 +7,11 @@ use graphics::TextStyle;
 use smallvec::smallvec;
 use tracing::info;
 use tracing::instrument;
+use ui_base::input::InputState;
+use ui_base::ui::UiContext;
 use winit::application::ApplicationHandler;
+use winit::event::ElementState;
+use winit::event::MouseButton;
 use winit::event::WindowEvent;
 use winit::event_loop::ActiveEventLoop;
 use winit::event_loop::ControlFlow;
@@ -26,7 +30,7 @@ use crate::graphics::Texture;
 
 pub struct App {
     graphics: Option<GraphicsContext>,
-    windows: Vec<Arc<Window>>,
+    windows: Vec<AppWindow>,
     texture: Option<Texture>,
     texture2: Option<Texture>,
 }
@@ -85,7 +89,11 @@ impl ApplicationHandler for App {
 
         window.set_visible(true);
 
-        self.windows.push(window);
+        self.windows.push(AppWindow {
+            window,
+            input: InputState::default(),
+            ui_context: UiContext::new(),
+        });
         self.graphics = Some(graphics_context);
     }
 
@@ -113,20 +121,75 @@ impl ApplicationHandler for App {
                     let window = self
                         .windows
                         .iter_mut()
-                        .find(|rc| rc.id() == window_id)
+                        .find(|rc| rc.window.id() == window_id)
                         .unwrap();
 
-                    window.request_redraw();
+                    window.window.request_redraw();
                 }
 
                 if event.logical_key == Key::Named(NamedKey::Escape) && event.state.is_pressed() {
-                    self.windows.retain(|rc| rc.id() != window_id);
+                    self.windows.retain(|rc| rc.window.id() != window_id);
                 }
             }
-            WindowEvent::Resized(_) => {}
+            WindowEvent::Resized(size) => {
+                let window = self
+                    .windows
+                    .iter_mut()
+                    .find(|rc| rc.window.id() == window_id)
+                    .unwrap();
+
+                window.input.window_size.width = size.width as f32;
+                window.input.window_size.height = size.height as f32;
+            }
             WindowEvent::CloseRequested => {
-                self.windows.retain(|rc| rc.id() != window_id);
+                self.windows.retain(|rc| rc.window.id() != window_id);
                 self.graphics.as_mut().unwrap().destroy_surface(window_id);
+            }
+            WindowEvent::CursorMoved {
+                device_id: _,
+                position,
+            } => {
+                let window = self
+                    .windows
+                    .iter_mut()
+                    .find(|rc| rc.window.id() == window_id)
+                    .unwrap();
+
+                window.input.pointer.x = position.x as f32;
+                window.input.pointer.y = position.y as f32;
+            }
+            WindowEvent::MouseInput {
+                device_id: _,
+                state,
+                button,
+            } => {
+                let window = self
+                    .windows
+                    .iter_mut()
+                    .find(|rc| rc.window.id() == window_id)
+                    .unwrap();
+
+                match (button, state) {
+                    (MouseButton::Left, ElementState::Pressed) => {
+                        window.input.mouse_state.is_left_down = true;
+                    }
+                    (MouseButton::Left, ElementState::Released) => {
+                        window.input.mouse_state.is_left_down = false;
+                    }
+                    (MouseButton::Right, ElementState::Pressed) => {
+                        window.input.mouse_state.is_right_down = true;
+                    }
+                    (MouseButton::Right, ElementState::Released) => {
+                        window.input.mouse_state.is_right_down = false;
+                    }
+                    (MouseButton::Middle, ElementState::Pressed) => {
+                        window.input.mouse_state.is_middle_down = true;
+                    }
+                    (MouseButton::Middle, ElementState::Released) => {
+                        window.input.mouse_state.is_middle_down = false;
+                    }
+                    _ => (),
+                }
             }
             WindowEvent::Destroyed => {
                 if self.windows.is_empty() {
@@ -138,43 +201,101 @@ impl ApplicationHandler for App {
                 let window = self
                     .windows
                     .iter_mut()
-                    .find(|rc| rc.id() == window_id)
+                    .find(|rc| rc.window.id() == window_id)
                     .unwrap();
 
                 let graphics = self.graphics.as_mut().unwrap();
                 let mut canvas = graphics.get_canvas();
 
                 canvas.clear(Color::srgb(0.1, 0.2, 0.3, 1.0));
-                canvas.draw(Primitive::new(100.0, 100.0, 50.0, 50.0, Color::WHITE));
-                canvas.draw(Primitive::new(100.0, 200.0, 50.0, 50.0, Color::WHITE));
-                canvas.draw(Primitive::new(100.0, 300.0, 50.0, 50.0, Color::WHITE));
-                canvas.draw(Primitive::new(100.0, 400.0, 50.0, 50.0, Color::WHITE));
-                canvas.draw(
-                    Primitive::new(200.0, 50.0, 400.0, 450.0, Color::WHITE)
-                        .with_texture(self.texture.clone().unwrap()),
-                );
-                canvas.draw(
-                    Primitive::new(200.0, 50.0, 300.0, 100.0, Color::WHITE)
-                        .with_texture(self.texture2.clone().unwrap()),
-                );
-                canvas.draw_text(
-                    TextPrimitive::new(
-                        "Hello world!",
-                        &TextStyle::default(),
-                        100.0,
-                        470.0,
-                        Color::BLACK,
-                    )
-                    .with_max_width(200.),
-                );
+
+                window
+                    .ui_context
+                    .next_frame(window.input.clone(), Duration::ZERO, |ui| {
+                        ui.with_color(Color::srgb(0.1, 0.2, 0.3, 1.0))
+                            .with_spacing(4.0)
+                            .with_container(|ui| {
+                                ui.with_color(Color::GREEN)
+                                    .with_spacing(10.0)
+                                    .with_height(105.0)
+                                    .with_element(|ui| {
+                                        ui.with_color(Color::WHITE)
+                                            .with_height(100.0)
+                                            .with_width(100.0);
+                                    })
+                                    .with_element(|ui| {
+                                        ui.with_color(Color::WHITE)
+                                            .with_height(100.0)
+                                            .with_width(100.0);
+                                    });
+                            })
+                            .with_element(|ui| {
+                                ui.with_color(Color::RED)
+                                    .with_height(100.0)
+                                    .with_width(100.0);
+                            });
+
+                        // ui.with_color(Color::srgb(0.3, 0.3, 0.3, 1.0))
+                        //     .with_element(|ui| {
+                        //         ui.with_color(Color::WHITE)
+                        //             .with_height(100.0, None)
+                        //             .with_width(100.0, None);
+                        //     })
+                        //     .with_container(|ui| {
+                        //         ui.with_color(Color::GREEN)
+                        //             .with_element(|ui| {
+                        //                 ui.with_color(Color::WHITE)
+                        //                     .with_height(100.0, None)
+                        //                     .with_width(100.0, None);
+                        //             })
+                        //             .with_element(|ui| {
+                        //                 ui.with_color(Color::RED)
+                        //                     .with_height(100.0, None)
+                        //                     .with_width(100.0, None);
+                        //             });
+                        //     });
+                    })
+                    .finish(&mut canvas);
+
+                // canvas.draw(Primitive::new(100.0, 100.0, 50.0, 50.0, Color::WHITE));
+                // canvas.draw(Primitive::new(100.0, 200.0, 50.0, 50.0, Color::WHITE));
+                // canvas.draw(Primitive::new(100.0, 300.0, 50.0, 50.0, Color::WHITE));
+                // canvas.draw(Primitive::new(100.0, 400.0, 50.0, 50.0, Color::WHITE));
+                // canvas.draw(
+                //     Primitive::new(200.0, 50.0, 400.0, 450.0, Color::WHITE)
+                //         .with_texture(self.texture.clone().unwrap()),
+                // );
+                // canvas.draw(
+                //     Primitive::new(200.0, 50.0, 300.0, 100.0, Color::WHITE)
+                //         .with_texture(self.texture2.clone().unwrap()),
+                // );
+                // canvas.draw_text(
+                //     TextPrimitive::new(
+                //         "Hello world!",
+                //         &TextStyle::default(),
+                //         100.0,
+                //         470.0,
+                //         Color::BLACK,
+                //     )
+                //     .with_max_width(200.),
+                // );
 
                 if canvas.has_unready_textures() {
-                    window.request_redraw();
+                    window.window.request_redraw();
                 }
 
-                graphics.render(smallvec![(window.id(), canvas)]).unwrap();
+                graphics
+                    .render(smallvec![(window.window.id(), canvas)])
+                    .unwrap();
             }
             _ => (),
         }
     }
+}
+
+struct AppWindow {
+    window: Arc<Window>,
+
+    input: InputState,
+    ui_context: UiContext,
 }
