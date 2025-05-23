@@ -34,6 +34,17 @@ pub struct Padding {
     pub bottom: f32,
 }
 
+impl Padding {
+    pub fn equal(value: f32) -> Self {
+        Self {
+            left: value,
+            right: value,
+            top: value,
+            bottom: value,
+        }
+    }
+}
+
 #[derive(Debug, Default)]
 pub(crate) struct Layout {
     pub x: Option<f32>,
@@ -108,7 +119,6 @@ fn compute_flex_widths(nodes: &mut [Node], children: &[NodeIndexArray], node_id:
         node.layout.width = Some(total_width.clamp(min, max));
     } else {
         for child in &children[node_id.0 as usize] {
-            tracing::info!("child: {:?}", child);
             compute_flex_widths(nodes, children, *child);
         }
     }
@@ -131,7 +141,7 @@ fn compute_x_offsets(
     for child_id in &children[node_id.0 as usize] {
         let child_node = &mut nodes[child_id.0 as usize];
 
-        child_node.layout.x = Some(current_x);
+        child_node.layout.x = Some(advance);
         advance = compute_x_offsets(nodes, children, *child_id, advance) + padding;
     }
 
@@ -162,7 +172,6 @@ fn compute_flex_heights(nodes: &mut [Node], children: &[NodeIndexArray], node_id
         node.layout.height = Some(total_height.clamp(min, max));
     } else {
         for child in &children[node_id.0 as usize] {
-            tracing::info!("child: {:?}", child);
             compute_flex_heights(nodes, children, *child);
         }
     }
@@ -177,12 +186,12 @@ fn compute_y_offsets(
     let node = &mut nodes[node_id.0 as usize];
 
     node.layout.y = Some(current_y);
-    let y_inset = node.element.inner_padding.top;
+    let y_inset = current_y + node.element.inner_padding.top;
 
     for child_id in &children[node_id.0 as usize] {
         let child_node = &mut nodes[child_id.0 as usize];
 
-        child_node.layout.y = Some(0.0);
+        child_node.layout.y = Some(y_inset);
         compute_y_offsets(nodes, children, *child_id, y_inset);
     }
 }

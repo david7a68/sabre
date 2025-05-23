@@ -215,12 +215,7 @@ impl ApplicationHandler for App {
                             .with_container(|ui| {
                                 ui.with_color(Color::GREEN)
                                     .with_child_spacing(5.0)
-                                    .with_padding(Padding {
-                                        left: 5.0,
-                                        right: 5.0,
-                                        top: 5.0,
-                                        bottom: 5.0,
-                                    })
+                                    .with_padding(Padding::equal(5.0))
                                     .with_element(|ui| {
                                         ui.with_color(Color::WHITE)
                                             .with_height(100.0)
@@ -237,26 +232,6 @@ impl ApplicationHandler for App {
                                     .with_height(100.0)
                                     .with_width(100.0);
                             });
-
-                        // ui.with_color(Color::srgb(0.3, 0.3, 0.3, 1.0))
-                        //     .with_element(|ui| {
-                        //         ui.with_color(Color::WHITE)
-                        //             .with_height(100.0, None)
-                        //             .with_width(100.0, None);
-                        //     })
-                        //     .with_container(|ui| {
-                        //         ui.with_color(Color::GREEN)
-                        //             .with_element(|ui| {
-                        //                 ui.with_color(Color::WHITE)
-                        //                     .with_height(100.0, None)
-                        //                     .with_width(100.0, None);
-                        //             })
-                        //             .with_element(|ui| {
-                        //                 ui.with_color(Color::RED)
-                        //                     .with_height(100.0, None)
-                        //                     .with_width(100.0, None);
-                        //             });
-                        //     });
                     })
                     .finish(&mut canvas);
 
