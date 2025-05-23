@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/graphics", "crates/workspace-hack"]
+members = ["crates/graphics", "crates/ui_base", "crates/workspace-hack"]
 
 [workspace.package]
 version = "0.1.0"
@@ -12,8 +12,13 @@ dbg_macro = "warn"
 unused_crate_dependencies = "warn"
 
 [workspace.dependencies]
+# Internal dependencies
+graphics = { path = "crates/graphics" }
+
+# External dependencies
 bytemuck = "1"
 color = "0.3"
+color-backtrace = { version = "0.7", default-features = false }
 futures = "0.3"
 glamour = "0.17"
 guillotiere = "0.6"
@@ -21,14 +26,11 @@ image = "0.25"
 memmap2 = "0.9"
 parley = "0.3"
 slotmap = "1"
-smallvec = { version = "1.15", features = [
-    "const_generics",
-    "const_new",
-    "union",
-] }
+smallvec = "1.15"
 swash = "0.2"
 tokio = "1.44"
 tracing = "0.1"
+tracing-subscriber = "0.3"
 tracing-tracy = { version = "0.11", default-features = false }
 wgpu = "25"
 winit = "0.30"
@@ -49,15 +51,18 @@ profile = ["tracing-tracy/enable"]
 workspace-hack = { version = "0.1", path = "crates/workspace-hack" }
 
 graphics = { path = "crates/graphics" }
+ui_base = { path = "crates/ui_base" }
 
-color-backtrace = { version = "0.7", default-features = false, features = [
-    "use-btparse-crate",
-] }
+color-backtrace = { workspace = true }
 futures = { workspace = true }
-smallvec = { workspace = true }
+smallvec = { workspace = true, features = [
+    "const_generics",
+    "const_new",
+    "union",
+] }
 tokio = { workspace = true, features = ["parking_lot", "rt-multi-thread"] }
 tracing = { workspace = true }
-tracing-subscriber = { version = "0.3", features = [
+tracing-subscriber = { workspace = true, features = [
     "env-filter",
     "parking_lot",
     "smallvec",

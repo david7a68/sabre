@@ -270,12 +270,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "btparse"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "387e80962b798815a2b5c4bcfdb6bf626fa922ffe9f74e373103b858738e9f31"
-
-[[package]]
 name = "built"
 version = "0.7.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -413,7 +407,6 @@ version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2123a5984bd52ca861c66f66a9ab9883b27115c607f801f86c1bc2a84eb69f0f"
 dependencies = [
- "btparse",
  "termcolor",
 ]
 
@@ -2323,6 +2316,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "tracing-tracy",
+ "ui_base",
  "winit",
  "workspace-hack",
 ]
@@ -2826,6 +2820,16 @@ name = "ttf-parser"
 version = "0.25.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d2df906b07856748fa3f6e0ad0cbaa047052d4a7dd609e231c4f72cee8c36f31"
+
+[[package]]
+name = "ui_base"
+version = "0.1.0"
+dependencies = [
+ "graphics",
+ "smallvec",
+ "tracing",
+ "workspace-hack",
+]
 
 [[package]]
 name = "unicode-ident"
