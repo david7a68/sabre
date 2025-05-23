@@ -99,8 +99,6 @@ fn compute_flex_widths(nodes: &mut [Node], children: &[NodeIndexArray], node_id:
 
     if let Size::MinMax { min, max } = node.element.width {
         for child in &children[node_id.0 as usize] {
-            tracing::info!("child: {:?}", child);
-
             if let Some(w) = nodes[child.0 as usize].layout.width {
                 total_width += w;
             } else {

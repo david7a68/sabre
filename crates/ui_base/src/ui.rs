@@ -4,7 +4,6 @@ use graphics::Canvas;
 use graphics::Color;
 use graphics::Primitive;
 use smallvec::SmallVec;
-use tracing::debug;
 
 use crate::input::InputState;
 use crate::layout::Layout;
@@ -89,8 +88,6 @@ impl UiContext {
 
         for node in &self.nodes {
             let layout = &node.layout;
-
-            debug!(?layout, color = ?node.element.color);
 
             canvas.draw(Primitive::new(
                 layout.x.unwrap(),
