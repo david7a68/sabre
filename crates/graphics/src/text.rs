@@ -116,7 +116,9 @@ impl TextSystemInner {
         origin: [f32; 2],
         color: Color,
     ) {
-        let mut compute = self.layout_cx.ranged_builder(&mut self.fonts, text, 1.0);
+        let mut compute = self
+            .layout_cx
+            .ranged_builder(&mut self.fonts, text, 1.0, false);
 
         compute.push_default(StyleProperty::FontStack(style.font_stack.clone()));
         compute.push_default(StyleProperty::FontSize(style.font_size));
