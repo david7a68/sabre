@@ -2,12 +2,11 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use futures::executor::block_on;
-use graphics::TextPrimitive;
-use graphics::TextStyle;
 use smallvec::smallvec;
 use tracing::info;
 use tracing::instrument;
 use ui_base::input::InputState;
+use ui_base::layout::Padding;
 use ui_base::ui::UiContext;
 use winit::application::ApplicationHandler;
 use winit::event::ElementState;
@@ -25,7 +24,6 @@ use winit::window::WindowId;
 
 use crate::graphics::Color;
 use crate::graphics::GraphicsContext;
-use crate::graphics::Primitive;
 use crate::graphics::Texture;
 
 pub struct App {
@@ -213,11 +211,16 @@ impl ApplicationHandler for App {
                     .ui_context
                     .next_frame(window.input.clone(), Duration::ZERO, |ui| {
                         ui.with_color(Color::srgb(0.1, 0.2, 0.3, 1.0))
-                            .with_spacing(4.0)
+                            .with_child_spacing(4.0)
                             .with_container(|ui| {
                                 ui.with_color(Color::GREEN)
-                                    .with_spacing(10.0)
-                                    .with_height(105.0)
+                                    .with_child_spacing(5.0)
+                                    .with_padding(Padding {
+                                        left: 5.0,
+                                        right: 5.0,
+                                        top: 5.0,
+                                        bottom: 5.0,
+                                    })
                                     .with_element(|ui| {
                                         ui.with_color(Color::WHITE)
                                             .with_height(100.0)

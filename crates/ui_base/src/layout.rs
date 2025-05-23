@@ -26,15 +26,27 @@ impl Default for Size {
     }
 }
 
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Padding {
+    pub left: f32,
+    pub right: f32,
+    pub top: f32,
+    pub bottom: f32,
+}
+
 #[derive(Debug, Default)]
-pub struct Layout {
+pub(crate) struct Layout {
     pub x: Option<f32>,
     pub y: Option<f32>,
     pub width: Option<f32>,
     pub height: Option<f32>,
 }
 
-pub fn compute_layout(nodes: &mut [Node], children: &[NodeIndexArray], node_id: UiElementId) {
+pub(crate) fn compute_layout(
+    nodes: &mut [Node],
+    children: &[NodeIndexArray],
+    node_id: UiElementId,
+) {
     debug!(?nodes);
     debug!(?children);
 
@@ -47,7 +59,8 @@ pub fn compute_layout(nodes: &mut [Node], children: &[NodeIndexArray], node_id: 
     compute_x_offsets(nodes, children, node_id, 0.0);
 
     compute_flex_heights(nodes, children, node_id);
-    compute_y_offsets(nodes, children, node_id);
+
+    compute_y_offsets(nodes, children, node_id, 0.0);
 
     debug!(?nodes);
 }
@@ -88,7 +101,9 @@ fn compute_flex_widths(nodes: &mut [Node], children: &[NodeIndexArray], node_id:
         let node = &mut nodes[node_id.0 as usize];
 
         total_width += node.element.inter_child_padding
-            * (children[node_id.0 as usize].len().saturating_sub(1)) as f32;
+            * (children[node_id.0 as usize].len().saturating_sub(1)) as f32
+            + node.element.inner_padding.left
+            + node.element.inner_padding.right;
 
         node.layout.width = Some(total_width.clamp(min, max));
     } else {
@@ -108,15 +123,16 @@ fn compute_x_offsets(
     let node = &mut nodes[node_id.0 as usize];
 
     node.layout.x = Some(current_x);
+
     let width = node.layout.width.unwrap();
     let padding = node.element.inter_child_padding;
 
-    let mut advance = current_x;
+    let mut advance = current_x + node.element.inner_padding.left;
     for child_id in &children[node_id.0 as usize] {
         let child_node = &mut nodes[child_id.0 as usize];
 
         child_node.layout.x = Some(current_x);
-        advance += compute_x_offsets(nodes, children, *child_id, advance) + padding;
+        advance = compute_x_offsets(nodes, children, *child_id, advance) + padding;
     }
 
     current_x + width
@@ -141,6 +157,8 @@ fn compute_flex_heights(nodes: &mut [Node], children: &[NodeIndexArray], node_id
 
         let node = &mut nodes[node_id.0 as usize];
 
+        total_height += node.element.inner_padding.top + node.element.inner_padding.bottom;
+
         node.layout.height = Some(total_height.clamp(min, max));
     } else {
         for child in &children[node_id.0 as usize] {
@@ -150,15 +168,21 @@ fn compute_flex_heights(nodes: &mut [Node], children: &[NodeIndexArray], node_id
     }
 }
 
-fn compute_y_offsets(nodes: &mut [Node], children: &[NodeIndexArray], node_id: UiElementId) {
+fn compute_y_offsets(
+    nodes: &mut [Node],
+    children: &[NodeIndexArray],
+    node_id: UiElementId,
+    current_y: f32,
+) {
     let node = &mut nodes[node_id.0 as usize];
 
-    node.layout.y = Some(0.0);
+    node.layout.y = Some(current_y);
+    let y_inset = node.element.inner_padding.top;
 
     for child_id in &children[node_id.0 as usize] {
         let child_node = &mut nodes[child_id.0 as usize];
 
         child_node.layout.y = Some(0.0);
-        compute_y_offsets(nodes, children, *child_id);
+        compute_y_offsets(nodes, children, *child_id, y_inset);
     }
 }

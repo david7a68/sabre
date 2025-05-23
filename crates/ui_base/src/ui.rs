@@ -8,6 +8,7 @@ use tracing::debug;
 
 use crate::input::InputState;
 use crate::layout::Layout;
+use crate::layout::Padding;
 use crate::layout::Size;
 use crate::layout::compute_layout;
 
@@ -17,11 +18,13 @@ pub struct UiElementId(pub(crate) u16);
 pub type NodeIndexArray = SmallVec<[UiElementId; 8]>;
 
 #[derive(Debug, Default)]
-pub struct UiElement {
+pub(crate) struct UiElement {
     pub color: Color,
 
     pub width: Size,
     pub height: Size,
+
+    pub inner_padding: Padding,
 
     // child layout properties
     pub inter_child_padding: f32,
@@ -31,9 +34,6 @@ pub struct UiElement {
 pub(crate) struct Node {
     pub(crate) layout: Layout,
     pub(crate) element: UiElement,
-
-    pub(crate) parent: u16,
-    pub(crate) sibling_order: u16,
 }
 
 #[derive(Debug, Default)]
@@ -64,6 +64,7 @@ impl UiContext {
                 color: Color::WHITE,
                 width: input.window_size.width.into(),
                 height: input.window_size.height.into(),
+                inner_padding: Padding::default(),
                 inter_child_padding: 0.0,
             },
             ..Default::default()
@@ -133,9 +134,15 @@ impl UiBuilder<'_> {
         self
     }
 
-    pub fn with_spacing(&mut self, spacing: f32) -> &mut Self {
+    pub fn with_child_spacing(&mut self, spacing: f32) -> &mut Self {
         let element = &mut self.context.nodes[self.index].element;
         element.inter_child_padding = spacing;
+        self
+    }
+
+    pub fn with_padding(&mut self, padding: Padding) -> &mut Self {
+        let element = &mut self.context.nodes[self.index].element;
+        element.inner_padding = padding;
         self
     }
 
@@ -171,11 +178,8 @@ impl UiBuilder<'_> {
         let child_index = self.context.nodes.len();
 
         self.context.children[parent].push(UiElementId(child_index as u16));
-        let sibling_order = (self.context.children[parent].len() - 1) as u16;
 
         self.context.nodes.push(Node {
-            parent: parent as u16,
-            sibling_order,
             ..Default::default()
         });
         self.context.children.push(NodeIndexArray::new());
