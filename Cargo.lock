@@ -2162,7 +2162,6 @@ version = "0.1.0"
 dependencies = [
  "graphics",
  "smallvec",
- "tracing",
  "workspace-hack",
 ]
 
