@@ -20,5 +20,7 @@ smallvec = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 tracing-tracy = { workspace = true }
-wgpu = { workspace = true, features = ["static-dxc"] }
 winit = { workspace = true }
+
+[target.'cfg(windows)'.dependencies]
+wgpu = { workspace = true, features = ["dx12", "static-dxc"] }
