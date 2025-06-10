@@ -244,7 +244,7 @@ fn draw_glyph_run(
                     _ => unimplemented!(),
                 };
 
-                let texture = textures.from_memory(
+                let texture = textures.load_from_memory(
                     &temp_glyph.data,
                     temp_glyph.placement.width as u16,
                     format,

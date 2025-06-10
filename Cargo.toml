@@ -24,7 +24,7 @@ glamour = "0.18"
 guillotiere = "0.6"
 image = "0.25"
 memmap2 = "0.9"
-parley = "0.4"
+parley = "0.5"
 slotmap = "1"
 smallvec = "1.15"
 swash = "0.2"
@@ -39,10 +39,6 @@ winit = "0.30"
 name = "sabre"
 version.workspace = true
 edition.workspace = true
-
-[profile.release]
-lto = "thin"
-debug = "limited"
 
 [features]
 profile = ["tracing-tracy/enable"]

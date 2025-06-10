@@ -163,7 +163,12 @@ impl TextureManager {
     }
 
     #[instrument(skip(self, data))]
-    pub fn from_memory(&self, data: &[u8], width: u16, format: wgpu::TextureFormat) -> Texture {
+    pub fn load_from_memory(
+        &self,
+        data: &[u8],
+        width: u16,
+        format: wgpu::TextureFormat,
+    ) -> Texture {
         self.inner.from_memory(data, width, format)
     }
 
