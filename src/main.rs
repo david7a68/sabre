@@ -13,6 +13,7 @@ use tracing::info;
 use tracing::instrument;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
+use ui_base::layout::Size::Grow;
 use winit::application::ApplicationHandler;
 use winit::event::ElementState;
 use winit::event::MouseButton;
@@ -250,6 +251,9 @@ impl ApplicationHandler for App {
                     .next_frame(window.input.clone(), Duration::ZERO, |ui| {
                         ui.with_color(Color::srgb(0.1, 0.2, 0.3, 1.0))
                             .with_child_spacing(4.0)
+                            .with_element(|ui| {
+                                ui.with_width(Grow);
+                            })
                             .with_container(|ui| {
                                 ui.with_color(Color::GREEN)
                                     .with_child_spacing(5.0)
@@ -269,6 +273,9 @@ impl ApplicationHandler for App {
                                 ui.with_color(Color::RED)
                                     .with_height(100.0)
                                     .with_width(100.0);
+                            })
+                            .with_element(|ui| {
+                                ui.with_width(Grow);
                             });
                     })
                     .finish(&mut canvas);

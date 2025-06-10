@@ -5,11 +5,11 @@ use crate::ui::UiElementId;
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Size {
     Fixed(f32),
-    MinMax { min: f32, max: f32 },
+    Fit { min: f32, max: f32 },
+    Grow,
 }
 
 pub use Size::*;
-use tracing::debug;
 
 impl From<f32> for Size {
     fn from(value: f32) -> Self {
@@ -19,7 +19,7 @@ impl From<f32> for Size {
 
 impl Default for Size {
     fn default() -> Self {
-        Size::MinMax {
+        Size::Fit {
             min: 0.0,
             max: f32::MAX,
         }
@@ -58,22 +58,15 @@ pub(crate) fn compute_layout(
     children: &[NodeIndexArray],
     node_id: UiElementId,
 ) {
-    debug!(?nodes);
-    debug!(?children);
-
     compute_fixed_sizes(nodes, children, node_id);
 
     compute_flex_widths(nodes, children, node_id);
-
-    debug!(nodes = ?nodes.iter().map(|n| &n.layout).collect::<Vec<_>>());
 
     compute_x_offsets(nodes, children, node_id, 0.0);
 
     compute_flex_heights(nodes, children, node_id);
 
     compute_y_offsets(nodes, children, node_id, 0.0);
-
-    debug!(?nodes);
 }
 
 fn compute_fixed_sizes(nodes: &mut [Node], children: &[NodeIndexArray], node_id: UiElementId) {
@@ -94,31 +87,69 @@ fn compute_fixed_sizes(nodes: &mut [Node], children: &[NodeIndexArray], node_id:
 
 fn compute_flex_widths(nodes: &mut [Node], children: &[NodeIndexArray], node_id: UiElementId) {
     let node = &nodes[node_id.0 as usize];
+    let inter_child_padding = node.element.inter_child_padding;
+    let inner_padding = node.element.inner_padding;
 
-    let mut total_width = 0.0;
+    // this is now the total width of all fixed children and required padding
+    let mut total_width = inter_child_padding
+        * (children[node_id.0 as usize].len().saturating_sub(1)) as f32
+        + inner_padding.left
+        + inner_padding.right;
 
-    if let Size::MinMax { min, max } = node.element.width {
+    if let Size::Fit { min, max } = node.element.width {
+        let mut grow_children = NodeIndexArray::new();
+
         for child in &children[node_id.0 as usize] {
             if let Some(w) = nodes[child.0 as usize].layout.width {
                 total_width += w;
+            } else if matches!(nodes[child.0 as usize].element.width, Grow) {
+                grow_children.push(*child);
             } else {
                 compute_flex_widths(nodes, children, *child);
                 total_width += nodes[child.0 as usize].layout.width.unwrap();
             }
         }
 
-        let node = &mut nodes[node_id.0 as usize];
+        // compute the width for children with grow sizing
+        if !grow_children.is_empty() {
+            let grow_width = (max - total_width).max(0.0) / grow_children.len() as f32;
 
-        total_width += node.element.inter_child_padding
-            * (children[node_id.0 as usize].len().saturating_sub(1)) as f32
-            + node.element.inner_padding.left
-            + node.element.inner_padding.right;
+            for child in &grow_children {
+                let child_node = &mut nodes[child.0 as usize];
+                child_node.layout.width = Some(grow_width);
+            }
 
-        node.layout.width = Some(total_width.clamp(min, max));
-    } else {
-        for child in &children[node_id.0 as usize] {
-            compute_flex_widths(nodes, children, *child);
+            total_width = max;
         }
+
+        let node = &mut nodes[node_id.0 as usize];
+        node.layout.width = Some(total_width.clamp(min, max));
+    } else if let Some(width) = node.layout.width {
+        let mut grow_children = NodeIndexArray::new();
+
+        for child in &children[node_id.0 as usize] {
+            if matches!(nodes[child.0 as usize].element.width, Grow) {
+                grow_children.push(*child);
+            } else {
+                compute_flex_widths(nodes, children, *child);
+            }
+
+            total_width += nodes[child.0 as usize].layout.width.unwrap_or_default();
+        }
+
+        if !grow_children.is_empty() {
+            let grow_width = (width - total_width).max(0.0) / grow_children.len() as f32;
+
+            for child in &grow_children {
+                let child_node = &mut nodes[child.0 as usize];
+                child_node.layout.width = Some(grow_width);
+            }
+        }
+    } else {
+        panic!(
+            "Node {:?} has no width set and is not a flex container",
+            node_id
+        );
     }
 }
 
@@ -151,7 +182,7 @@ fn compute_flex_heights(nodes: &mut [Node], children: &[NodeIndexArray], node_id
 
     let mut total_height = 0.0f32;
 
-    if let Size::MinMax { min, max } = node.element.height {
+    if let Size::Fit { min, max } = node.element.height {
         for child in &children[node_id.0 as usize] {
             let child_height = if let Some(w) = nodes[child.0 as usize].layout.height {
                 w
