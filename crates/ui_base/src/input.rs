@@ -1,16 +1,16 @@
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Copy, Debug, Default)]
 pub struct WindowSize {
     pub width: f32,
     pub height: f32,
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Copy, Debug, Default)]
 pub struct PointerLocation {
     pub x: f32,
     pub y: f32,
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Copy, Debug, Default)]
 pub struct MouseButtonState {
     pub is_left_down: bool,
     pub is_right_down: bool,
