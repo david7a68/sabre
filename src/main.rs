@@ -13,6 +13,7 @@ use tracing::info;
 use tracing::instrument;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
+use ui_base::layout::LayoutDirection;
 use ui_base::layout::Size::Grow;
 use winit::application::ApplicationHandler;
 use winit::event::ElementState;
@@ -250,23 +251,25 @@ impl ApplicationHandler for App {
                     .ui_context
                     .next_frame(window.input.clone(), Duration::ZERO, |ui| {
                         ui.with_color(Color::srgb(0.1, 0.2, 0.3, 1.0))
+                            .with_child_direction(LayoutDirection::Vertical)
                             .with_child_spacing(4.0)
                             .with_element(|ui| {
-                                ui.with_width(Grow);
+                                ui.with_width(Grow).with_height(Grow);
                             })
                             .with_container(|ui| {
                                 ui.with_color(Color::GREEN)
                                     .with_child_spacing(5.0)
                                     .with_padding(Padding::equal(5.0))
+                                    .with_child_direction(LayoutDirection::Horizontal)
                                     .with_element(|ui| {
                                         ui.with_color(Color::WHITE)
-                                            .with_height(100.0)
-                                            .with_width(100.0);
+                                            .with_height(200.0)
+                                            .with_width(80.0);
                                     })
                                     .with_element(|ui| {
                                         ui.with_color(Color::WHITE)
                                             .with_height(100.0)
-                                            .with_width(100.0);
+                                            .with_width(150.0);
                                     });
                             })
                             .with_element(|ui| {
@@ -275,7 +278,7 @@ impl ApplicationHandler for App {
                                     .with_width(100.0);
                             })
                             .with_element(|ui| {
-                                ui.with_width(Grow);
+                                ui.with_width(Grow).with_height(Grow);
                             });
                     })
                     .finish(&mut canvas);

@@ -6,6 +6,7 @@ use graphics::Primitive;
 use smallvec::SmallVec;
 
 use crate::input::InputState;
+use crate::layout::LayoutDirection;
 use crate::layout::LayoutNode;
 use crate::layout::LayoutNodeResult;
 use crate::layout::LayoutNodeSpec;
@@ -64,6 +65,7 @@ impl UiContext {
             spec: LayoutNodeSpec {
                 width: input.window_size.width.into(),
                 height: input.window_size.height.into(),
+                direction: LayoutDirection::Horizontal,
                 inner_padding: Padding::default(),
                 inter_child_padding: 0.0,
             },
@@ -92,10 +94,10 @@ impl UiContext {
             let layout = &layout.result;
 
             canvas.draw(Primitive::new(
-                layout.x.unwrap(),
-                layout.y.unwrap(),
-                layout.width.unwrap(),
-                layout.height.unwrap(),
+                layout.x.unwrap_or_default(),
+                layout.y.unwrap_or_default(),
+                layout.width.unwrap_or_default(),
+                layout.height.unwrap_or_default(),
                 node.element.color,
             ));
         }
@@ -136,6 +138,13 @@ impl UiBuilder<'_> {
     pub fn with_child_spacing(&mut self, spacing: f32) -> &mut Self {
         let element = &mut self.context.layout_nodes[self.index].spec;
         element.inter_child_padding = spacing;
+        self
+    }
+
+    pub fn with_child_direction(&mut self, direction: LayoutDirection) -> &mut Self {
+        let element = &mut self.context.layout_nodes[self.index].spec;
+        element.direction = direction;
+        tracing::debug!(?element);
         self
     }
 
