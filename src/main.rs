@@ -302,35 +302,6 @@ impl ApplicationHandler for App {
                             .with_element(|ui| {
                                 ui.with_width(Grow);
                             });
-                        // .with_child_direction(LayoutDirection::Vertical)
-                        // .with_child_spacing(4.0)
-                        // .with_element(|ui| {
-                        //     ui.with_width(Grow).with_height(Grow);
-                        // })
-                        // .with_container(|ui| {
-                        //     ui.with_color(Color::GREEN)
-                        //         .with_child_spacing(5.0)
-                        //         .with_padding(Padding::equal(5.0))
-                        //         .with_child_direction(LayoutDirection::Horizontal)
-                        //         .with_element(|ui| {
-                        //             ui.with_color(Color::WHITE)
-                        //                 .with_height(200.0)
-                        //                 .with_width(80.0);
-                        //         })
-                        //         .with_element(|ui| {
-                        //             ui.with_color(Color::WHITE)
-                        //                 .with_height(100.0)
-                        //                 .with_width(150.0);
-                        //         });
-                        // })
-                        // .with_element(|ui| {
-                        //     ui.with_color(Color::RED)
-                        //         .with_height(100.0)
-                        //         .with_width(100.0);
-                        // })
-                        // .with_element(|ui| {
-                        //     ui.with_width(Grow).with_height(Grow);
-                        // });
                     })
                     .finish(&mut canvas);
 

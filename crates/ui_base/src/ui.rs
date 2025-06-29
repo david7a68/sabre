@@ -146,9 +146,7 @@ impl UiBuilder<'_> {
     }
 
     pub fn with_child_direction(&mut self, direction: LayoutDirection) -> &mut Self {
-        let spec = &mut self.context.layout_nodes[self.index].spec;
-        spec.direction = direction;
-        tracing::debug!(?spec);
+        self.context.layout_nodes[self.index].spec.direction = direction;
         self
     }
 
