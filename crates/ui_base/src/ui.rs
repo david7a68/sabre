@@ -70,6 +70,7 @@ impl UiContext {
                 inter_child_padding: 0.0,
             },
             result: LayoutNodeResult::default(),
+            parent_idx: None, // Root node has no parent
         });
         self.children.push(NodeIndexArray::new());
 
@@ -92,6 +93,10 @@ impl UiContext {
         assert_eq!(self.ui_nodes.len(), self.layout_nodes.len());
         for (node, layout) in self.ui_nodes.iter().zip(&self.layout_nodes) {
             let layout = &layout.result;
+
+            if node.element.color == Color::default() {
+                continue; // Skip transparent nodes.
+            }
 
             canvas.draw(Primitive::new(
                 layout.x.unwrap_or_default(),
@@ -124,33 +129,31 @@ impl UiBuilder<'_> {
     }
 
     pub fn with_width(&mut self, width: impl Into<Size>) -> &mut Self {
-        let element = &mut self.context.layout_nodes[self.index].spec;
-        element.width = width.into();
+        self.context.layout_nodes[self.index].spec.width = width.into();
         self
     }
 
     pub fn with_height(&mut self, height: impl Into<Size>) -> &mut Self {
-        let element = &mut self.context.layout_nodes[self.index].spec;
-        element.height = height.into();
+        self.context.layout_nodes[self.index].spec.height = height.into();
         self
     }
 
     pub fn with_child_spacing(&mut self, spacing: f32) -> &mut Self {
-        let element = &mut self.context.layout_nodes[self.index].spec;
-        element.inter_child_padding = spacing;
+        self.context.layout_nodes[self.index]
+            .spec
+            .inter_child_padding = spacing;
         self
     }
 
     pub fn with_child_direction(&mut self, direction: LayoutDirection) -> &mut Self {
-        let element = &mut self.context.layout_nodes[self.index].spec;
-        element.direction = direction;
-        tracing::debug!(?element);
+        let spec = &mut self.context.layout_nodes[self.index].spec;
+        spec.direction = direction;
+        tracing::debug!(?spec);
         self
     }
 
     pub fn with_padding(&mut self, padding: Padding) -> &mut Self {
-        let element = &mut self.context.layout_nodes[self.index].spec;
-        element.inner_padding = padding;
+        self.context.layout_nodes[self.index].spec.inner_padding = padding;
         self
     }
 
@@ -188,7 +191,13 @@ impl UiBuilder<'_> {
         self.context.children[parent].push(UiElementId(child_index as u16));
 
         self.context.ui_nodes.push(Node::default());
-        self.context.layout_nodes.push(LayoutNode::default());
+
+        // Create layout node with parent index already set
+        self.context.layout_nodes.push(LayoutNode {
+            parent_idx: Some(UiElementId(parent as u16)),
+            ..Default::default()
+        });
+
         self.context.children.push(NodeIndexArray::new());
 
         child_index
@@ -215,14 +224,12 @@ impl UiElementBuilder<'_> {
     }
 
     pub fn with_width(&mut self, width: impl Into<Size>) -> &mut Self {
-        let element = &mut self.context.layout_nodes[self.index].spec;
-        element.width = width.into();
+        self.context.layout_nodes[self.index].spec.width = width.into();
         self
     }
 
     pub fn with_height(&mut self, height: impl Into<Size>) -> &mut Self {
-        let element = &mut self.context.layout_nodes[self.index].spec;
-        element.height = height.into();
+        self.context.layout_nodes[self.index].spec.height = height.into();
         self
     }
 }
