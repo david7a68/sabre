@@ -132,6 +132,10 @@ fn compute_major_axis_flex_sizes<D: LayoutDirectionExt>(
 ) {
     let node = &nodes[node_id.0 as usize];
 
+    if !(node.spec.direction == D::DIRECTION) {
+        return compute_minor_axis_flex_sizes::<D::Other>(nodes, children, node_id);
+    }
+
     // this is now the total width of all fixed children and required padding
     //
     // Out here on its lonesome to avoid borrowing `node` for the entire closure
@@ -195,6 +199,10 @@ fn compute_major_axis_offsets<D: LayoutDirectionExt>(
 ) -> f32 {
     let node = &mut nodes[node_id.0 as usize];
 
+    if node.spec.direction != D::DIRECTION {
+        return compute_minor_axis_offsets::<D::Other>(nodes, children, node_id, current_offset);
+    }
+
     D::set_major_offset(&mut node.result, current_offset);
 
     let size = D::major_size_result(&node.result).unwrap();
@@ -217,6 +225,10 @@ fn compute_minor_axis_flex_sizes<D: LayoutDirectionExt>(
     node_id: UiElementId,
 ) {
     let node = &nodes[node_id.0 as usize];
+
+    if node.spec.direction != D::DIRECTION {
+        return compute_major_axis_flex_sizes::<D::Other>(nodes, children, node_id);
+    }
 
     let mut total_size = 0.0f32;
 
@@ -251,10 +263,16 @@ fn compute_minor_axis_offsets<D: LayoutDirectionExt>(
     children: &[NodeIndexArray],
     node_id: UiElementId,
     current_offset: f32,
-) {
+) -> f32 {
     let node = &mut nodes[node_id.0 as usize];
 
+    if node.spec.direction != D::DIRECTION {
+        return compute_major_axis_offsets::<D::Other>(nodes, children, node_id, current_offset);
+    }
+
     D::set_minor_offset(&mut node.result, current_offset);
+
+    let size = D::minor_size_result(&node.result).unwrap();
     let inset = current_offset + D::major_axis_padding_start(&node.spec);
 
     for child_id in &children[node_id.0 as usize] {
@@ -263,10 +281,13 @@ fn compute_minor_axis_offsets<D: LayoutDirectionExt>(
         D::set_minor_offset(&mut child_node.result, inset);
         compute_minor_axis_offsets::<D>(nodes, children, *child_id, inset);
     }
+
+    inset + size
 }
 
 trait LayoutDirectionExt {
     type Other: LayoutDirectionExt;
+    const DIRECTION: LayoutDirection;
 
     fn string() -> &'static str;
 
@@ -293,6 +314,7 @@ struct HorizontalMode;
 
 impl LayoutDirectionExt for HorizontalMode {
     type Other = VerticalMode;
+    const DIRECTION: LayoutDirection = LayoutDirection::Horizontal;
 
     fn string() -> &'static str {
         "horizontal"
@@ -351,6 +373,7 @@ struct VerticalMode;
 
 impl LayoutDirectionExt for VerticalMode {
     type Other = HorizontalMode;
+    const DIRECTION: LayoutDirection = LayoutDirection::Vertical;
 
     fn string() -> &'static str {
         "vertical"
