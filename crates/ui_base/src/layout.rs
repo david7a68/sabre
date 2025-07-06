@@ -1,3 +1,6 @@
+use tracing::debug;
+use tracing::info;
+use tracing::instrument;
 use tracing::warn;
 
 use crate::ui::NodeIndexArray;
@@ -53,10 +56,20 @@ pub enum LayoutDirection {
     Vertical,
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum Alignment {
+    #[default]
+    Start,
+    Center,
+    End,
+    Justify,
+}
+
 #[derive(Debug, Default)]
 pub(crate) struct LayoutNodeSpec {
     pub width: Size,
     pub height: Size,
+    pub alignment: Alignment,
     pub direction: LayoutDirection,
     pub inner_padding: Padding,
     pub inter_child_padding: f32,
@@ -211,6 +224,7 @@ fn compute_major_axis_children_with_limit<D: LayoutDirectionExt, T: LayoutInfo>(
     (total_size, has_grow_children)
 }
 
+#[instrument(skip(nodes, children), fields(direction = D::string()))]
 fn compute_major_axis_offsets<D: LayoutDirectionExt, T: LayoutInfo>(
     nodes: &mut [T],
     children: &[NodeIndexArray],
@@ -273,6 +287,7 @@ fn compute_minor_axis_flex_sizes<D: LayoutDirectionExt, T: LayoutInfo>(
     }
 }
 
+#[instrument(skip(nodes, children), fields(direction = D::string()))]
 fn compute_minor_axis_offsets<D: LayoutDirectionExt, T: LayoutInfo>(
     nodes: &mut [T],
     children: &[NodeIndexArray],

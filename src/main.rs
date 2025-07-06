@@ -12,7 +12,9 @@ use tracing::info;
 use tracing::instrument;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
+use ui_base::layout::Alignment;
 use ui_base::layout::LayoutDirection;
+use ui_base::layout::Padding;
 use ui_base::layout::Size::Grow;
 use winit::application::ApplicationHandler;
 use winit::event::ElementState;
@@ -250,17 +252,21 @@ impl ApplicationHandler for App {
                     .ui_context
                     .next_frame(window.input.clone(), Duration::ZERO, |ui| {
                         ui.with_color(Color::srgb(0.1, 0.2, 0.3, 1.0))
-                            .with_element(|ui| {
-                                ui.with_width(Grow);
-                            })
+                            .with_child_alignment(Alignment::Center)
                             .with_container(|ui| {
                                 ui.with_child_direction(LayoutDirection::Vertical)
-                                    .with_child_spacing(10.0)
-                                    .with_element(|ui| {
-                                        ui.with_height(Grow);
-                                    })
+                                    // .with_child_alignment(Alignment::Justify)
+                                    .with_child_alignment(Alignment::Center)
+                                    .with_height(Grow)
                                     .with_container(|ui| {
                                         ui.with_child_spacing(10.0)
+                                            .with_color(Color::BLUE)
+                                            .with_padding(Padding {
+                                                left: 10.0,
+                                                right: 10.0,
+                                                top: 10.0,
+                                                bottom: 10.0,
+                                            })
                                             .with_element(|ui| {
                                                 ui.with_color(Color::WHITE)
                                                     .with_height(100.0)
@@ -279,6 +285,13 @@ impl ApplicationHandler for App {
                                     })
                                     .with_container(|ui| {
                                         ui.with_child_spacing(10.0)
+                                            .with_color(Color::RED)
+                                            .with_padding(Padding {
+                                                left: 10.0,
+                                                right: 10.0,
+                                                top: 10.0,
+                                                bottom: 10.0,
+                                            })
                                             .with_element(|ui| {
                                                 ui.with_color(Color::WHITE)
                                                     .with_height(100.0)
@@ -295,12 +308,9 @@ impl ApplicationHandler for App {
                                                     .with_width(299.0);
                                             });
                                     })
-                                    .with_element(|ui| {
-                                        ui.with_height(Grow);
+                                    .with_container(|ui| {
+                                        ui.with_height(Grow).with_color(Color::WHITE);
                                     });
-                            })
-                            .with_element(|ui| {
-                                ui.with_width(Grow);
                             });
                     })
                     .finish(&mut canvas);

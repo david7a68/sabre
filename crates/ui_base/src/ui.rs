@@ -4,8 +4,10 @@ use graphics::Canvas;
 use graphics::Color;
 use graphics::Primitive;
 use smallvec::SmallVec;
+use tracing::debug;
 
 use crate::input::InputState;
+use crate::layout::Alignment;
 use crate::layout::LayoutDirection;
 use crate::layout::LayoutInfo;
 use crate::layout::LayoutNodeResult;
@@ -78,9 +80,7 @@ impl UiContext {
             layout_spec: LayoutNodeSpec {
                 width: input.window_size.width.into(),
                 height: input.window_size.height.into(),
-                direction: LayoutDirection::Horizontal,
-                inner_padding: Padding::default(),
-                inter_child_padding: 0.0,
+                ..Default::default()
             },
             layout_result: LayoutNodeResult::default(),
         });
@@ -109,6 +109,15 @@ impl UiContext {
             if node.color == Color::default() {
                 continue; // Skip transparent nodes.
             }
+
+            debug!(
+                "Drawing node at ({}, {}), size: {}x{}, color: {:?}",
+                layout.x.unwrap_or_default(),
+                layout.y.unwrap_or_default(),
+                layout.width.unwrap_or_default(),
+                layout.height.unwrap_or_default(),
+                node.color
+            );
 
             canvas.draw(Primitive::new(
                 layout.x.unwrap_or_default(),
@@ -150,15 +159,20 @@ impl UiBuilder<'_> {
         self
     }
 
-    pub fn with_child_spacing(&mut self, spacing: f32) -> &mut Self {
-        self.context.ui_nodes[self.index]
-            .layout_spec
-            .inter_child_padding = spacing;
+    pub fn with_child_alignment(&mut self, alignment: Alignment) -> &mut Self {
+        self.context.ui_nodes[self.index].layout_spec.alignment = alignment;
         self
     }
 
     pub fn with_child_direction(&mut self, direction: LayoutDirection) -> &mut Self {
         self.context.ui_nodes[self.index].layout_spec.direction = direction;
+        self
+    }
+
+    pub fn with_child_spacing(&mut self, spacing: f32) -> &mut Self {
+        self.context.ui_nodes[self.index]
+            .layout_spec
+            .inter_child_padding = spacing;
         self
     }
 
