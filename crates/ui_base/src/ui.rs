@@ -7,7 +7,7 @@ use smallvec::SmallVec;
 
 use crate::input::InputState;
 use crate::layout::LayoutDirection;
-use crate::layout::LayoutNode;
+use crate::layout::LayoutInfo;
 use crate::layout::LayoutNodeResult;
 use crate::layout::LayoutNodeSpec;
 use crate::layout::Padding;
@@ -20,13 +20,31 @@ pub struct UiElementId(pub(crate) u16);
 pub type NodeIndexArray = SmallVec<[UiElementId; 8]>;
 
 #[derive(Debug, Default)]
-pub(crate) struct UiElement {
-    pub color: Color,
+struct UiNode {
+    color: Color,
+
+    parent_idx: Option<UiElementId>,
+
+    layout_spec: LayoutNodeSpec,
+    layout_result: LayoutNodeResult,
 }
 
-#[derive(Debug, Default)]
-pub(crate) struct Node {
-    pub(crate) element: UiElement,
+impl LayoutInfo for UiNode {
+    fn spec(&self) -> &LayoutNodeSpec {
+        &self.layout_spec
+    }
+
+    fn result(&self) -> &LayoutNodeResult {
+        &self.layout_result
+    }
+
+    fn result_mut(&mut self) -> &mut LayoutNodeResult {
+        &mut self.layout_result
+    }
+
+    fn parent_idx(&self) -> Option<UiElementId> {
+        self.parent_idx
+    }
 }
 
 #[derive(Debug, Default)]
@@ -34,8 +52,7 @@ pub struct UiContext {
     input: InputState,
     time_delta: Duration,
 
-    ui_nodes: Vec<Node>,
-    layout_nodes: Vec<LayoutNode>,
+    ui_nodes: Vec<UiNode>,
 
     children: Vec<NodeIndexArray>,
 }
@@ -52,25 +69,20 @@ impl UiContext {
         callback: impl FnOnce(&mut UiBuilder),
     ) -> &mut Self {
         self.ui_nodes.clear();
-        self.layout_nodes.clear();
         self.children.clear();
 
         // Set up the root node.
-        self.ui_nodes.push(Node {
-            element: UiElement {
-                color: Color::WHITE,
-            },
-        });
-        self.layout_nodes.push(LayoutNode {
-            spec: LayoutNodeSpec {
+        self.ui_nodes.push(UiNode {
+            color: Color::WHITE,
+            parent_idx: None, // Root node has no parent
+            layout_spec: LayoutNodeSpec {
                 width: input.window_size.width.into(),
                 height: input.window_size.height.into(),
                 direction: LayoutDirection::Horizontal,
                 inner_padding: Padding::default(),
                 inter_child_padding: 0.0,
             },
-            result: LayoutNodeResult::default(),
-            parent_idx: None, // Root node has no parent
+            layout_result: LayoutNodeResult::default(),
         });
         self.children.push(NodeIndexArray::new());
 
@@ -88,13 +100,13 @@ impl UiContext {
     }
 
     pub fn finish(&mut self, canvas: &mut Canvas) {
-        compute_layout(&mut self.layout_nodes, &self.children, UiElementId(0));
+        compute_layout(&mut self.ui_nodes, &self.children, UiElementId(0));
 
-        assert_eq!(self.ui_nodes.len(), self.layout_nodes.len());
-        for (node, layout) in self.ui_nodes.iter().zip(&self.layout_nodes) {
-            let layout = &layout.result;
+        assert_eq!(self.ui_nodes.len(), self.ui_nodes.len());
+        for node in &self.ui_nodes {
+            let layout = &node.layout_result;
 
-            if node.element.color == Color::default() {
+            if node.color == Color::default() {
                 continue; // Skip transparent nodes.
             }
 
@@ -103,7 +115,7 @@ impl UiContext {
                 layout.y.unwrap_or_default(),
                 layout.width.unwrap_or_default(),
                 layout.height.unwrap_or_default(),
-                node.element.color,
+                node.color,
             ));
         }
     }
@@ -124,34 +136,34 @@ impl UiBuilder<'_> {
     }
 
     pub fn with_color(&mut self, color: impl Into<Color>) -> &mut Self {
-        self.context.ui_nodes[self.index].element.color = color.into();
+        self.context.ui_nodes[self.index].color = color.into();
         self
     }
 
     pub fn with_width(&mut self, width: impl Into<Size>) -> &mut Self {
-        self.context.layout_nodes[self.index].spec.width = width.into();
+        self.context.ui_nodes[self.index].layout_spec.width = width.into();
         self
     }
 
     pub fn with_height(&mut self, height: impl Into<Size>) -> &mut Self {
-        self.context.layout_nodes[self.index].spec.height = height.into();
+        self.context.ui_nodes[self.index].layout_spec.height = height.into();
         self
     }
 
     pub fn with_child_spacing(&mut self, spacing: f32) -> &mut Self {
-        self.context.layout_nodes[self.index]
-            .spec
+        self.context.ui_nodes[self.index]
+            .layout_spec
             .inter_child_padding = spacing;
         self
     }
 
     pub fn with_child_direction(&mut self, direction: LayoutDirection) -> &mut Self {
-        self.context.layout_nodes[self.index].spec.direction = direction;
+        self.context.ui_nodes[self.index].layout_spec.direction = direction;
         self
     }
 
     pub fn with_padding(&mut self, padding: Padding) -> &mut Self {
-        self.context.layout_nodes[self.index].spec.inner_padding = padding;
+        self.context.ui_nodes[self.index].layout_spec.inner_padding = padding;
         self
     }
 
@@ -188,10 +200,7 @@ impl UiBuilder<'_> {
 
         self.context.children[parent].push(UiElementId(child_index as u16));
 
-        self.context.ui_nodes.push(Node::default());
-
-        // Create layout node with parent index already set
-        self.context.layout_nodes.push(LayoutNode {
+        self.context.ui_nodes.push(UiNode {
             parent_idx: Some(UiElementId(parent as u16)),
             ..Default::default()
         });
@@ -217,17 +226,17 @@ impl UiElementBuilder<'_> {
     }
 
     pub fn with_color(&mut self, color: impl Into<Color>) -> &mut Self {
-        self.context.ui_nodes[self.index].element.color = color.into();
+        self.context.ui_nodes[self.index].color = color.into();
         self
     }
 
     pub fn with_width(&mut self, width: impl Into<Size>) -> &mut Self {
-        self.context.layout_nodes[self.index].spec.width = width.into();
+        self.context.ui_nodes[self.index].layout_spec.width = width.into();
         self
     }
 
     pub fn with_height(&mut self, height: impl Into<Size>) -> &mut Self {
-        self.context.layout_nodes[self.index].spec.height = height.into();
+        self.context.ui_nodes[self.index].layout_spec.height = height.into();
         self
     }
 }

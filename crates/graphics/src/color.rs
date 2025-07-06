@@ -57,6 +57,5 @@ impl Color {
             b: srgb.components[2],
             a: srgb.components[3],
         }
-        // Self { r, g, b, a }
     }
 }
