@@ -103,14 +103,14 @@ impl UiContext {
                 continue; // Skip transparent nodes.
             }
 
-            debug!(
-                "Drawing node at ({}, {}), size: {}x{}, color: {:?}",
-                layout.x.unwrap_or_default(),
-                layout.y.unwrap_or_default(),
-                layout.width.unwrap_or_default(),
-                layout.height.unwrap_or_default(),
-                node.color
-            );
+            // debug!(
+            //     "Drawing node at ({}, {}), size: {}x{}, color: {:?}",
+            //     layout.x.unwrap_or_default(),
+            //     layout.y.unwrap_or_default(),
+            //     layout.width.unwrap_or_default(),
+            //     layout.height.unwrap_or_default(),
+            //     node.color
+            // );
 
             canvas.draw(Primitive::new(
                 layout.x.unwrap_or_default(),

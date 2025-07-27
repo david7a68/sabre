@@ -261,21 +261,21 @@ impl ApplicationHandler for App {
                             })
                             .with_container(|ui| {
                                 ui.with_child_direction(LayoutDirection::Vertical)
-                                    // .with_child_spacing(10.0)
-                                    .with_color(Color {
-                                        r: 0.2,
-                                        g: 0.2,
-                                        b: 0.2,
-                                        a: 1.0,
-                                    })
-                                    // .with_element(|ui| {
-                                    //     ui.with_width(20.0).with_height(Grow).with_color(Color {
-                                    //         r: 0.4,
-                                    //         g: 0.4,
-                                    //         b: 0.4,
-                                    //         a: 1.0,
-                                    //     });
+                                    // .with_color(Color {
+                                    //     r: 0.2,
+                                    //     g: 0.2,
+                                    //     b: 0.2,
+                                    //     a: 1.0,
                                     // })
+                                    .with_height(Grow)
+                                    .with_element(|ui| {
+                                        ui.with_width(20.0).with_height(Grow).with_color(Color {
+                                            r: 0.4,
+                                            g: 0.4,
+                                            b: 0.4,
+                                            a: 1.0,
+                                        });
+                                    })
                                     .with_container(|ui| {
                                         ui.with_child_spacing(10.0)
                                             .with_padding(Padding {
@@ -326,15 +326,14 @@ impl ApplicationHandler for App {
                                                     .with_width(299.0);
                                             });
                                     })
-                                // .with_element(|ui| {
-                                //     ui.with_width(20.0).with_height(Grow).with_color(Color {
-                                //         r: 0.4,
-                                //         g: 0.4,
-                                //         b: 0.4,
-                                //         a: 1.0,
-                                //     });
-                                // });
-                                ;
+                                    .with_element(|ui| {
+                                        ui.with_width(20.0).with_height(Grow).with_color(Color {
+                                            r: 0.4,
+                                            g: 0.4,
+                                            b: 0.4,
+                                            a: 1.0,
+                                        });
+                                    });
                             })
                             .with_element(|ui| {
                                 ui.with_height(20.0).with_width(Grow).with_color(Color {

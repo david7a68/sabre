@@ -100,6 +100,7 @@ pub(crate) fn compute_layout<T: LayoutInfo>(
         compute_major_axis_fit_sizes::<D, T>(nodes, children, node_id);
         compute_major_axis_grow_sizes::<D, T>(nodes, children, node_id);
         compute_minor_axis_fit_sizes::<D, T>(nodes, children, node_id);
+        compute_minor_axis_grow_sizes::<D, T>(nodes, children, node_id);
         compute_major_axis_offsets::<D, T>(nodes, children, node_id, 0.0);
         compute_minor_axis_offsets::<D, T>(nodes, children, node_id, 0.0);
     }
@@ -142,14 +143,16 @@ fn compute_major_axis_fit_sizes<D: LayoutDirectionExt, T: LayoutInfo>(
         }
     };
 
-    tracing::debug!(
-        ?node_id,
-        ?size_spec,
-        ?child_sizes,
-        ?size,
-        "Computing {} axis fit sizes",
-        D::string(),
-    );
+    if D::DIRECTION == LayoutDirection::Vertical {
+        tracing::debug!(
+            ?node_id,
+            ?size_spec,
+            ?child_sizes,
+            ?size,
+            "Computing {} axis fit sizes",
+            D::string(),
+        );
+    }
 
     D::set_major_size(&mut nodes[node_id.0 as usize], size);
     size
@@ -163,16 +166,16 @@ fn compute_major_axis_grow_sizes<D: LayoutDirectionExt, T: LayoutInfo>(
     let node = &nodes[node_id.0 as usize];
 
     if !(node.spec().direction == D::DIRECTION) {
-        // return compute_minor_axis_fit_sizes::<D::Other, T>(nodes, children, node_id);
-        unimplemented!()
+        return compute_minor_axis_grow_sizes::<D::Other, T>(nodes, children, node_id);
     }
 
+    let mut grow_children = NodeIndexArray::new();
     let mut remaining_size = D::major_size_result(node)
         .expect("Breadth-first layout pass, this node must have a size")
         - get_major_axis_empty_size::<D, T>(node, &children[node_id.0 as usize]);
 
-    let mut grow_children = NodeIndexArray::new();
-
+    // Step 1: Find all the children that can grow and the amount of space they
+    // can take up.
     for child_id in &children[node_id.0 as usize] {
         let child = &nodes[child_id.0 as usize];
 
@@ -180,12 +183,12 @@ fn compute_major_axis_grow_sizes<D: LayoutDirectionExt, T: LayoutInfo>(
         remaining_size -= child_size;
 
         match D::major_size_spec(child) {
-            Fixed(_) => {}   // already computed
-            Fit { .. } => {} // already computed
+            Fixed(_) | Fit { .. } => {} // already computed
             Grow => grow_children.push(*child_id),
         }
     }
 
+    // Step 2: Distribute the remaining size evenly among the grow children.
     while remaining_size > 0.0 && !grow_children.is_empty() {
         tracing::debug!(
             "Distributing {} pixels between {} grow children",
@@ -233,6 +236,11 @@ fn compute_major_axis_grow_sizes<D: LayoutDirectionExt, T: LayoutInfo>(
             }
         });
     }
+
+    // Step 3: Call recursively for each child.
+    for child_id in &children[node_id.0 as usize] {
+        compute_major_axis_grow_sizes::<D, T>(nodes, children, *child_id);
+    }
 }
 
 #[instrument(skip(nodes, children), fields(direction = D::string()))]
@@ -256,15 +264,6 @@ fn compute_major_axis_offsets<D: LayoutDirectionExt, T: LayoutInfo>(
     let mut advance = current_offset + D::major_axis_padding_start(node);
     for child_id in &children[node_id.0 as usize] {
         advance = compute_major_axis_offsets::<D, T>(nodes, children, *child_id, advance) + padding;
-    }
-
-    if D::DIRECTION == LayoutDirection::Vertical {
-        tracing::info!(
-            ?node_id,
-            ?padding,
-            ?advance,
-            current_offset = ?(current_offset + size),
-        );
     }
 
     current_offset + size
@@ -305,6 +304,32 @@ fn compute_minor_axis_fit_sizes<D: LayoutDirectionExt, T: LayoutInfo>(
     size
 }
 
+fn compute_minor_axis_grow_sizes<D: LayoutDirectionExt, T: LayoutInfo>(
+    nodes: &mut [T],
+    children: &[NodeIndexArray],
+    node_id: UiElementId,
+) {
+    let node = &nodes[node_id.0 as usize];
+
+    if !(node.spec().direction == D::DIRECTION) {
+        return compute_major_axis_grow_sizes::<D::Other, T>(nodes, children, node_id);
+    }
+
+    let remaining_size = D::minor_size_result(node)
+        .expect("Breadth-first layout pass, this node must have a size")
+        - (D::minor_axis_padding_start(node) + D::minor_axis_padding_end(node));
+
+    for child_id in &children[node_id.0 as usize] {
+        let child = &mut nodes[child_id.0 as usize];
+
+        if matches!(D::minor_size_spec(child), Grow) {
+            D::set_minor_size(child, remaining_size);
+        }
+
+        compute_minor_axis_grow_sizes::<D, T>(nodes, children, *child_id);
+    }
+}
+
 #[instrument(skip(nodes, children), fields(direction = D::string()))]
 fn compute_minor_axis_offsets<D: LayoutDirectionExt, T: LayoutInfo>(
     nodes: &mut [T],
@@ -326,15 +351,6 @@ fn compute_minor_axis_offsets<D: LayoutDirectionExt, T: LayoutInfo>(
     for child_id in &children[node_id.0 as usize] {
         D::set_minor_offset(&mut nodes[child_id.0 as usize], inset);
         compute_minor_axis_offsets::<D, T>(nodes, children, *child_id, inset);
-    }
-
-    if D::DIRECTION == LayoutDirection::Horizontal {
-        tracing::info!(
-            ?node_id,
-            ?inset,
-            ?size,
-            current_offset = ?(current_offset + size),
-        );
     }
 
     current_offset + size
