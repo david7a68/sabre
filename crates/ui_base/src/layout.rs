@@ -194,26 +194,23 @@ fn compute_major_axis_grow_sizes<D: LayoutDirectionExt, T: LayoutInfo>(
                 Fit { max, .. } => {
                     let tentative_size = child_size + even_size;
 
-                    let actual_size = if tentative_size > max {
-                        max
+                    let (is_done, actual_size) = if tentative_size > max {
+                        (true, max)
                     } else {
-                        child_size + even_size
+                        (false, child_size + even_size)
                     };
 
                     D::set_major_size(child, actual_size);
                     remaining_size -= actual_size - child_size;
 
-                    actual_size < max
+                    // Stop growing the child if it has reached its max size
+                    is_done
                 }
                 Grow => {
-                    if child_size + even_size > remaining_size {
-                        D::set_major_size(child, remaining_size);
-                        remaining_size = 0.0;
-                    } else {
-                        D::set_major_size(child, child_size + even_size);
-                        remaining_size -= even_size;
-                    }
+                    D::set_major_size(child, child_size + even_size);
+                    remaining_size -= even_size;
 
+                    // Grow children are always considered to have space
                     true
                 }
             }

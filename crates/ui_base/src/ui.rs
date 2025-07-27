@@ -94,22 +94,12 @@ impl UiContext {
     pub fn finish(&mut self, canvas: &mut Canvas) {
         compute_layout(&mut self.ui_nodes, &self.children, UiElementId(0));
 
-        assert_eq!(self.ui_nodes.len(), self.ui_nodes.len());
         for node in &self.ui_nodes {
             let layout = &node.layout_result;
 
             if node.color == Color::default() {
                 continue; // Skip transparent nodes.
             }
-
-            // debug!(
-            //     "Drawing node at ({}, {}), size: {}x{}, color: {:?}",
-            //     layout.x.unwrap_or_default(),
-            //     layout.y.unwrap_or_default(),
-            //     layout.width.unwrap_or_default(),
-            //     layout.height.unwrap_or_default(),
-            //     node.color
-            // );
 
             canvas.draw(Primitive::new(
                 layout.x.unwrap_or_default(),
