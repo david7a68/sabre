@@ -18,7 +18,7 @@ graphics = { path = "crates/graphics" }
 # External dependencies
 bytemuck = "1"
 color = "0.3"
-color-backtrace = { version = "0.7", default-features = false }
+color-backtrace = { version = "0.7" }
 futures = "0.3"
 glamour = "0.18"
 guillotiere = "0.6"

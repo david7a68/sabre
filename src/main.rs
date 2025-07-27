@@ -13,6 +13,7 @@ use tracing::instrument;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use ui_base::layout::LayoutDirection;
+use ui_base::layout::Padding;
 use ui_base::layout::Size::Grow;
 use winit::application::ApplicationHandler;
 use winit::event::ElementState;
@@ -255,12 +256,19 @@ impl ApplicationHandler for App {
                             })
                             .with_container(|ui| {
                                 ui.with_child_direction(LayoutDirection::Vertical)
-                                    .with_child_spacing(10.0)
+                                    .with_height(Grow)
                                     .with_element(|ui| {
                                         ui.with_height(Grow);
                                     })
                                     .with_container(|ui| {
                                         ui.with_child_spacing(10.0)
+                                            .with_padding(Padding {
+                                                left: 15.0,
+                                                right: 15.0,
+                                                top: 15.0,
+                                                bottom: 15.0,
+                                            })
+                                            .with_color(Color::BLUE)
                                             .with_element(|ui| {
                                                 ui.with_color(Color::WHITE)
                                                     .with_height(100.0)
@@ -279,6 +287,13 @@ impl ApplicationHandler for App {
                                     })
                                     .with_container(|ui| {
                                         ui.with_child_spacing(10.0)
+                                            .with_color(Color::GREEN)
+                                            .with_padding(Padding {
+                                                left: 15.0,
+                                                right: 15.0,
+                                                top: 15.0,
+                                                bottom: 15.0,
+                                            })
                                             .with_element(|ui| {
                                                 ui.with_color(Color::WHITE)
                                                     .with_height(100.0)
