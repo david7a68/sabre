@@ -12,7 +12,6 @@ use tracing::info;
 use tracing::instrument;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
-use ui_base::layout::Alignment;
 use ui_base::layout::LayoutDirection;
 use ui_base::layout::Padding;
 use ui_base::layout::Size::Grow;
@@ -252,21 +251,40 @@ impl ApplicationHandler for App {
                     .ui_context
                     .next_frame(window.input.clone(), Duration::ZERO, |ui| {
                         ui.with_color(Color::srgb(0.1, 0.2, 0.3, 1.0))
-                            .with_child_alignment(Alignment::Center)
+                            .with_element(|ui| {
+                                ui.with_height(20.0).with_width(Grow).with_color(Color {
+                                    r: 0.4,
+                                    g: 0.4,
+                                    b: 0.4,
+                                    a: 1.0,
+                                });
+                            })
                             .with_container(|ui| {
                                 ui.with_child_direction(LayoutDirection::Vertical)
-                                    // .with_child_alignment(Alignment::Justify)
-                                    .with_child_alignment(Alignment::Center)
-                                    .with_height(Grow)
+                                    // .with_child_spacing(10.0)
+                                    .with_color(Color {
+                                        r: 0.2,
+                                        g: 0.2,
+                                        b: 0.2,
+                                        a: 1.0,
+                                    })
+                                    // .with_element(|ui| {
+                                    //     ui.with_width(20.0).with_height(Grow).with_color(Color {
+                                    //         r: 0.4,
+                                    //         g: 0.4,
+                                    //         b: 0.4,
+                                    //         a: 1.0,
+                                    //     });
+                                    // })
                                     .with_container(|ui| {
                                         ui.with_child_spacing(10.0)
-                                            .with_color(Color::BLUE)
                                             .with_padding(Padding {
-                                                left: 10.0,
-                                                right: 10.0,
-                                                top: 10.0,
-                                                bottom: 10.0,
+                                                left: 15.0,
+                                                right: 15.0,
+                                                top: 15.0,
+                                                bottom: 15.0,
                                             })
+                                            .with_color(Color::BLUE)
                                             .with_element(|ui| {
                                                 ui.with_color(Color::WHITE)
                                                     .with_height(100.0)
@@ -285,12 +303,12 @@ impl ApplicationHandler for App {
                                     })
                                     .with_container(|ui| {
                                         ui.with_child_spacing(10.0)
-                                            .with_color(Color::RED)
+                                            .with_color(Color::GREEN)
                                             .with_padding(Padding {
-                                                left: 10.0,
-                                                right: 10.0,
-                                                top: 10.0,
-                                                bottom: 10.0,
+                                                left: 15.0,
+                                                right: 15.0,
+                                                top: 15.0,
+                                                bottom: 15.0,
                                             })
                                             .with_element(|ui| {
                                                 ui.with_color(Color::WHITE)
@@ -308,9 +326,23 @@ impl ApplicationHandler for App {
                                                     .with_width(299.0);
                                             });
                                     })
-                                    .with_container(|ui| {
-                                        ui.with_height(Grow).with_color(Color::WHITE);
-                                    });
+                                // .with_element(|ui| {
+                                //     ui.with_width(20.0).with_height(Grow).with_color(Color {
+                                //         r: 0.4,
+                                //         g: 0.4,
+                                //         b: 0.4,
+                                //         a: 1.0,
+                                //     });
+                                // });
+                                ;
+                            })
+                            .with_element(|ui| {
+                                ui.with_height(20.0).with_width(Grow).with_color(Color {
+                                    r: 0.4,
+                                    g: 0.4,
+                                    b: 0.4,
+                                    a: 1.0,
+                                });
                             });
                     })
                     .finish(&mut canvas);

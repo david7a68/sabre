@@ -1,5 +1,3 @@
-use tracing::debug;
-use tracing::info;
 use tracing::instrument;
 use tracing::warn;
 
@@ -87,7 +85,6 @@ pub(crate) trait LayoutInfo {
     fn spec(&self) -> &LayoutNodeSpec;
     fn result(&self) -> &LayoutNodeResult;
     fn result_mut(&mut self) -> &mut LayoutNodeResult;
-    fn parent_idx(&self) -> Option<UiElementId>;
 }
 
 pub(crate) fn compute_layout<T: LayoutInfo>(
@@ -100,9 +97,9 @@ pub(crate) fn compute_layout<T: LayoutInfo>(
         children: &[NodeIndexArray],
         node_id: UiElementId,
     ) {
-        compute_fixed_sizes(nodes, children, node_id);
-        compute_major_axis_flex_sizes::<D, T>(nodes, children, node_id);
-        compute_minor_axis_flex_sizes::<D, T>(nodes, children, node_id);
+        compute_major_axis_fit_sizes::<D, T>(nodes, children, node_id);
+        compute_major_axis_grow_sizes::<D, T>(nodes, children, node_id);
+        compute_minor_axis_fit_sizes::<D, T>(nodes, children, node_id);
         compute_major_axis_offsets::<D, T>(nodes, children, node_id, 0.0);
         compute_minor_axis_offsets::<D, T>(nodes, children, node_id, 0.0);
     }
@@ -113,27 +110,52 @@ pub(crate) fn compute_layout<T: LayoutInfo>(
     }
 }
 
-fn compute_fixed_sizes<T: LayoutInfo>(
+fn compute_major_axis_fit_sizes<D: LayoutDirectionExt, T: LayoutInfo>(
     nodes: &mut [T],
     children: &[NodeIndexArray],
     node_id: UiElementId,
-) {
-    let node = &mut nodes[node_id.0 as usize];
+) -> f32 {
+    let node = &nodes[node_id.0 as usize];
 
-    if let Size::Fixed(w) = node.spec().width {
-        node.result_mut().width = Some(w)
-    };
-
-    if let Size::Fixed(h) = node.spec().height {
-        node.result_mut().height = Some(h)
-    };
-
-    for child in &children[node_id.0 as usize] {
-        compute_fixed_sizes(nodes, children, *child);
+    if !(node.spec().direction == D::DIRECTION) {
+        return compute_minor_axis_fit_sizes::<D::Other, T>(nodes, children, node_id);
     }
+
+    let size_spec = D::major_size_spec(node);
+
+    let child_sizes = {
+        let mut total_size = get_major_axis_empty_size::<D, T>(node, &children[node_id.0 as usize]);
+
+        for child_id in &children[node_id.0 as usize] {
+            total_size += compute_major_axis_fit_sizes::<D, T>(nodes, children, *child_id);
+        }
+
+        total_size
+    };
+
+    let size = match size_spec {
+        Size::Fixed(size) => size,
+        Size::Fit { min, max } => child_sizes.clamp(min, max),
+        Size::Grow => {
+            // Grow is handled in the offsets phase
+            0.0
+        }
+    };
+
+    tracing::debug!(
+        ?node_id,
+        ?size_spec,
+        ?child_sizes,
+        ?size,
+        "Computing {} axis fit sizes",
+        D::string(),
+    );
+
+    D::set_major_size(&mut nodes[node_id.0 as usize], size);
+    size
 }
 
-fn compute_major_axis_flex_sizes<D: LayoutDirectionExt, T: LayoutInfo>(
+fn compute_major_axis_grow_sizes<D: LayoutDirectionExt, T: LayoutInfo>(
     nodes: &mut [T],
     children: &[NodeIndexArray],
     node_id: UiElementId,
@@ -141,87 +163,76 @@ fn compute_major_axis_flex_sizes<D: LayoutDirectionExt, T: LayoutInfo>(
     let node = &nodes[node_id.0 as usize];
 
     if !(node.spec().direction == D::DIRECTION) {
-        return compute_minor_axis_flex_sizes::<D::Other, T>(nodes, children, node_id);
+        // return compute_minor_axis_fit_sizes::<D::Other, T>(nodes, children, node_id);
+        unimplemented!()
     }
 
-    let empty_size = node.spec().inter_child_padding
-        * (children[node_id.0 as usize].len().saturating_sub(1)) as f32
-        + D::major_axis_padding_start(node)
-        + D::major_axis_padding_end(node);
+    let mut remaining_size = D::major_size_result(node)
+        .expect("Breadth-first layout pass, this node must have a size")
+        - get_major_axis_empty_size::<D, T>(node, &children[node_id.0 as usize]);
 
-    if let Size::Fit { min, max } = D::major_size_spec(node) {
-        let effective_max = if max >= f32::MAX {
-            find_parent_constraint::<D, T>(nodes, children, node_id).unwrap_or(f32::MAX)
-        } else {
-            max
-        };
-
-        let (total_size, _) = compute_major_axis_children_with_limit::<D, T>(
-            nodes,
-            children,
-            node_id,
-            empty_size,
-            effective_max,
-        );
-
-        D::set_major_size(
-            &mut nodes[node_id.0 as usize],
-            total_size.clamp(min, effective_max.min(max)),
-        );
-    } else if let Some(size) = D::major_size_result(node) {
-        compute_major_axis_children_with_limit::<D, T>(nodes, children, node_id, empty_size, size);
-    } else {
-        warn!(
-            "Node {node_id:?} has no {} size set and is not a flex container",
-            D::string()
-        );
-        D::set_major_size(&mut nodes[node_id.0 as usize], 0.0);
-    }
-}
-
-fn compute_major_axis_children_with_limit<D: LayoutDirectionExt, T: LayoutInfo>(
-    nodes: &mut [T],
-    children: &[NodeIndexArray],
-    node_id: UiElementId,
-    empty_size: f32,
-    size_limit: f32,
-) -> (f32, bool) {
-    let mut total_size = empty_size;
     let mut grow_children = NodeIndexArray::new();
 
-    // Calculate sizes for non-grow children and collect grow children
-    for child in &children[node_id.0 as usize] {
-        let child_node = &nodes[child.0 as usize];
-        if let Some(size) = D::major_size_result(child_node) {
-            total_size += size;
-        } else if matches!(D::major_size_spec(child_node), Grow) {
-            grow_children.push(*child);
-        } else {
-            compute_major_axis_flex_sizes::<D, T>(nodes, children, *child);
-            total_size += D::major_size_result(&nodes[child.0 as usize]).unwrap();
+    for child_id in &children[node_id.0 as usize] {
+        let child = &nodes[child_id.0 as usize];
+
+        let child_size = D::major_size_result(child).unwrap();
+        remaining_size -= child_size;
+
+        match D::major_size_spec(child) {
+            Fixed(_) => {}   // already computed
+            Fit { .. } => {} // already computed
+            Grow => grow_children.push(*child_id),
         }
     }
 
-    let has_grow_children = !grow_children.is_empty();
+    while remaining_size > 0.0 && !grow_children.is_empty() {
+        tracing::debug!(
+            "Distributing {} pixels between {} grow children",
+            remaining_size,
+            grow_children.len()
+        );
 
-    // Handle grow children if any
-    if has_grow_children {
-        let effective_limit = if size_limit >= f32::MAX {
-            total_size
-        } else {
-            size_limit
-        };
+        let even_size = remaining_size / grow_children.len() as f32;
 
-        let grow_size = (effective_limit - total_size).max(0.0) / grow_children.len() as f32;
+        // For each grow child, distribute the available grow size evenly
+        // between all of them, unless it exceeds their max size. If that
+        // happens, continue to distribute the unallocated size subsequent
+        // iterations.
+        grow_children.retain(|child_id| {
+            let child = &mut nodes[child_id.0 as usize];
+            let child_size = D::major_size_result(child).unwrap();
 
-        for child in &grow_children {
-            D::set_major_size(&mut nodes[child.0 as usize], grow_size);
-        }
+            match D::major_size_spec(child) {
+                Fixed(_) => unreachable!(),
+                Fit { max, .. } => {
+                    let tentative_size = child_size + even_size;
 
-        total_size = effective_limit;
+                    let actual_size = if tentative_size > max {
+                        max
+                    } else {
+                        child_size + even_size
+                    };
+
+                    D::set_major_size(child, actual_size);
+                    remaining_size -= actual_size - child_size;
+
+                    actual_size < max
+                }
+                Grow => {
+                    if child_size + even_size > remaining_size {
+                        D::set_major_size(child, remaining_size);
+                        remaining_size = 0.0;
+                    } else {
+                        D::set_major_size(child, child_size + even_size);
+                        remaining_size -= even_size;
+                    }
+
+                    true
+                }
+            }
+        });
     }
-
-    (total_size, has_grow_children)
 }
 
 #[instrument(skip(nodes, children), fields(direction = D::string()))]
@@ -244,47 +255,54 @@ fn compute_major_axis_offsets<D: LayoutDirectionExt, T: LayoutInfo>(
 
     let mut advance = current_offset + D::major_axis_padding_start(node);
     for child_id in &children[node_id.0 as usize] {
-        D::set_major_offset(&mut nodes[child_id.0 as usize], advance);
         advance = compute_major_axis_offsets::<D, T>(nodes, children, *child_id, advance) + padding;
+    }
+
+    if D::DIRECTION == LayoutDirection::Vertical {
+        tracing::info!(
+            ?node_id,
+            ?padding,
+            ?advance,
+            current_offset = ?(current_offset + size),
+        );
     }
 
     current_offset + size
 }
 
-fn compute_minor_axis_flex_sizes<D: LayoutDirectionExt, T: LayoutInfo>(
+fn compute_minor_axis_fit_sizes<D: LayoutDirectionExt, T: LayoutInfo>(
     nodes: &mut [T],
     children: &[NodeIndexArray],
     node_id: UiElementId,
-) {
+) -> f32 {
     let node = &nodes[node_id.0 as usize];
 
     if node.spec().direction != D::DIRECTION {
-        return compute_major_axis_flex_sizes::<D::Other, T>(nodes, children, node_id);
+        return compute_major_axis_fit_sizes::<D::Other, T>(nodes, children, node_id);
     }
 
-    let mut total_size = 0.0f32;
+    let size_spec = D::minor_size_spec(node);
+    let size_padding = D::minor_axis_padding_start(node) + D::minor_axis_padding_end(node);
 
-    if let Size::Fit { min, max } = D::minor_size_spec(node) {
+    let child_sizes = {
+        let mut total_size = 0.0f32;
+
         for child in &children[node_id.0 as usize] {
-            let child_size = if let Some(size) = D::minor_size_result(&nodes[child.0 as usize]) {
-                size
-            } else {
-                compute_minor_axis_flex_sizes::<D, T>(nodes, children, *child);
-                D::minor_size_result(&nodes[child.0 as usize]).unwrap()
-            };
-
+            let child_size = compute_minor_axis_fit_sizes::<D, T>(nodes, children, *child);
             total_size = total_size.max(child_size);
         }
 
-        let node = &mut nodes[node_id.0 as usize];
+        total_size
+    };
 
-        total_size += D::minor_axis_padding_start(node) + D::minor_axis_padding_end(node);
-        D::set_minor_size(node, total_size.clamp(min, max));
-    } else {
-        for child in &children[node_id.0 as usize] {
-            compute_minor_axis_flex_sizes::<D, T>(nodes, children, *child);
-        }
-    }
+    let size = match size_spec {
+        Fixed(size) => size,
+        Fit { min, max } => (child_sizes + size_padding).clamp(min, max),
+        Grow => 0.0, // Grow is handled later
+    };
+
+    D::set_minor_size(&mut nodes[node_id.0 as usize], size);
+    size
 }
 
 #[instrument(skip(nodes, children), fields(direction = D::string()))]
@@ -310,33 +328,25 @@ fn compute_minor_axis_offsets<D: LayoutDirectionExt, T: LayoutInfo>(
         compute_minor_axis_offsets::<D, T>(nodes, children, *child_id, inset);
     }
 
-    inset + size
+    if D::DIRECTION == LayoutDirection::Horizontal {
+        tracing::info!(
+            ?node_id,
+            ?inset,
+            ?size,
+            current_offset = ?(current_offset + size),
+        );
+    }
+
+    current_offset + size
 }
 
-fn find_parent_constraint<D: LayoutDirectionExt, T: LayoutInfo>(
-    nodes: &[T],
-    children: &[NodeIndexArray],
-    node_id: UiElementId,
-) -> Option<f32> {
-    let parent_id = nodes[node_id.0 as usize].parent_idx()?;
-    let parent_node = &nodes[parent_id.0 as usize];
-
-    // Determine the parent's available size in the major axis
-    D::major_size_result(parent_node).or_else(|| {
-        if let Size::Fit { max, .. } = D::major_size_spec(parent_node)
-            && max < f32::MAX
-        {
-            let available_space = max
-                - D::major_axis_padding_start(parent_node)
-                - D::major_axis_padding_end(parent_node)
-                - parent_node.spec().inter_child_padding
-                    * children[parent_id.0 as usize].len() as f32;
-
-            Some(available_space.max(0.0))
-        } else {
-            None
-        }
-    })
+fn get_major_axis_empty_size<D: LayoutDirectionExt, T: LayoutInfo>(
+    node: &T,
+    children: &NodeIndexArray,
+) -> f32 {
+    node.spec().inter_child_padding * (children.len().saturating_sub(1)) as f32
+        + D::major_axis_padding_start(node)
+        + D::major_axis_padding_end(node)
 }
 
 trait LayoutDirectionExt {

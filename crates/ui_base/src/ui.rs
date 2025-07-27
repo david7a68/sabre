@@ -25,8 +25,6 @@ pub type NodeIndexArray = SmallVec<[UiElementId; 8]>;
 struct UiNode {
     color: Color,
 
-    parent_idx: Option<UiElementId>,
-
     layout_spec: LayoutNodeSpec,
     layout_result: LayoutNodeResult,
 }
@@ -42,10 +40,6 @@ impl LayoutInfo for UiNode {
 
     fn result_mut(&mut self) -> &mut LayoutNodeResult {
         &mut self.layout_result
-    }
-
-    fn parent_idx(&self) -> Option<UiElementId> {
-        self.parent_idx
     }
 }
 
@@ -76,7 +70,6 @@ impl UiContext {
         // Set up the root node.
         self.ui_nodes.push(UiNode {
             color: Color::WHITE,
-            parent_idx: None, // Root node has no parent
             layout_spec: LayoutNodeSpec {
                 width: input.window_size.width.into(),
                 height: input.window_size.height.into(),
@@ -215,7 +208,6 @@ impl UiBuilder<'_> {
         self.context.children[parent].push(UiElementId(child_index as u16));
 
         self.context.ui_nodes.push(UiNode {
-            parent_idx: Some(UiElementId(parent as u16)),
             ..Default::default()
         });
 
