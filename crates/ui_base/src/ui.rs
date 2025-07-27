@@ -4,7 +4,6 @@ use graphics::Canvas;
 use graphics::Color;
 use graphics::Primitive;
 use smallvec::SmallVec;
-use tracing::debug;
 
 use crate::input::InputState;
 use crate::layout::Alignment;

@@ -143,17 +143,6 @@ fn compute_major_axis_fit_sizes<D: LayoutDirectionExt, T: LayoutInfo>(
         }
     };
 
-    if D::DIRECTION == LayoutDirection::Vertical {
-        tracing::debug!(
-            ?node_id,
-            ?size_spec,
-            ?child_sizes,
-            ?size,
-            "Computing {} axis fit sizes",
-            D::string(),
-        );
-    }
-
     D::set_major_size(&mut nodes[node_id.0 as usize], size);
     size
 }
@@ -190,12 +179,6 @@ fn compute_major_axis_grow_sizes<D: LayoutDirectionExt, T: LayoutInfo>(
 
     // Step 2: Distribute the remaining size evenly among the grow children.
     while remaining_size > 0.0 && !grow_children.is_empty() {
-        tracing::debug!(
-            "Distributing {} pixels between {} grow children",
-            remaining_size,
-            grow_children.len()
-        );
-
         let even_size = remaining_size / grow_children.len() as f32;
 
         // For each grow child, distribute the available grow size evenly
@@ -243,7 +226,6 @@ fn compute_major_axis_grow_sizes<D: LayoutDirectionExt, T: LayoutInfo>(
     }
 }
 
-#[instrument(skip(nodes, children), fields(direction = D::string()))]
 fn compute_major_axis_offsets<D: LayoutDirectionExt, T: LayoutInfo>(
     nodes: &mut [T],
     children: &[NodeIndexArray],

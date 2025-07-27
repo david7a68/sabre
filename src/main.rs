@@ -252,29 +252,13 @@ impl ApplicationHandler for App {
                     .next_frame(window.input.clone(), Duration::ZERO, |ui| {
                         ui.with_color(Color::srgb(0.1, 0.2, 0.3, 1.0))
                             .with_element(|ui| {
-                                ui.with_height(20.0).with_width(Grow).with_color(Color {
-                                    r: 0.4,
-                                    g: 0.4,
-                                    b: 0.4,
-                                    a: 1.0,
-                                });
+                                ui.with_width(Grow);
                             })
                             .with_container(|ui| {
                                 ui.with_child_direction(LayoutDirection::Vertical)
-                                    // .with_color(Color {
-                                    //     r: 0.2,
-                                    //     g: 0.2,
-                                    //     b: 0.2,
-                                    //     a: 1.0,
-                                    // })
                                     .with_height(Grow)
                                     .with_element(|ui| {
-                                        ui.with_width(20.0).with_height(Grow).with_color(Color {
-                                            r: 0.4,
-                                            g: 0.4,
-                                            b: 0.4,
-                                            a: 1.0,
-                                        });
+                                        ui.with_height(Grow);
                                     })
                                     .with_container(|ui| {
                                         ui.with_child_spacing(10.0)
@@ -327,21 +311,11 @@ impl ApplicationHandler for App {
                                             });
                                     })
                                     .with_element(|ui| {
-                                        ui.with_width(20.0).with_height(Grow).with_color(Color {
-                                            r: 0.4,
-                                            g: 0.4,
-                                            b: 0.4,
-                                            a: 1.0,
-                                        });
+                                        ui.with_height(Grow);
                                     });
                             })
                             .with_element(|ui| {
-                                ui.with_height(20.0).with_width(Grow).with_color(Color {
-                                    r: 0.4,
-                                    g: 0.4,
-                                    b: 0.4,
-                                    a: 1.0,
-                                });
+                                ui.with_width(Grow);
                             });
                     })
                     .finish(&mut canvas);
