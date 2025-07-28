@@ -17,7 +17,6 @@ parley = { workspace = true }
 slotmap = { workspace = true }
 swash = { workspace = true }
 smallvec = { workspace = true }
-tokio = { workspace = true }
 tracing = { workspace = true }
 tracing-tracy = { workspace = true }
 winit = { workspace = true }

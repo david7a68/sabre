@@ -452,7 +452,8 @@ impl TextureManagerInner {
         let storage_id = usage.storage;
         let texture_id = self.texture_map.borrow_mut().insert(usage);
 
-        tokio::task::spawn_blocking({
+        // todo: figure out a better way
+        std::thread::spawn({
             let span = info_span!(
                 "Loading texture from file",
                 path = %path.display(),
