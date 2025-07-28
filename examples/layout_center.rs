@@ -12,9 +12,9 @@ use tracing::info;
 use tracing::instrument;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
-use ui_base::layout::Alignment;
 use ui_base::layout::LayoutDirection;
 use ui_base::layout::Padding;
+use ui_base::layout::Size::Grow;
 use winit::application::ApplicationHandler;
 use winit::event::ElementState;
 use winit::event::MouseButton;
@@ -28,21 +28,6 @@ use winit::platform::windows::EventLoopBuilderExtWindows;
 use winit::platform::windows::WindowAttributesExtWindows;
 use winit::window::Window;
 use winit::window::WindowId;
-
-#[derive(Default)]
-struct TracyConfig(tracing_subscriber::fmt::format::DefaultFields);
-
-impl tracing_tracy::Config for TracyConfig {
-    type Formatter = tracing_subscriber::fmt::format::DefaultFields;
-
-    fn formatter(&self) -> &Self::Formatter {
-        &self.0
-    }
-
-    fn stack_depth(&self, _: &tracing::metadata::Metadata<'_>) -> u16 {
-        10
-    }
-}
 
 fn main() {
     color_backtrace::install();
@@ -61,7 +46,6 @@ fn main() {
 
     tracing_subscriber::registry()
         .with(tracing_subscriber::fmt::layer().pretty())
-        .with(tracing_tracy::TracyLayer::new(TracyConfig::default()))
         .with(env_filter)
         .with(def_filter)
         .init();
@@ -251,11 +235,15 @@ impl ApplicationHandler for App {
                     .ui_context
                     .next_frame(window.input.clone(), Duration::ZERO, |ui| {
                         ui.with_color(Color::srgb(0.1, 0.2, 0.3, 1.0))
-                            .with_child_major_alignment(Alignment::Center)
-                            .with_child_minor_alignment(Alignment::Center)
+                            .with_element(|ui| {
+                                ui.with_width(Grow);
+                            })
                             .with_container(|ui| {
                                 ui.with_child_direction(LayoutDirection::Vertical)
-                                    .with_child_minor_alignment(Alignment::Center)
+                                    .with_height(Grow)
+                                    .with_element(|ui| {
+                                        ui.with_height(Grow);
+                                    })
                                     .with_container(|ui| {
                                         ui.with_child_spacing(10.0)
                                             .with_padding(Padding {
@@ -305,7 +293,13 @@ impl ApplicationHandler for App {
                                                     .with_height(100.0)
                                                     .with_width(299.0);
                                             });
+                                    })
+                                    .with_element(|ui| {
+                                        ui.with_height(Grow);
                                     });
+                            })
+                            .with_element(|ui| {
+                                ui.with_width(Grow);
                             });
                     })
                     .finish(&mut canvas);

@@ -102,10 +102,10 @@ impl UiContext {
             }
 
             canvas.draw(Primitive::new(
-                layout.x.unwrap_or_default(),
-                layout.y.unwrap_or_default(),
-                layout.width.unwrap_or_default(),
-                layout.height.unwrap_or_default(),
+                layout.x,
+                layout.y,
+                layout.width,
+                layout.height,
                 node.color,
             ));
         }
@@ -141,8 +141,13 @@ impl UiBuilder<'_> {
         self
     }
 
-    pub fn with_child_alignment(&mut self, alignment: Alignment) -> &mut Self {
-        self.context.ui_nodes[self.index].layout_spec.alignment = alignment;
+    pub fn with_child_major_alignment(&mut self, alignment: Alignment) -> &mut Self {
+        self.context.ui_nodes[self.index].layout_spec.major_align = alignment;
+        self
+    }
+
+    pub fn with_child_minor_alignment(&mut self, alignment: Alignment) -> &mut Self {
+        self.context.ui_nodes[self.index].layout_spec.minor_align = alignment;
         self
     }
 
