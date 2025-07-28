@@ -118,6 +118,7 @@ fn compute_major_axis_fit_sizes<D: LayoutDirectionExt, T: LayoutInfo>(
     node_id: UiElementId,
 ) -> f32 {
     let node = &nodes[node_id.0 as usize];
+    let node_children = &children[node_id.0 as usize];
 
     if !(node.spec().direction == D::DIRECTION) {
         return compute_minor_axis_fit_sizes::<D::Other, T>(nodes, children, node_id);
@@ -126,9 +127,9 @@ fn compute_major_axis_fit_sizes<D: LayoutDirectionExt, T: LayoutInfo>(
     let size_spec = D::major_size_spec(node);
 
     let child_sizes = {
-        let mut total_size = get_major_axis_empty_size::<D, T>(node, &children[node_id.0 as usize]);
+        let mut total_size = get_major_axis_empty_size::<D, T>(node, node_children);
 
-        for child_id in &children[node_id.0 as usize] {
+        for child_id in node_children {
             total_size += compute_major_axis_fit_sizes::<D, T>(nodes, children, *child_id);
         }
 
@@ -154,18 +155,19 @@ fn compute_major_axis_grow_sizes<D: LayoutDirectionExt, T: LayoutInfo>(
     node_id: UiElementId,
 ) {
     let node = &nodes[node_id.0 as usize];
+    let node_children = &children[node_id.0 as usize];
 
     if !(node.spec().direction == D::DIRECTION) {
         return compute_minor_axis_grow_sizes::<D::Other, T>(nodes, children, node_id);
     }
 
     let mut grow_children = NodeIndexArray::new();
-    let mut remaining_size = D::major_size_result(node)
-        - get_major_axis_empty_size::<D, T>(node, &children[node_id.0 as usize]);
+    let mut remaining_size =
+        D::major_size_result(node) - get_major_axis_empty_size::<D, T>(node, node_children);
 
     // Step 1: Find all the children that can grow and the amount of space they
     // can take up.
-    for child_id in &children[node_id.0 as usize] {
+    for child_id in node_children {
         let child = &nodes[child_id.0 as usize];
 
         let child_size = D::major_size_result(child);
@@ -218,7 +220,7 @@ fn compute_major_axis_grow_sizes<D: LayoutDirectionExt, T: LayoutInfo>(
     }
 
     // Step 3: Call recursively for each child.
-    for child_id in &children[node_id.0 as usize] {
+    for child_id in node_children {
         compute_major_axis_grow_sizes::<D, T>(nodes, children, *child_id);
     }
 }
@@ -243,27 +245,27 @@ fn compute_major_axis_offsets<D: LayoutDirectionExt, T: LayoutInfo>(
     let padding_internal = node.spec().inter_child_padding;
     let padding_end = D::major_axis_padding_end(node);
 
+    let node_children = &children[node_id.0 as usize];
     match node.spec().major_align {
         Alignment::Start => {
             let mut advance = current_offset + padding_start;
-            for child_id in &children[node_id.0 as usize] {
+            for child_id in node_children {
                 advance = compute_major_axis_offsets::<D, T>(nodes, children, *child_id, advance)
                     + padding_internal;
             }
         }
         Alignment::Center => {
             // start with all the reserved space for padding
-            let mut content_size =
-                get_major_axis_empty_size::<D, T>(node, &children[node_id.0 as usize]);
+            let mut content_size = get_major_axis_empty_size::<D, T>(node, node_children);
 
-            for child_id in &children[node_id.0 as usize] {
+            for child_id in node_children {
                 content_size += D::major_size_result(&nodes[child_id.0 as usize]);
             }
 
             let half_unused_space = (size - content_size) / 2.0;
 
             let mut advance = current_offset + padding_start + half_unused_space;
-            for child_id in &children[node_id.0 as usize] {
+            for child_id in node_children {
                 advance = compute_major_axis_offsets::<D, T>(nodes, children, *child_id, advance)
                     + padding_internal;
             }
@@ -271,37 +273,44 @@ fn compute_major_axis_offsets<D: LayoutDirectionExt, T: LayoutInfo>(
         Alignment::End => {
             // start with all the reserved space for padding from the end (without the start padding)
             let mut content_size =
-                padding_end + get_inter_child_padding::<D, T>(node, &children[node_id.0 as usize]);
+                padding_end + get_inter_child_padding::<D, T>(node, node_children);
 
-            for child_id in &children[node_id.0 as usize] {
+            for child_id in node_children {
                 content_size += D::major_size_result(&nodes[child_id.0 as usize]);
             }
 
             let mut advance = current_offset + size - content_size;
-            for child_id in &children[node_id.0 as usize] {
+            for child_id in node_children {
                 advance = compute_major_axis_offsets::<D, T>(nodes, children, *child_id, advance)
                     + padding_internal;
             }
         }
-        Alignment::Justify => {
+        Alignment::Justify if node_children.len() > 1 => {
             // start with all the reserved space for padding
-            let mut content_size =
-                get_major_axis_empty_size::<D, T>(node, &children[node_id.0 as usize]);
+            let mut content_size = get_major_axis_empty_size::<D, T>(node, node_children);
 
-            for child_id in &children[node_id.0 as usize] {
+            for child_id in node_children {
                 content_size += D::major_size_result(&nodes[child_id.0 as usize]);
             }
 
             // The amount to pad between children, valuing at least the
             // configured inter-child padding
-            let internal_padding = padding_internal.max(
-                (size - content_size) / children[node_id.0 as usize].len().saturating_sub(1) as f32,
-            );
+            let internal_padding =
+                padding_internal.max((size - content_size) / (node_children.len() - 1) as f32);
 
             let mut advance = current_offset + padding_start;
-            for child_id in &children[node_id.0 as usize] {
+            for child_id in node_children {
                 advance = compute_major_axis_offsets::<D, T>(nodes, children, *child_id, advance)
                     + internal_padding;
+            }
+        }
+        Alignment::Justify => {
+            // Justified layouts with a single child are treated as start-aligned.
+            let mut advance = current_offset + padding_start;
+
+            for child_id in node_children {
+                advance = compute_major_axis_offsets::<D, T>(nodes, children, *child_id, advance)
+                    + padding_internal;
             }
         }
     }
@@ -377,6 +386,7 @@ fn compute_minor_axis_offsets<D: LayoutDirectionExt, T: LayoutInfo>(
     current_offset: f32,
 ) -> f32 {
     let node = &mut nodes[node_id.0 as usize];
+    let node_children = &children[node_id.0 as usize];
 
     if node.spec().direction != D::DIRECTION {
         return compute_major_axis_offsets::<D::Other, T>(nodes, children, node_id, current_offset);
@@ -394,27 +404,29 @@ fn compute_minor_axis_offsets<D: LayoutDirectionExt, T: LayoutInfo>(
         Alignment::Start | Alignment::Justify => {
             let inset = current_offset + padding_start;
 
-            for child_id in &children[node_id.0 as usize] {
+            for child_id in node_children {
                 compute_minor_axis_offsets::<D, T>(nodes, children, *child_id, inset);
             }
         }
         Alignment::Center => {
             // Center on a per-child basis.
-            for child_id in &children[node_id.0 as usize] {
+            for child_id in node_children {
                 let child = &mut nodes[child_id.0 as usize];
                 let child_size = D::minor_size_result(child);
 
-                let inset = current_offset + padding_start + (size - child_size) / 2.0;
+                // Ignore the padding for centering since the child has already
+                // been sized appropriately.
+                let inset = current_offset + (size - child_size).max(0.0) / 2.0;
 
                 compute_minor_axis_offsets::<D, T>(nodes, children, *child_id, inset);
             }
         }
         Alignment::End => {
-            for child_id in &children[node_id.0 as usize] {
+            for child_id in node_children {
                 let child = &mut nodes[child_id.0 as usize];
                 let child_size = D::minor_size_result(child);
 
-                let inset = current_offset + size - child_size - padding_end;
+                let inset = current_offset + (size - child_size - padding_end).max(0.0);
 
                 compute_minor_axis_offsets::<D, T>(nodes, children, *child_id, inset);
             }
