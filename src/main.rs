@@ -12,9 +12,9 @@ use tracing::info;
 use tracing::instrument;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
+use ui_base::layout::Alignment;
 use ui_base::layout::LayoutDirection;
 use ui_base::layout::Padding;
-use ui_base::layout::Size::Grow;
 use winit::application::ApplicationHandler;
 use winit::event::ElementState;
 use winit::event::MouseButton;
@@ -251,15 +251,11 @@ impl ApplicationHandler for App {
                     .ui_context
                     .next_frame(window.input.clone(), Duration::ZERO, |ui| {
                         ui.with_color(Color::srgb(0.1, 0.2, 0.3, 1.0))
-                            .with_element(|ui| {
-                                ui.with_width(Grow);
-                            })
+                            .with_child_major_alignment(Alignment::Center)
+                            .with_child_minor_alignment(Alignment::Center)
                             .with_container(|ui| {
                                 ui.with_child_direction(LayoutDirection::Vertical)
-                                    .with_height(Grow)
-                                    .with_element(|ui| {
-                                        ui.with_height(Grow);
-                                    })
+                                    .with_child_minor_alignment(Alignment::Center)
                                     .with_container(|ui| {
                                         ui.with_child_spacing(10.0)
                                             .with_padding(Padding {
@@ -309,13 +305,7 @@ impl ApplicationHandler for App {
                                                     .with_height(100.0)
                                                     .with_width(299.0);
                                             });
-                                    })
-                                    .with_element(|ui| {
-                                        ui.with_height(Grow);
                                     });
-                            })
-                            .with_element(|ui| {
-                                ui.with_width(Grow);
                             });
                     })
                     .finish(&mut canvas);
