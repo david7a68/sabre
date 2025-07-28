@@ -92,14 +92,9 @@ impl App {
 
 impl App {
     fn run(mut self) {
-        let rt = tokio::runtime::Runtime::new().unwrap();
-        let _guard = rt.enter();
-
         let event_loop = EventLoop::builder().with_dpi_aware(true).build().unwrap();
         event_loop.set_control_flow(ControlFlow::Wait);
         event_loop.run_app(&mut self).unwrap();
-
-        rt.shutdown_timeout(Duration::from_secs(1));
     }
 }
 
