@@ -67,10 +67,12 @@ pub enum Alignment {
 pub(crate) struct LayoutNodeSpec {
     pub width: Size,
     pub height: Size,
+    pub inner_padding: Padding,
+
+    // Container layout properties
     pub major_align: Alignment,
     pub minor_align: Alignment,
     pub direction: LayoutDirection,
-    pub inner_padding: Padding,
     pub inter_child_padding: f32,
 }
 
@@ -80,6 +82,20 @@ pub(crate) struct LayoutNodeResult {
     pub y: f32,
     pub width: f32,
     pub height: f32,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct ContentWidth {
+    pub min: f32,
+    pub max: f32,
+}
+
+pub(crate) trait MeasureText<T: LayoutInfo> {
+    /// Measures the text, returning the minimum and maximum width it can take.
+    fn measure(&mut self, node: &T) -> ContentWidth;
+
+    /// Breaks the text into lines, returning the total height of the text.
+    fn break_lines(&mut self, node: &T, max_width: f32) -> f32;
 }
 
 pub(crate) trait LayoutInfo {

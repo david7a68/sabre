@@ -148,6 +148,32 @@ impl TextSystemInner {
             }
         }
     }
+
+    #[expect(unused)]
+    #[instrument(skip_all)]
+    pub fn draw(
+        &mut self,
+        canvas: &mut CanvasStorage,
+        textures: &TextureManager,
+        layout: &Layout<Color>,
+        origin: [f32; 2],
+    ) {
+        for line in layout.lines() {
+            for item in line.items() {
+                match item {
+                    PositionedLayoutItem::GlyphRun(glyphs) => draw_glyph_run(
+                        &mut self.scaler_cx,
+                        &mut self.glyph_cache,
+                        canvas,
+                        textures,
+                        &glyphs,
+                        origin,
+                    ),
+                    PositionedLayoutItem::InlineBox(_) => {}
+                }
+            }
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug)]
