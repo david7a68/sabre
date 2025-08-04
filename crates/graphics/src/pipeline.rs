@@ -7,7 +7,7 @@ use tracing::info;
 
 use crate::Color;
 
-const SHADER: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/shader.naga"));
+const SHADER_SOURCE: &str = include_str!("shader.wgsl");
 
 #[derive(Clone)]
 pub(crate) struct RenderPipeline {
@@ -172,7 +172,7 @@ impl RenderPipelineCache {
     pub fn new(device: wgpu::Device) -> Self {
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: None,
-            source: wgpu::ShaderSource::Naga(postcard::from_bytes(SHADER).unwrap()),
+            source: wgpu::ShaderSource::Wgsl(SHADER_SOURCE.into()),
         });
 
         let draw_data_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {

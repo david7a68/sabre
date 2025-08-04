@@ -60,7 +60,8 @@ impl GraphicsContext {
             memory_budget_thresholds: wgpu::MemoryBudgetThresholds::default(),
             backend_options: wgpu::BackendOptions {
                 dx12: wgpu::Dx12BackendOptions {
-                    shader_compiler: wgpu::Dx12Compiler::StaticDxc,
+                    // shader_compiler: wgpu::Dx12Compiler::StaticDxc,
+                    shader_compiler: wgpu::Dx12Compiler::Fxc,
                 },
                 ..Default::default()
             },

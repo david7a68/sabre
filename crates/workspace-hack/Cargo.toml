@@ -15,26 +15,11 @@ publish = false
 
 ### BEGIN HAKARI SECTION
 [dependencies]
-hashbrown = { version = "0.15", features = ["serde"] }
-log = { version = "0.4", default-features = false, features = ["std"] }
-naga = { version = "26", features = ["deserialize", "serialize", "wgsl-in"] }
-num-traits = { version = "0.2", features = ["libm"] }
-once_cell = { version = "1" }
-serde = { version = "1", default-features = false, features = ["alloc", "derive", "std"] }
 smallvec = { version = "1", default-features = false, features = ["const_new", "union"] }
 tracing-core = { version = "0.1" }
 tracing-subscriber = { version = "0.3", features = ["parking_lot"] }
 tracing-tracy = { version = "0.11", default-features = false, features = ["broadcast", "callstack-inlines", "code-transfer", "context-switch-tracing", "enable", "fibers", "ondemand", "only-localhost", "sampling", "system-tracing"] }
 tracy-client = { version = "0.18", default-features = false, features = ["broadcast", "callstack-inlines", "code-transfer", "context-switch-tracing", "enable", "fibers", "ondemand", "only-localhost", "sampling", "system-tracing"] }
 tracy-client-sys = { version = "0.26", default-features = false, features = ["broadcast", "callstack-inlines", "code-transfer", "context-switch-tracing", "enable", "fibers", "ondemand", "only-localhost", "sampling", "system-tracing"] }
-
-[build-dependencies]
-hashbrown = { version = "0.15", features = ["serde"] }
-log = { version = "0.4", default-features = false, features = ["std"] }
-naga = { version = "26", features = ["deserialize", "serialize", "wgsl-in"] }
-num-traits = { version = "0.2", features = ["libm"] }
-once_cell = { version = "1" }
-serde = { version = "1", default-features = false, features = ["alloc", "derive", "std"] }
-syn = { version = "2", features = ["extra-traits", "full", "visit-mut"] }
 
 ### END HAKARI SECTION

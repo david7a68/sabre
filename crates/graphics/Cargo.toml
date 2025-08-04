@@ -17,18 +17,12 @@ guillotiere = { workspace = true }
 image = { workspace = true, features = ["jpeg", "png"] }
 memmap2 = { workspace = true }
 parley = { workspace = true }
-postcard = { workspace = true, features = ["use-std"] }
 slotmap = { workspace = true }
 smallvec = { workspace = true }
 swash = { workspace = true }
 tracing = { workspace = true }
 tracing-tracy = { workspace = true, optional = true }
 winit = { workspace = true }
-naga = { workspace = true, features = ["deserialize"] }
 
 [target.'cfg(windows)'.dependencies]
-wgpu = { workspace = true, features = ["naga-ir", "dx12", "static-dxc"] }
-
-[build-dependencies]
-naga = { workspace = true, features = ["wgsl-in", "serialize"] }
-postcard = { workspace = true, features = ["use-std"] }
+wgpu = { workspace = true, features = ["wgsl", "dx12"] }
