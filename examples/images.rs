@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use graphics::Primitive;
 use graphics::TextPrimitive;
-use graphics::TextStyle;
+use graphics::text::TextStyle;
 use smallvec::smallvec;
 use tracing::info;
 use tracing::instrument;

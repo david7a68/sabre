@@ -349,6 +349,7 @@ impl TextLayoutPool {
         )
     }
 
+    #[expect(unused)]
     fn free(&mut self, id: TextLayoutId) {
         let Some(entry) = self.entries.get_mut(id.index as usize) else {
             return; // Invalid ID, nothing to free

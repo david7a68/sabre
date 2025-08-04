@@ -2122,7 +2122,6 @@ dependencies = [
  "graphics",
  "parley",
  "smallvec",
- "tracing",
  "workspace-hack",
 ]
 

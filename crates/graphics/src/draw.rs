@@ -2,9 +2,9 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::sync::mpsc;
 
-use crate::TextStyle;
 use crate::color::Color;
 use crate::pipeline::GpuPrimitive;
+use crate::text::TextStyle;
 use crate::text::TextSystem;
 use crate::texture::StorageId;
 

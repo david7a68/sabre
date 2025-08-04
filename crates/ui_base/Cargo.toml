@@ -12,4 +12,3 @@ workspace-hack = { version = "0.1", path = "../workspace-hack" }
 
 parley = { workspace = true }
 smallvec = { workspace = true }
-tracing = { workspace = true }
