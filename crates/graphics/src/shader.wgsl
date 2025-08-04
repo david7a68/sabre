@@ -8,6 +8,10 @@ struct Rect {
     color_tint: vec4f,
     color_uvwh: vec4f,
     alpha_uvwh: vec4f,
+    use_nearest_sampling: u32,
+    _padding0: u32,
+    _padding1: u32,
+    _padding2: u32,
 }
 
 struct VertexOutput {
@@ -15,6 +19,7 @@ struct VertexOutput {
     @location(0) color_tint: vec4f,
     @location(1) color_uv: vec2f,
     @location(2) alpha_uv: vec2f,
+    @location(3) use_nearest_sampling: u32,
 };
 
 @group(0) @binding(0) var<uniform> draw_info: DrawInfo;
@@ -43,10 +48,13 @@ fn vs_main(
     out.alpha_uv = alpha_uvwh.xy + alpha_uvwh.zw * UV_LOOKUP[vertex_index];
     out.alpha_uv = vec2f(out.alpha_uv.x, out.alpha_uv.y);
 
+    out.use_nearest_sampling = rects[rect_index].use_nearest_sampling;
+
     return out;
 }
 
 @group(1) @binding(0) var basic_sampler: sampler;
+@group(1) @binding(1) var nearest_sampler: sampler;
 @group(2) @binding(0) var color_texture: texture_2d<f32>;
 @group(2) @binding(1) var alpha_texture: texture_2d<f32>;
 
@@ -54,11 +62,18 @@ fn vs_main(
 fn fs_main(
     in: VertexOutput
 ) -> @location(0) vec4f {
-    var color = in.color_tint
-        * textureSample(color_texture, basic_sampler, in.color_uv);
-
-    color.a = textureSample(alpha_texture, basic_sampler, in.alpha_uv).r;
-
+    var color: vec4f;
+    var alpha: f32;
+    
+    if (in.use_nearest_sampling != 0u) {
+        color = in.color_tint * textureSample(color_texture, nearest_sampler, in.color_uv);
+        alpha = textureSample(alpha_texture, nearest_sampler, in.alpha_uv).r;
+    } else {
+        color = in.color_tint * textureSample(color_texture, basic_sampler, in.color_uv);
+        alpha = textureSample(alpha_texture, basic_sampler, in.alpha_uv).r;
+    }
+    
+    color.a = alpha;
     return color;
 }
 

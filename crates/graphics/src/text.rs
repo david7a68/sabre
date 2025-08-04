@@ -464,7 +464,8 @@ fn draw_glyph_run(
                 entry.height as f32,
                 color,
             )
-            .with_mask(entry.texture.clone()),
+            .with_mask(entry.texture.clone())
+            .with_nearest_sampling(),
         );
     }
 }

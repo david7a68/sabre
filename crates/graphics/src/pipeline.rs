@@ -64,10 +64,14 @@ pub struct DrawUniforms {
 #[derive(Clone, Copy, Debug, Default, Pod, Zeroable)]
 pub(crate) struct GpuPrimitive {
     pub point: [f32; 2],
-    pub size: [f32; 2],
+    pub extent: [f32; 2],
     pub color_tint: Color,
     pub color_uvwh: [f32; 4],
     pub alpha_uvwh: [f32; 4],
+    pub use_nearest_sampling: u32, // 0 = basic_sampler, 1 = nearest_sampler
+    pub _padding0: u32,
+    pub _padding1: u32,
+    pub _padding2: u32,
 }
 
 pub struct DrawBuffer {
@@ -160,6 +164,9 @@ pub(crate) struct RenderPipelineCache {
 
     #[expect(unused)]
     diffuse_sampler: wgpu::Sampler,
+    #[expect(unused)]
+    nearest_sampler: wgpu::Sampler,
+
     sampler_bind_group: wgpu::BindGroup,
 
     draw_data_layout: wgpu::BindGroupLayout,
@@ -204,12 +211,20 @@ impl RenderPipelineCache {
         let sampler_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                 label: Some("Sampler Bind Group Layout"),
-                entries: &[wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                    count: None,
-                }],
+                entries: &[
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 1,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                        count: None,
+                    },
+                ],
             });
 
         let texture_bind_group_layout =
@@ -259,13 +274,29 @@ impl RenderPipelineCache {
             ..Default::default()
         });
 
+        let nearest_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("Diffuse Sampler"),
+            address_mode_u: wgpu::AddressMode::ClampToEdge,
+            address_mode_v: wgpu::AddressMode::ClampToEdge,
+            address_mode_w: wgpu::AddressMode::ClampToEdge,
+            mag_filter: wgpu::FilterMode::Nearest,
+            min_filter: wgpu::FilterMode::Nearest,
+            ..Default::default()
+        });
+
         let sampler_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("Sampler Bind Group"),
             layout: &sampler_bind_group_layout,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: wgpu::BindingResource::Sampler(&diffuse_sampler),
-            }],
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::Sampler(&diffuse_sampler),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::Sampler(&nearest_sampler),
+                },
+            ],
         });
 
         Self {
@@ -273,6 +304,7 @@ impl RenderPipelineCache {
             shader,
             layout,
             diffuse_sampler,
+            nearest_sampler,
             sampler_bind_group,
             draw_data_layout,
             texture_bind_group_layout,
@@ -347,5 +379,17 @@ impl RenderPipelineCache {
         pipelines.insert(format, pipeline.clone());
 
         pipeline
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_gpu_primitive_size() {
+        // Expected: 2*4 + 2*4 + 4*4 + 4*4 + 4*4 + 4 + 4 + 4 + 4 = 80 bytes
+        assert_eq!(std::mem::size_of::<GpuPrimitive>(), 80);
+        assert_eq!(std::mem::align_of::<GpuPrimitive>(), 16);
     }
 }
