@@ -195,7 +195,7 @@ impl UiBuilder<'_> {
             &mut self.context.font_context,
             text,
             1.0,
-            false,
+            true,
         );
 
         style.as_defaults(&mut compute);

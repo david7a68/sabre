@@ -93,7 +93,7 @@ impl Default for TextStyle {
         Self {
             align: TextAlignment::Start,
             font_color: Color::BLACK,
-            font_size: 16.0,
+            font_size: 32.0,
             font_style: FontStyle::Normal,
             font_weight: FontWeight::NORMAL,
             font: Arc::new(FontStack::Source(Cow::Borrowed("system-ui"))),
