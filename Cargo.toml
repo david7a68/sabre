@@ -37,8 +37,11 @@ winit = "0.30"
 [profile.dev.build-override]
 opt-level = 2
 
+[profile.dev.package."*"]
+opt-level = 3
+
 [profile.release]
-lto = "thin"
+lto = "fat"
 codegen-units = 1
 
 [package]
@@ -65,11 +68,10 @@ smallvec = { workspace = true, features = [
 ] }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true, features = [
-    "env-filter",
     "parking_lot",
     "smallvec",
 ] }
-tracing-tracy = { workspace = true, features = [
+tracing-tracy = { workspace = true, optional = true, features = [
     "broadcast",
     "callstack-inlines",
     "code-transfer",
