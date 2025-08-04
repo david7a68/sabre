@@ -1,7 +1,6 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use futures::executor::block_on;
 use sabre::graphics::Color;
 use sabre::graphics::GraphicsContext;
 use sabre::ui::UiContext;
@@ -30,8 +29,10 @@ use winit::window::Window;
 use winit::window::WindowId;
 
 #[derive(Default)]
+#[cfg(feature = "profile")]
 struct TracyConfig(tracing_subscriber::fmt::format::DefaultFields);
 
+#[cfg(feature = "profile")]
 impl tracing_tracy::Config for TracyConfig {
     type Formatter = tracing_subscriber::fmt::format::DefaultFields;
 
@@ -45,26 +46,25 @@ impl tracing_tracy::Config for TracyConfig {
 }
 
 fn main() {
-    color_backtrace::install();
+    let def_filter = tracing_subscriber::filter::Targets::new()
+        .with_default(Level::DEBUG)
+        .with_targets([
+            ("naga", Level::WARN),
+            ("wgpu_core", Level::WARN),
+            ("wgpu_hal", Level::WARN),
+            ("wgpu", Level::WARN),
+        ]);
 
-    let env_filter = tracing_subscriber::EnvFilter::try_from_default_env().ok();
-    let def_filter = env_filter.is_none().then(|| {
-        tracing_subscriber::filter::Targets::new()
-            .with_default(Level::DEBUG)
-            .with_targets([
-                ("naga", Level::WARN),
-                ("wgpu_core", Level::WARN),
-                ("wgpu_hal", Level::WARN),
-                ("wgpu", Level::WARN),
-            ])
-    });
+    #[allow(unused_mut)]
+    let mut registry =
+        tracing_subscriber::registry().with(tracing_subscriber::fmt::layer().pretty());
 
-    tracing_subscriber::registry()
-        .with(tracing_subscriber::fmt::layer().pretty())
-        .with(tracing_tracy::TracyLayer::new(TracyConfig::default()))
-        .with(env_filter)
-        .with(def_filter)
-        .init();
+    #[cfg(feature = "profile")]
+    {
+        registry = registry.with(tracing_tracy::TracyLayer::new(TracyConfig::default()));
+    }
+
+    registry.with(def_filter).init();
 
     App::new().run();
 }
@@ -111,7 +111,7 @@ impl ApplicationHandler for App {
                 .unwrap(),
         );
 
-        let mut graphics_context = block_on(async { GraphicsContext::new(window.clone()).await });
+        let mut graphics_context = GraphicsContext::new(window.clone());
 
         // Render to the window before showing it to avoid flashing when
         // creating the window for the first time.

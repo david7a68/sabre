@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use futures::executor::block_on;
 use graphics::Primitive;
 use graphics::TextPrimitive;
 use graphics::TextStyle;
@@ -64,7 +63,7 @@ impl ApplicationHandler for App {
                 .unwrap(),
         );
 
-        let mut graphics_context = block_on(async { GraphicsContext::new(window.clone()).await });
+        let mut graphics_context = GraphicsContext::new(window.clone());
 
         self.texture = Some(graphics_context.load_image("scratch/test.png").unwrap());
         self.texture2 = Some(graphics_context.load_image("scratch/test2.png").unwrap());

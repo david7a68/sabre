@@ -1,7 +1,6 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use futures::executor::block_on;
 use sabre::graphics::Color;
 use sabre::graphics::GraphicsContext;
 use sabre::ui::UiContext;
@@ -91,7 +90,7 @@ impl ApplicationHandler for App {
                 .unwrap(),
         );
 
-        let mut graphics_context = block_on(async { GraphicsContext::new(window.clone()).await });
+        let mut graphics_context = GraphicsContext::new(window.clone());
 
         // Render to the window before showing it to avoid flashing when
         // creating the window for the first time.

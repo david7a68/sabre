@@ -24,14 +24,16 @@ glamour = "0.18"
 guillotiere = "0.6"
 image = { version = "0.25", default-features = false }
 memmap2 = "0.9"
+naga = { version = "26" }
 parley = "0.5"
+postcard = { version = "1", default-features = false }
 slotmap = "1"
 smallvec = "1.15"
 swash = "0.2"
 tracing = "0.1"
 tracing-subscriber = "0.3"
 tracing-tracy = { version = "0.11", default-features = false }
-wgpu = { version = "26", default-features = false, features = ["wgsl"] }
+wgpu = { version = "26", default-features = false }
 winit = "0.30"
 
 [profile.dev.build-override]
@@ -41,8 +43,9 @@ opt-level = 2
 opt-level = 3
 
 [profile.release]
-lto = "fat"
+lto = "thin"
 codegen-units = 1
+panic = "abort"
 
 [package]
 name = "sabre"
@@ -51,7 +54,7 @@ edition.workspace = true
 
 [features]
 default = []
-profile = ["tracing-tracy/enable"]
+profile = ["dep:tracing-tracy", "tracing-tracy/enable"]
 
 [dependencies]
 workspace-hack = { version = "0.1", path = "crates/workspace-hack" }
@@ -59,7 +62,6 @@ workspace-hack = { version = "0.1", path = "crates/workspace-hack" }
 graphics = { path = "crates/graphics" }
 ui_base = { path = "crates/ui_base" }
 
-color-backtrace = { workspace = true }
 futures = { workspace = true }
 smallvec = { workspace = true, features = [
     "const_generics",
@@ -83,3 +85,6 @@ tracing-tracy = { workspace = true, optional = true, features = [
     "system-tracing",
 ] }
 winit = { workspace = true }
+
+[dev-dependencies]
+color-backtrace = { workspace = true }
