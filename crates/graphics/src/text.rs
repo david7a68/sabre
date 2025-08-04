@@ -449,6 +449,8 @@ fn draw_glyph_run(
                     texture,
                     width: temp_glyph.placement.width as u8,
                     height: temp_glyph.placement.height as u8,
+                    left: temp_glyph.placement.left,
+                    top: temp_glyph.placement.top,
                 })
             }
         };
@@ -456,8 +458,8 @@ fn draw_glyph_run(
         canvas.draw(
             textures,
             Primitive::new(
-                x.floor() + x_placement.offset,
-                y.floor() + y_placement.offset,
+                x.floor() + x_placement.offset + entry.left as f32,
+                y.floor() + y_placement.offset - entry.top as f32,
                 entry.width as f32,
                 entry.height as f32,
                 color,
@@ -480,4 +482,6 @@ struct GlyphCacheEntry {
     texture: Texture,
     width: u8,
     height: u8,
+    left: i32,
+    top: i32,
 }
