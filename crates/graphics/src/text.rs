@@ -74,6 +74,18 @@ impl TextSystem {
             .borrow_mut()
             .simple_layout(canvas, textures, text, style, max_width, origin, color);
     }
+
+    pub fn draw(
+        &self,
+        canvas: &mut CanvasStorage,
+        textures: &TextureManager,
+        layout: &Layout<Color>,
+        origin: [f32; 2],
+    ) {
+        self.inner
+            .borrow_mut()
+            .draw(canvas, textures, layout, origin);
+    }
 }
 
 struct TextSystemInner {
@@ -88,7 +100,7 @@ struct TextSystemInner {
 }
 
 impl TextSystemInner {
-    pub fn new() -> Self {
+    fn new() -> Self {
         let fonts = FontContext::new();
         let layout_cx = LayoutContext::new();
         let scaler_cx = ScaleContext::new();
@@ -106,7 +118,7 @@ impl TextSystemInner {
 
     #[allow(clippy::too_many_arguments)]
     #[instrument(skip(self, canvas, textures, style))]
-    pub fn simple_layout(
+    fn simple_layout(
         &mut self,
         canvas: &mut CanvasStorage,
         textures: &TextureManager,
@@ -149,9 +161,8 @@ impl TextSystemInner {
         }
     }
 
-    #[expect(unused)]
     #[instrument(skip_all)]
-    pub fn draw(
+    fn draw(
         &mut self,
         canvas: &mut CanvasStorage,
         textures: &TextureManager,

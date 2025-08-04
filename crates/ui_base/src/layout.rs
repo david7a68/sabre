@@ -1,16 +1,15 @@
-use tracing::instrument;
-use tracing::warn;
-
 use crate::ui::NodeIndexArray;
 use crate::ui::UiElementId;
 
 pub use Size::*;
 
+/// Single-dimension size for UI elements.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Size {
     Fixed(f32),
     Fit { min: f32, max: f32 },
     Grow,
+    Flex { min: f32, max: f32 },
 }
 
 impl From<f32> for Size {
@@ -25,6 +24,12 @@ impl Default for Size {
             min: 0.0,
             max: f32::MAX,
         }
+    }
+}
+
+impl From<Option<Size>> for Size {
+    fn from(size: Option<Size>) -> Self {
+        size.unwrap_or_default()
     }
 }
 
@@ -84,48 +89,39 @@ pub(crate) struct LayoutNodeResult {
     pub height: f32,
 }
 
-#[derive(Clone, Copy, Debug)]
-pub(crate) struct ContentWidth {
-    pub min: f32,
-    pub max: f32,
-}
-
 pub(crate) trait MeasureText<T: LayoutInfo> {
-    /// Measures the text, returning the minimum and maximum width it can take.
-    fn measure(&mut self, node: &T) -> ContentWidth;
-
     /// Breaks the text into lines, returning the total height of the text.
-    fn break_lines(&mut self, node: &T, max_width: f32) -> f32;
+    fn break_lines(&mut self, node: &T, max_width: f32) -> Option<f32>;
 }
 
 pub(crate) trait LayoutInfo {
     fn spec(&self) -> &LayoutNodeSpec;
+    fn spec_mut(&mut self) -> &mut LayoutNodeSpec;
     fn result(&self) -> &LayoutNodeResult;
     fn result_mut(&mut self) -> &mut LayoutNodeResult;
 }
 
-pub(crate) fn compute_layout<T: LayoutInfo>(
+pub(crate) fn compute_layout<T: LayoutInfo, W: MeasureText<T>>(
+    measure_text: &mut W,
     nodes: &mut [T],
     children: &[NodeIndexArray],
     node_id: UiElementId,
 ) {
-    fn compute<D: LayoutDirectionExt, T: LayoutInfo>(
-        nodes: &mut [T],
-        children: &[NodeIndexArray],
-        node_id: UiElementId,
-    ) {
-        compute_major_axis_fit_sizes::<D, T>(nodes, children, node_id);
-        compute_major_axis_grow_sizes::<D, T>(nodes, children, node_id);
-        compute_minor_axis_fit_sizes::<D, T>(nodes, children, node_id);
-        compute_minor_axis_grow_sizes::<D, T>(nodes, children, node_id);
-        compute_major_axis_offsets::<D, T>(nodes, children, node_id, 0.0);
-        compute_minor_axis_offsets::<D, T>(nodes, children, node_id, 0.0);
-    }
+    debug_assert_eq!(
+        nodes[node_id.0 as usize].spec().direction,
+        LayoutDirection::Horizontal
+    );
 
-    match nodes[node_id.0 as usize].spec().direction {
-        LayoutDirection::Horizontal => compute::<HorizontalMode, T>(nodes, children, node_id),
-        LayoutDirection::Vertical => compute::<VerticalMode, T>(nodes, children, node_id),
-    }
+    compute_major_axis_fit_sizes::<HorizontalMode, T>(nodes, children, node_id);
+    compute_major_axis_grow_sizes::<HorizontalMode, T>(nodes, children, node_id);
+
+    compute_text_heights(measure_text, nodes);
+
+    compute_minor_axis_fit_sizes::<HorizontalMode, T>(nodes, children, node_id);
+    compute_minor_axis_grow_sizes::<HorizontalMode, T>(nodes, children, node_id);
+
+    compute_major_axis_offsets::<HorizontalMode, T>(nodes, children, node_id, 0.0);
+    compute_minor_axis_offsets::<HorizontalMode, T>(nodes, children, node_id, 0.0);
 }
 
 fn compute_major_axis_fit_sizes<D: LayoutDirectionExt, T: LayoutInfo>(
@@ -154,7 +150,7 @@ fn compute_major_axis_fit_sizes<D: LayoutDirectionExt, T: LayoutInfo>(
 
     let size = match size_spec {
         Size::Fixed(size) => size,
-        Size::Fit { min, max } => child_sizes.clamp(min, max),
+        Size::Fit { min, max } | Size::Flex { min, max } => child_sizes.clamp(min, max),
         Size::Grow => {
             // Grow is handled in the offsets phase
             0.0
@@ -191,7 +187,7 @@ fn compute_major_axis_grow_sizes<D: LayoutDirectionExt, T: LayoutInfo>(
 
         match D::major_size_spec(child) {
             Fixed(_) | Fit { .. } => {} // already computed
-            Grow => grow_children.push(*child_id),
+            Flex { .. } | Grow => grow_children.push(*child_id),
         }
     }
 
@@ -208,8 +204,8 @@ fn compute_major_axis_grow_sizes<D: LayoutDirectionExt, T: LayoutInfo>(
             let child_size = D::major_size_result(child);
 
             match D::major_size_spec(child) {
-                Fixed(_) => unreachable!(),
-                Fit { max, .. } => {
+                Fixed(_) | Fit { .. } => false,
+                Flex { max, .. } => {
                     let tentative_size = child_size + even_size;
 
                     let (is_done, actual_size) = if tentative_size > max {
@@ -334,6 +330,24 @@ fn compute_major_axis_offsets<D: LayoutDirectionExt, T: LayoutInfo>(
     current_offset + size
 }
 
+fn compute_text_heights<T: LayoutInfo, W: MeasureText<T>>(measure_text: &mut W, nodes: &mut [T]) {
+    for node in nodes {
+        let Some(text_height) = measure_text.break_lines(node, node.result().width) else {
+            continue;
+        };
+
+        node.spec_mut().height = match node.spec().height {
+            Fixed(height) => Fixed(height),
+            Fit { min, max } => Fixed(text_height.clamp(min, max)),
+            Grow => Grow,
+            Flex { min, max } => Flex {
+                min: text_height.clamp(min, max),
+                max,
+            },
+        };
+    }
+}
+
 fn compute_minor_axis_fit_sizes<D: LayoutDirectionExt, T: LayoutInfo>(
     nodes: &mut [T],
     children: &[NodeIndexArray],
@@ -361,7 +375,7 @@ fn compute_minor_axis_fit_sizes<D: LayoutDirectionExt, T: LayoutInfo>(
 
     let size = match size_spec {
         Fixed(size) => size,
-        Fit { min, max } => (child_sizes + size_padding).clamp(min, max),
+        Fit { min, max } | Flex { min, max } => (child_sizes + size_padding).clamp(min, max),
         Grow => 0.0, // Grow is handled later
     };
 
@@ -394,7 +408,6 @@ fn compute_minor_axis_grow_sizes<D: LayoutDirectionExt, T: LayoutInfo>(
     }
 }
 
-#[instrument(skip(nodes, children), fields(direction = D::string()))]
 fn compute_minor_axis_offsets<D: LayoutDirectionExt, T: LayoutInfo>(
     nodes: &mut [T],
     children: &[NodeIndexArray],
@@ -472,8 +485,6 @@ trait LayoutDirectionExt {
     type Other: LayoutDirectionExt;
     const DIRECTION: LayoutDirection;
 
-    fn string() -> &'static str;
-
     fn major_size_spec<T: LayoutInfo>(node: &T) -> Size;
     fn minor_size_spec<T: LayoutInfo>(node: &T) -> Size;
 
@@ -504,10 +515,6 @@ impl std::fmt::Debug for HorizontalMode {
 impl LayoutDirectionExt for HorizontalMode {
     type Other = VerticalMode;
     const DIRECTION: LayoutDirection = LayoutDirection::Horizontal;
-
-    fn string() -> &'static str {
-        "horizontal"
-    }
 
     fn major_size_spec<T: LayoutInfo>(node: &T) -> Size {
         node.spec().width
@@ -563,10 +570,6 @@ struct VerticalMode;
 impl LayoutDirectionExt for VerticalMode {
     type Other = HorizontalMode;
     const DIRECTION: LayoutDirection = LayoutDirection::Vertical;
-
-    fn string() -> &'static str {
-        "vertical"
-    }
 
     fn major_size_spec<T: LayoutInfo>(node: &T) -> Size {
         node.spec().height

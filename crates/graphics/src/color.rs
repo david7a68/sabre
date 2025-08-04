@@ -19,6 +19,13 @@ impl Color {
         a: 1.0,
     };
 
+    pub const LIGHT_GRAY: Self = Self {
+        r: 0.8,
+        g: 0.8,
+        b: 0.8,
+        a: 1.0,
+    };
+
     pub const WHITE: Self = Self {
         r: 1.0,
         g: 1.0,
@@ -57,5 +64,11 @@ impl Color {
             b: srgb.components[2],
             a: srgb.components[3],
         }
+    }
+}
+
+impl From<Option<Color>> for Color {
+    fn from(color: Option<Color>) -> Self {
+        color.unwrap_or_default()
     }
 }

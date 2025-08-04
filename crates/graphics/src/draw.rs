@@ -182,6 +182,11 @@ impl Canvas {
         );
     }
 
+    pub fn draw_text_layout(&mut self, layout: &parley::Layout<Color>, origin: [f32; 2]) {
+        self.text_system
+            .draw(&mut self.storage, &self.texture_manager, layout, origin);
+    }
+
     pub fn draw(&mut self, primitive: Primitive) {
         self.storage.draw(&self.texture_manager, primitive);
     }
