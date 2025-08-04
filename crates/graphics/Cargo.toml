@@ -3,6 +3,9 @@ name = "graphics"
 version.workspace = true
 edition.workspace = true
 
+[features]
+profile = ["dep:tracing-tracy"]
+
 [dependencies]
 workspace-hack = { version = "0.1", path = "../workspace-hack" }
 
@@ -15,11 +18,11 @@ image = { workspace = true, features = ["jpeg", "png"] }
 memmap2 = { workspace = true }
 parley = { workspace = true }
 slotmap = { workspace = true }
-swash = { workspace = true }
 smallvec = { workspace = true }
+swash = { workspace = true }
 tracing = { workspace = true }
-tracing-tracy = { workspace = true }
+tracing-tracy = { workspace = true, optional = true }
 winit = { workspace = true }
 
 [target.'cfg(windows)'.dependencies]
-wgpu = { workspace = true, features = ["dx12", "static-dxc"] }
+wgpu = { workspace = true, features = ["wgsl", "dx12"] }

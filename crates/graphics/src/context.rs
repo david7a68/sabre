@@ -2,6 +2,7 @@ use std::path::Path;
 use std::sync::Arc;
 use std::sync::mpsc;
 
+use futures::executor::block_on;
 use smallvec::SmallVec;
 use tracing::info;
 use tracing::instrument;
@@ -42,7 +43,7 @@ pub struct GraphicsContext {
 
 impl GraphicsContext {
     #[instrument(skip(window))]
-    pub async fn new(window: Arc<Window>) -> Self {
+    pub fn new(window: Arc<Window>) -> Self {
         info!("Creating graphics context");
 
         let mut flags = wgpu::InstanceFlags::empty();
@@ -59,7 +60,8 @@ impl GraphicsContext {
             memory_budget_thresholds: wgpu::MemoryBudgetThresholds::default(),
             backend_options: wgpu::BackendOptions {
                 dx12: wgpu::Dx12BackendOptions {
-                    shader_compiler: wgpu::Dx12Compiler::StaticDxc,
+                    // shader_compiler: wgpu::Dx12Compiler::StaticDxc,
+                    shader_compiler: wgpu::Dx12Compiler::Fxc,
                 },
                 ..Default::default()
             },
@@ -67,27 +69,31 @@ impl GraphicsContext {
 
         let surface = instance.create_surface(window.clone()).unwrap();
 
-        let adapter = instance
-            .request_adapter(&wgpu::RequestAdapterOptions {
-                power_preference: wgpu::PowerPreference::LowPower,
-                force_fallback_adapter: false,
-                compatible_surface: Some(&surface),
-            })
-            .await
-            .unwrap();
+        let adapter = block_on(async {
+            instance
+                .request_adapter(&wgpu::RequestAdapterOptions {
+                    power_preference: wgpu::PowerPreference::LowPower,
+                    force_fallback_adapter: false,
+                    compatible_surface: Some(&surface),
+                })
+                .await
+        })
+        .unwrap();
 
         info!("Adapter: {:?}", adapter.get_info());
 
-        let (device, queue) = adapter
-            .request_device(&wgpu::DeviceDescriptor {
-                label: Some("Device"),
-                required_features: wgpu::Features::empty(),
-                required_limits: wgpu::Limits::default(),
-                memory_hints: wgpu::MemoryHints::MemoryUsage,
-                trace: wgpu::Trace::Off,
-            })
-            .await
-            .unwrap();
+        let (device, queue) = block_on(async {
+            adapter
+                .request_device(&wgpu::DeviceDescriptor {
+                    label: Some("Device"),
+                    required_features: wgpu::Features::empty(),
+                    required_limits: wgpu::Limits::default(),
+                    memory_hints: wgpu::MemoryHints::MemoryUsage,
+                    trace: wgpu::Trace::Off,
+                })
+                .await
+        })
+        .unwrap();
 
         let render_pipelines = Arc::new(RenderPipelineCache::new(device.clone()));
 
@@ -206,7 +212,10 @@ impl GraphicsContext {
 
         self.textures.end_frame();
 
-        tracing_tracy::client::frame_mark();
+        #[cfg(feature = "profile")]
+        {
+            tracing_tracy::client::frame_mark();
+        }
 
         Ok(())
     }

@@ -1,7 +1,6 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use futures::executor::block_on;
 use sabre::graphics::Color;
 use sabre::graphics::GraphicsContext;
 use sabre::ui::UiContext;
@@ -32,21 +31,17 @@ use winit::window::WindowId;
 fn main() {
     color_backtrace::install();
 
-    let env_filter = tracing_subscriber::EnvFilter::try_from_default_env().ok();
-    let def_filter = env_filter.is_none().then(|| {
-        tracing_subscriber::filter::Targets::new()
-            .with_default(Level::DEBUG)
-            .with_targets([
-                ("naga", Level::WARN),
-                ("wgpu_core", Level::WARN),
-                ("wgpu_hal", Level::WARN),
-                ("wgpu", Level::WARN),
-            ])
-    });
+    let def_filter = tracing_subscriber::filter::Targets::new()
+        .with_default(Level::DEBUG)
+        .with_targets([
+            ("naga", Level::WARN),
+            ("wgpu_core", Level::WARN),
+            ("wgpu_hal", Level::WARN),
+            ("wgpu", Level::WARN),
+        ]);
 
     tracing_subscriber::registry()
         .with(tracing_subscriber::fmt::layer().pretty())
-        .with(env_filter)
         .with(def_filter)
         .init();
 
@@ -95,7 +90,7 @@ impl ApplicationHandler for App {
                 .unwrap(),
         );
 
-        let mut graphics_context = block_on(async { GraphicsContext::new(window.clone()).await });
+        let mut graphics_context = GraphicsContext::new(window.clone());
 
         // Render to the window before showing it to avoid flashing when
         // creating the window for the first time.

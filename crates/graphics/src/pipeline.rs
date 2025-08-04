@@ -4,11 +4,10 @@ use std::sync::Mutex;
 use bytemuck::Pod;
 use bytemuck::Zeroable;
 use tracing::info;
-use wgpu::include_wgsl;
 
 use crate::Color;
 
-const SHADER: wgpu::ShaderModuleDescriptor = include_wgsl!("shader.wgsl");
+const SHADER_SOURCE: &str = include_str!("shader.wgsl");
 
 #[derive(Clone)]
 pub(crate) struct RenderPipeline {
@@ -171,7 +170,10 @@ pub(crate) struct RenderPipelineCache {
 
 impl RenderPipelineCache {
     pub fn new(device: wgpu::Device) -> Self {
-        let shader = device.create_shader_module(SHADER);
+        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: None,
+            source: wgpu::ShaderSource::Wgsl(SHADER_SOURCE.into()),
+        });
 
         let draw_data_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("Draw Info Bind Group Layout"),
