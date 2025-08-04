@@ -62,33 +62,33 @@ fn fs_main(
     return color;
 }
 
-/// 2----1  5
+/// Triangle layout for top-left origin (Y down):
+/// 1----2  4
 /// |   / / |
 /// |  / /  |
 /// | / /   |
-/// 0  3----4
+/// 0  3----5
 const CORNER_LOOKUP: array<vec2f, 6> = array<vec2f, 6>(
     vec2f(0.0, 0.0),
-    vec2f(1.0, 1.0),
     vec2f(0.0, 1.0),
-    vec2f(0.0, 0.0),
-    vec2f(1.0, 0.0),
     vec2f(1.0, 1.0),
+    vec2f(0.0, 0.0),
+    vec2f(1.0, 1.0),
+    vec2f(1.0, 0.0),
 );
 
-// We flip the Y coordinate but also need to remap the UV coordinates from
-// bottom-left to top-left. This lookup table keeps the UV coordinates the same,
-// but flips the image upside down.
+// UV coordinates for top-left origin with Y pointing down
 const UV_LOOKUP: array<vec2f, 6> = array<vec2f, 6>(
-    vec2f(0.0, 1.0),
-    vec2f(1.0, 0.0),
     vec2f(0.0, 0.0),
     vec2f(0.0, 1.0),
+    vec2f(1.0, 1.0),
+    vec2f(0.0, 0.0),
     vec2f(1.0, 1.0),
     vec2f(1.0, 0.0),
 );
 
 fn to_clip_coords(position: vec2f) -> vec4f {
-    let xy = position / vec2f(f32(draw_info.viewport_size.x), f32(draw_info.viewport_size.y)) * 2.0 - 1.0;
-    return vec4f(xy, 0.0, 1.0);
+    let x = position.x / f32(draw_info.viewport_size.x) * 2.0 - 1.0;
+    let y = -(position.y / f32(draw_info.viewport_size.y) * 2.0 - 1.0);
+    return vec4f(x, y, 0.0, 1.0);
 }
