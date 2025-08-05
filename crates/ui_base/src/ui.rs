@@ -4,6 +4,7 @@ use std::time::Duration;
 use graphics::Canvas;
 use graphics::Color;
 use graphics::Primitive;
+use graphics::text::TextAlignment;
 use parley::FontContext;
 use parley::LayoutContext;
 use smallvec::SmallVec;
@@ -189,8 +190,9 @@ impl UiBuilder<'_> {
         height: impl Into<Size>,
         background_color: impl Into<Color>,
     ) -> &mut Self {
-        let (id, layout) = self.context.text_layouts.allocate();
+        let (id, layout, alignment) = self.context.text_layouts.allocate();
 
+        *alignment = style.align;
         let mut compute = self.context.layout_context.ranged_builder(
             &mut self.context.font_context,
             text,
@@ -287,6 +289,7 @@ struct TextLayoutPoolEntry {
     version: NonZeroU32,
     next: Option<u32>,
     layout: parley::Layout<Color>,
+    alignment: TextAlignment,
 }
 
 /// Pooling generational allocator for text layouts.
@@ -315,16 +318,16 @@ impl TextLayoutPool {
         }
     }
 
-    fn get_mut(&mut self, id: TextLayoutId) -> Option<&mut parley::Layout<Color>> {
+    fn get_mut(&mut self, id: TextLayoutId) -> Option<&mut TextLayoutPoolEntry> {
         let entry = self.entries.get_mut(id.index as usize)?;
         if entry.version == id.version && entry.next.is_none() {
-            Some(&mut entry.layout)
+            Some(entry)
         } else {
             None
         }
     }
 
-    fn allocate(&mut self) -> (TextLayoutId, &mut parley::Layout<Color>) {
+    fn allocate(&mut self) -> (TextLayoutId, &mut parley::Layout<Color>, &mut TextAlignment) {
         let (index, entry) = if let Some(index) = self.first_free.take() {
             let entry = &mut self.entries[index as usize];
             self.first_free = entry.next.take();
@@ -335,6 +338,7 @@ impl TextLayoutPool {
                 version: NonZeroU32::new(1).unwrap(),
                 next: None,
                 layout: parley::Layout::new(),
+                alignment: TextAlignment::Start,
             });
 
             (index, self.entries.last_mut().unwrap())
@@ -346,6 +350,7 @@ impl TextLayoutPool {
                 version: entry.version,
             },
             &mut entry.layout,
+            &mut entry.alignment,
         )
     }
 
@@ -375,9 +380,14 @@ impl TextLayoutPool {
 impl MeasureText<UiNode> for TextLayoutPool {
     fn break_lines(&mut self, node: &UiNode, max_width: f32) -> Option<f32> {
         let text_id = node.layout_text?;
-        let layout = self.get_mut(text_id)?;
-        layout.break_all_lines(Some(max_width));
+        let entry = self.get_mut(text_id)?;
+        entry.layout.break_all_lines(Some(max_width));
+        entry.layout.align(
+            Some(max_width),
+            entry.alignment.into(),
+            parley::AlignmentOptions::default(),
+        );
 
-        Some(layout.height())
+        Some(entry.layout.height())
     }
 }
