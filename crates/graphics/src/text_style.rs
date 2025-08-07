@@ -81,6 +81,7 @@ impl Default for TextStyle {
             font_size: 32.0,
             font_style: FontStyle::Normal,
             font_features: Cow::Borrowed(&[
+                FontFeature::ContextualAlternatives,
                 FontFeature::ContextualLigatures,
                 FontFeature::DiscretionaryLigatures,
                 FontFeature::Kerning,
@@ -201,6 +202,10 @@ impl From<FontWeight> for parley::FontWeight {
 
 #[derive(Clone, Copy, Debug)]
 pub enum FontFeature {
+    /// The CALT feature tag for contextual alternatives.
+    ///
+    ///
+    ContextualAlternatives,
     /// The CLIG feature tag for contextual ligatures.
     ///
     /// Should usually be enabled by default.
@@ -226,11 +231,12 @@ pub enum FontFeature {
 impl From<FontFeature> for parley::style::FontFeature {
     fn from(value: FontFeature) -> Self {
         match value {
-            FontFeature::ContextualLigatures => Self::parse("\"clig\" on").unwrap(),
-            FontFeature::DiscretionaryLigatures => Self::parse("\"dlig\" on").unwrap(),
-            FontFeature::Kerning => Self::parse("\"kern\" on").unwrap(),
-            FontFeature::RequiredLigatures => Self::parse("\"rlig\" on").unwrap(),
-            FontFeature::StandardLigatures => Self::parse("\"liga\" on").unwrap(),
+            FontFeature::ContextualAlternatives => Self::parse("\"calt\"").unwrap(),
+            FontFeature::ContextualLigatures => Self::parse("\"clig\"").unwrap(),
+            FontFeature::DiscretionaryLigatures => Self::parse("\"dlig\"").unwrap(),
+            FontFeature::Kerning => Self::parse("\"kern\"").unwrap(),
+            FontFeature::RequiredLigatures => Self::parse("\"rlig\"").unwrap(),
+            FontFeature::StandardLigatures => Self::parse("\"liga\"").unwrap(),
         }
     }
 }
