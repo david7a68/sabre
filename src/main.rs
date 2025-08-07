@@ -273,7 +273,7 @@ impl ApplicationHandler for App {
                                                 Color::LIGHT_GRAY,
                                             )
                                             .add_rect(None, Grow, None)
-                                            .add_rect(Color::RED, 45.0, 45.0);
+                                            .add_rect(45.0, 45.0, Color::RED);
                                     })
                                     .with_container(|ui| {
                                         ui.with_child_minor_alignment(Alignment::Center)
@@ -292,7 +292,7 @@ impl ApplicationHandler for App {
                                                 Color::LIGHT_GRAY,
                                             )
                                             .add_rect(None, Grow, None)
-                                            .add_rect(Color::RED, 45.0, 45.0);
+                                            .add_rect(45.0, 45.0, Color::RED);
                                     })
                                     .with_container(|ui| {
                                         ui.with_child_minor_alignment(Alignment::Center)
@@ -311,7 +311,7 @@ impl ApplicationHandler for App {
                                                 Color::LIGHT_GRAY,
                                             )
                                             .add_rect(None, Grow, None)
-                                            .add_rect(Color::RED, 45.0, 45.0);
+                                            .add_rect(45.0, 45.0, Color::RED);
                                     });
                             });
                     })

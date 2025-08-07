@@ -88,7 +88,7 @@ impl Default for TextStyle {
                 FontFeature::StandardLigatures,
             ]),
             font_weight: FontWeight::NORMAL,
-            font: Arc::new(FontStack::Source(Cow::Borrowed("Times New Roman"))),
+            font: Arc::new(FontStack::Source(Cow::Borrowed("serif"))),
             strikethrough_color: None,
             strikethrough_offset: None,
             underline_color: None,

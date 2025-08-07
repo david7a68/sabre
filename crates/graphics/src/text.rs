@@ -78,6 +78,9 @@ struct TextSystemInner {
     /// A cache of mappings from glyphs (and their aligned x-offsets) to textures.
     glyph_cache: HashMap<GlyphCacheKey, GlyphCacheEntry>,
 
+    /// Scratch space for rendering glyphs.
+    image_place: Image,
+
     quick_layout: Layout<Color>,
 }
 
@@ -94,6 +97,7 @@ impl TextSystemInner {
             layout_cx,
             scaler_cx,
             glyph_cache: HashMap::new(),
+            image_place: Image::new(),
             quick_layout,
         }
     }
@@ -129,6 +133,7 @@ impl TextSystemInner {
                 match item {
                     PositionedLayoutItem::GlyphRun(glyphs) => draw_glyph_run(
                         &mut self.scaler_cx,
+                        &mut self.image_place,
                         &mut self.glyph_cache,
                         canvas,
                         textures,
@@ -154,6 +159,7 @@ impl TextSystemInner {
                 match item {
                     PositionedLayoutItem::GlyphRun(glyphs) => draw_glyph_run(
                         &mut self.scaler_cx,
+                        &mut self.image_place,
                         &mut self.glyph_cache,
                         canvas,
                         textures,
@@ -167,6 +173,8 @@ impl TextSystemInner {
     }
 }
 
+const SUBPIXEL_VARIANTS: f32 = 3.0;
+
 #[derive(Clone, Copy, Debug)]
 struct SubpixelAlignment {
     step: u8,
@@ -175,16 +183,21 @@ struct SubpixelAlignment {
 
 impl SubpixelAlignment {
     fn new(value: f32) -> Self {
-        let scaled = value.fract() * 3.0;
-        let step = (scaled.round() % 3.0) as u8;
-        let offset = scaled / 3.0;
+        let fraction = value.fract();
 
-        Self { step, offset }
+        let scaled = fraction * SUBPIXEL_VARIANTS;
+        let step = scaled.round() as u8 % SUBPIXEL_VARIANTS as u8;
+
+        Self {
+            step,
+            offset: fraction,
+        }
     }
 }
 
 fn draw_glyph_run(
     scaler_cx: &mut ScaleContext,
+    temp_glyph: &mut Image,
     glyph_cache: &mut HashMap<GlyphCacheKey, GlyphCacheEntry>,
     canvas: &mut CanvasStorage,
     textures: &TextureManager,
@@ -203,7 +216,8 @@ fn draw_glyph_run(
     let font_size = run.font_size();
     let normalized_coords = run.normalized_coords();
 
-    // Convert from parley::Font to swash::FontRef
+    // Convert from parley::Font to swash::FontRef. Should always succeed since
+    // parley created and owns the `Font`.
     let font_ref = FontRef::from_index(font.data.as_ref(), font.index as usize).unwrap();
 
     let mut scaler = scaler_cx
@@ -212,8 +226,6 @@ fn draw_glyph_run(
         .hint(true)
         .normalized_coords(normalized_coords)
         .build();
-
-    let mut temp_glyph = Image::new();
 
     for glyph in glyph_run.glyphs() {
         let x = run_x + glyph.x;
@@ -229,7 +241,7 @@ fn draw_glyph_run(
             glyph: glyph.id,
             x_variant: x_placement.step,
             y_variant: y_placement.step,
-            size: font_size as u8,
+            size: font_size as u16,
         };
 
         let entry = match glyph_cache.entry(key) {
@@ -247,7 +259,7 @@ fn draw_glyph_run(
                 ])
                 .format(Format::Alpha)
                 .offset(offset)
-                .render_into(&mut scaler, glyph.id, &mut temp_glyph);
+                .render_into(&mut scaler, glyph.id, temp_glyph);
 
                 assert!(success);
 
@@ -301,7 +313,8 @@ struct GlyphCacheKey {
     glyph: GlyphId,
     x_variant: u8,
     y_variant: u8,
-    size: u8,
+    // We can't use `f32` here because it is not `Hash`.
+    size: u16,
 }
 
 struct GlyphCacheEntry {

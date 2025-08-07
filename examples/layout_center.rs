@@ -238,9 +238,9 @@ impl ApplicationHandler for App {
                                                 bottom: 15.0,
                                             })
                                             .with_color(Color::BLUE)
-                                            .add_rect(Color::WHITE, 100.0, 100.0)
-                                            .add_rect(Color::WHITE, 100.0, 200.0)
-                                            .add_rect(Color::WHITE, 30.0, 150.0);
+                                            .add_rect(100.0, 100.0, Color::WHITE)
+                                            .add_rect(100.0, 200.0, Color::WHITE)
+                                            .add_rect(30.0, 150.0, Color::WHITE);
                                     })
                                     .with_container(|ui| {
                                         ui.with_child_spacing(10.0)
@@ -251,9 +251,9 @@ impl ApplicationHandler for App {
                                                 top: 15.0,
                                                 bottom: 15.0,
                                             })
-                                            .add_rect(Color::WHITE, 100.0, 91.0)
-                                            .add_rect(Color::WHITE, 100.0, 15.0)
-                                            .add_rect(Color::WHITE, 100.0, 299.0);
+                                            .add_rect(100.0, 91.0, Color::WHITE)
+                                            .add_rect(100.0, 15.0, Color::WHITE)
+                                            .add_rect(100.0, 299.0, Color::WHITE);
                                     });
                             });
                     })

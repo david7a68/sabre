@@ -169,9 +169,9 @@ impl UiBuilder<'_> {
 
     pub fn add_rect(
         &mut self,
-        color: impl Into<Color>,
         width: impl Into<Size>,
         height: impl Into<Size>,
+        color: impl Into<Color>,
     ) -> &mut Self {
         let node = self.add(self.index);
 
@@ -294,7 +294,7 @@ struct TextLayoutPoolEntry {
 
 /// Pooling generational allocator for text layouts.
 ///
-/// This isn't meant to be used for larger text blocks beacuse the layouts can
+/// This isn't meant to be used for larger text blocks because the layouts can
 /// be fairly memory-intensive and we don't deallocate them, meaning that they
 /// hang around for what could conceivably be the lifetime of the program.
 #[derive(Default)]
@@ -335,7 +335,7 @@ impl TextLayoutPool {
         } else {
             let index = self.entries.len() as u32;
             self.entries.push(TextLayoutPoolEntry {
-                version: NonZeroU32::new(1).unwrap(),
+                version: NonZeroU32::MIN,
                 next: None,
                 layout: parley::Layout::new(),
                 alignment: TextAlignment::Start,

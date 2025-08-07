@@ -109,7 +109,8 @@ pub(crate) fn compute_layout<T: LayoutInfo, W: MeasureText<T>>(
 ) {
     debug_assert_eq!(
         nodes[node_id.0 as usize].spec().direction,
-        LayoutDirection::Horizontal
+        LayoutDirection::Horizontal,
+        "The root node must have a horizontal layout direction"
     );
 
     compute_major_axis_fit_sizes::<HorizontalMode, T>(nodes, children, node_id);
@@ -204,7 +205,10 @@ fn compute_major_axis_grow_sizes<D: LayoutDirectionExt, T: LayoutInfo>(
             let child_size = D::major_size_result(child);
 
             match D::major_size_spec(child) {
-                Fixed(_) | Fit { .. } => false,
+                Fixed(_) | Fit { .. } => {
+                    // Fixed and fit containers do not grow, so we can skip them.
+                    false
+                }
                 Flex { max, .. } => {
                     let tentative_size = child_size + even_size;
 
