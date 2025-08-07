@@ -13,4 +13,5 @@ mod draw;
 mod pipeline;
 mod surface;
 pub mod text;
+mod text_style;
 mod texture;
