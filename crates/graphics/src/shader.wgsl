@@ -8,6 +8,10 @@ struct Rect {
     color_tint: vec4f,
     color_uvwh: vec4f,
     alpha_uvwh: vec4f,
+    use_nearest_sampling: u32,
+    _padding0: u32,
+    _padding1: u32,
+    _padding2: u32,
 }
 
 struct VertexOutput {
@@ -15,6 +19,7 @@ struct VertexOutput {
     @location(0) color_tint: vec4f,
     @location(1) color_uv: vec2f,
     @location(2) alpha_uv: vec2f,
+    @location(3) use_nearest_sampling: u32,
 };
 
 @group(0) @binding(0) var<uniform> draw_info: DrawInfo;
@@ -43,10 +48,13 @@ fn vs_main(
     out.alpha_uv = alpha_uvwh.xy + alpha_uvwh.zw * UV_LOOKUP[vertex_index];
     out.alpha_uv = vec2f(out.alpha_uv.x, out.alpha_uv.y);
 
+    out.use_nearest_sampling = rects[rect_index].use_nearest_sampling;
+
     return out;
 }
 
 @group(1) @binding(0) var basic_sampler: sampler;
+@group(1) @binding(1) var nearest_sampler: sampler;
 @group(2) @binding(0) var color_texture: texture_2d<f32>;
 @group(2) @binding(1) var alpha_texture: texture_2d<f32>;
 
@@ -54,41 +62,48 @@ fn vs_main(
 fn fs_main(
     in: VertexOutput
 ) -> @location(0) vec4f {
-    var color = in.color_tint
-        * textureSample(color_texture, basic_sampler, in.color_uv);
-
-    color.a = textureSample(alpha_texture, basic_sampler, in.alpha_uv).r;
-
+    var color: vec4f;
+    var alpha: f32;
+    
+    if (in.use_nearest_sampling != 0u) {
+        color = in.color_tint * textureSample(color_texture, nearest_sampler, in.color_uv);
+        alpha = textureSample(alpha_texture, nearest_sampler, in.alpha_uv).r;
+    } else {
+        color = in.color_tint * textureSample(color_texture, basic_sampler, in.color_uv);
+        alpha = textureSample(alpha_texture, basic_sampler, in.alpha_uv).r;
+    }
+    
+    color.a = alpha;
     return color;
 }
 
-/// 2----1  5
+/// Triangle layout for top-left origin (Y down):
+/// 1----2  4
 /// |   / / |
 /// |  / /  |
 /// | / /   |
-/// 0  3----4
+/// 0  3----5
 const CORNER_LOOKUP: array<vec2f, 6> = array<vec2f, 6>(
     vec2f(0.0, 0.0),
-    vec2f(1.0, 1.0),
     vec2f(0.0, 1.0),
-    vec2f(0.0, 0.0),
-    vec2f(1.0, 0.0),
     vec2f(1.0, 1.0),
+    vec2f(0.0, 0.0),
+    vec2f(1.0, 1.0),
+    vec2f(1.0, 0.0),
 );
 
-// We flip the Y coordinate but also need to remap the UV coordinates from
-// bottom-left to top-left. This lookup table keeps the UV coordinates the same,
-// but flips the image upside down.
+// UV coordinates for top-left origin with Y pointing down
 const UV_LOOKUP: array<vec2f, 6> = array<vec2f, 6>(
-    vec2f(0.0, 1.0),
-    vec2f(1.0, 0.0),
     vec2f(0.0, 0.0),
     vec2f(0.0, 1.0),
+    vec2f(1.0, 1.0),
+    vec2f(0.0, 0.0),
     vec2f(1.0, 1.0),
     vec2f(1.0, 0.0),
 );
 
 fn to_clip_coords(position: vec2f) -> vec4f {
-    let xy = position / vec2f(f32(draw_info.viewport_size.x), f32(draw_info.viewport_size.y)) * 2.0 - 1.0;
-    return vec4f(xy, 0.0, 1.0);
+    let x = position.x / f32(draw_info.viewport_size.x) * 2.0 - 1.0;
+    let y = -(position.y / f32(draw_info.viewport_size.y) * 2.0 - 1.0);
+    return vec4f(x, y, 0.0, 1.0);
 }

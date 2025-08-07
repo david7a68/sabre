@@ -1,4 +1,3 @@
-use std::borrow::Cow;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
@@ -7,12 +6,10 @@ use std::rc::Rc;
 
 use parley::AlignmentOptions;
 use parley::FontContext;
-use parley::FontStack;
 use parley::GlyphRun;
 use parley::Layout;
 use parley::LayoutContext;
 use parley::PositionedLayoutItem;
-use parley::StyleProperty;
 use swash::FontRef;
 use swash::GlyphId;
 use swash::scale::Render;
@@ -31,25 +28,10 @@ use crate::Texture;
 use crate::draw::CanvasStorage;
 use crate::texture::TextureManager;
 
-#[derive(Clone, Debug, PartialEq)]
-pub struct TextStyle {
-    font_stack: FontStack<'static>,
-    font_size: f32,
-    align: parley::Alignment,
-}
-
-impl Default for TextStyle {
-    fn default() -> Self {
-        Self {
-            font_stack: FontStack::Source(Cow::Borrowed("system-ui")),
-            font_size: 16.0,
-            align: parley::Alignment::Start,
-        }
-    }
-}
+pub use crate::text_style::*;
 
 #[derive(Clone)]
-pub struct TextSystem {
+pub(crate) struct TextSystem {
     inner: Rc<RefCell<TextSystemInner>>,
 }
 
@@ -74,6 +56,18 @@ impl TextSystem {
             .borrow_mut()
             .simple_layout(canvas, textures, text, style, max_width, origin, color);
     }
+
+    pub fn draw(
+        &self,
+        canvas: &mut CanvasStorage,
+        textures: &TextureManager,
+        layout: &Layout<Color>,
+        origin: [f32; 2],
+    ) {
+        self.inner
+            .borrow_mut()
+            .draw(canvas, textures, layout, origin);
+    }
 }
 
 struct TextSystemInner {
@@ -84,11 +78,14 @@ struct TextSystemInner {
     /// A cache of mappings from glyphs (and their aligned x-offsets) to textures.
     glyph_cache: HashMap<GlyphCacheKey, GlyphCacheEntry>,
 
+    /// Scratch space for rendering glyphs.
+    image_place: Image,
+
     quick_layout: Layout<Color>,
 }
 
 impl TextSystemInner {
-    pub fn new() -> Self {
+    fn new() -> Self {
         let fonts = FontContext::new();
         let layout_cx = LayoutContext::new();
         let scaler_cx = ScaleContext::new();
@@ -100,13 +97,14 @@ impl TextSystemInner {
             layout_cx,
             scaler_cx,
             glyph_cache: HashMap::new(),
+            image_place: Image::new(),
             quick_layout,
         }
     }
 
     #[allow(clippy::too_many_arguments)]
     #[instrument(skip(self, canvas, textures, style))]
-    pub fn simple_layout(
+    fn simple_layout(
         &mut self,
         canvas: &mut CanvasStorage,
         textures: &TextureManager,
@@ -120,15 +118,13 @@ impl TextSystemInner {
             .layout_cx
             .ranged_builder(&mut self.fonts, text, 1.0, false);
 
-        compute.push_default(StyleProperty::FontStack(style.font_stack.clone()));
-        compute.push_default(StyleProperty::FontSize(style.font_size));
-        compute.push_default(StyleProperty::Brush(color));
+        style.as_defaults(&mut compute);
 
         compute.build_into(&mut self.quick_layout, text);
 
         self.quick_layout.break_all_lines(max_width);
         self.quick_layout
-            .align(max_width, style.align, AlignmentOptions::default());
+            .align(max_width, style.align.into(), AlignmentOptions::default());
 
         let layout: &Layout<Color> = &self.quick_layout;
 
@@ -137,6 +133,33 @@ impl TextSystemInner {
                 match item {
                     PositionedLayoutItem::GlyphRun(glyphs) => draw_glyph_run(
                         &mut self.scaler_cx,
+                        &mut self.image_place,
+                        &mut self.glyph_cache,
+                        canvas,
+                        textures,
+                        &glyphs,
+                        origin,
+                    ),
+                    PositionedLayoutItem::InlineBox(_) => {}
+                }
+            }
+        }
+    }
+
+    #[instrument(skip_all)]
+    fn draw(
+        &mut self,
+        canvas: &mut CanvasStorage,
+        textures: &TextureManager,
+        layout: &Layout<Color>,
+        origin: [f32; 2],
+    ) {
+        for line in layout.lines() {
+            for item in line.items() {
+                match item {
+                    PositionedLayoutItem::GlyphRun(glyphs) => draw_glyph_run(
+                        &mut self.scaler_cx,
+                        &mut self.image_place,
                         &mut self.glyph_cache,
                         canvas,
                         textures,
@@ -150,6 +173,8 @@ impl TextSystemInner {
     }
 }
 
+const SUBPIXEL_VARIANTS: f32 = 3.0;
+
 #[derive(Clone, Copy, Debug)]
 struct SubpixelAlignment {
     step: u8,
@@ -158,16 +183,21 @@ struct SubpixelAlignment {
 
 impl SubpixelAlignment {
     fn new(value: f32) -> Self {
-        let scaled = value.fract() * 3.0;
-        let step = (scaled.round() % 3.0) as u8;
-        let offset = scaled / 3.0;
+        let fraction = value.fract();
 
-        Self { step, offset }
+        let scaled = fraction * SUBPIXEL_VARIANTS;
+        let step = scaled.round() as u8 % SUBPIXEL_VARIANTS as u8;
+
+        Self {
+            step,
+            offset: fraction,
+        }
     }
 }
 
 fn draw_glyph_run(
     scaler_cx: &mut ScaleContext,
+    temp_glyph: &mut Image,
     glyph_cache: &mut HashMap<GlyphCacheKey, GlyphCacheEntry>,
     canvas: &mut CanvasStorage,
     textures: &TextureManager,
@@ -186,7 +216,8 @@ fn draw_glyph_run(
     let font_size = run.font_size();
     let normalized_coords = run.normalized_coords();
 
-    // Convert from parley::Font to swash::FontRef
+    // Convert from parley::Font to swash::FontRef. Should always succeed since
+    // parley created and owns the `Font`.
     let font_ref = FontRef::from_index(font.data.as_ref(), font.index as usize).unwrap();
 
     let mut scaler = scaler_cx
@@ -195,8 +226,6 @@ fn draw_glyph_run(
         .hint(true)
         .normalized_coords(normalized_coords)
         .build();
-
-    let mut temp_glyph = Image::new();
 
     for glyph in glyph_run.glyphs() {
         let x = run_x + glyph.x;
@@ -212,7 +241,7 @@ fn draw_glyph_run(
             glyph: glyph.id,
             x_variant: x_placement.step,
             y_variant: y_placement.step,
-            size: font_size as u8,
+            size: font_size as u16,
         };
 
         let entry = match glyph_cache.entry(key) {
@@ -230,7 +259,7 @@ fn draw_glyph_run(
                 ])
                 .format(Format::Alpha)
                 .offset(offset)
-                .render_into(&mut scaler, glyph.id, &mut temp_glyph);
+                .render_into(&mut scaler, glyph.id, temp_glyph);
 
                 assert!(success);
 
@@ -254,20 +283,26 @@ fn draw_glyph_run(
                     texture,
                     width: temp_glyph.placement.width as u8,
                     height: temp_glyph.placement.height as u8,
+                    left: temp_glyph.placement.left,
+                    top: temp_glyph.placement.top,
                 })
             }
         };
 
+        let glyph_x = (x.floor() as i32 + entry.left) as f32;
+        let glyph_y = (y.floor() as i32 - entry.top) as f32;
+
         canvas.draw(
             textures,
             Primitive::new(
-                x.floor() + x_placement.offset,
-                y.floor() + y_placement.offset,
+                glyph_x,
+                glyph_y,
                 entry.width as f32,
                 entry.height as f32,
                 color,
             )
-            .with_mask(entry.texture.clone()),
+            .with_mask(entry.texture.clone())
+            .with_nearest_sampling(),
         );
     }
 }
@@ -278,11 +313,14 @@ struct GlyphCacheKey {
     glyph: GlyphId,
     x_variant: u8,
     y_variant: u8,
-    size: u8,
+    // We can't use `f32` here because it is not `Hash`.
+    size: u16,
 }
 
 struct GlyphCacheEntry {
     texture: Texture,
     width: u8,
     height: u8,
+    left: i32,
+    top: i32,
 }

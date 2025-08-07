@@ -2,9 +2,9 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::sync::mpsc;
 
-use crate::TextStyle;
 use crate::color::Color;
 use crate::pipeline::GpuPrimitive;
+use crate::text::TextStyle;
 use crate::text::TextSystem;
 use crate::texture::StorageId;
 
@@ -22,6 +22,7 @@ pub struct Primitive {
 
     pub color_texture: Option<Texture>,
     pub alpha_texture: Option<Texture>,
+    pub use_nearest_sampling: bool,
 }
 
 impl Primitive {
@@ -33,6 +34,7 @@ impl Primitive {
             color,
             color_texture: None,
             alpha_texture: None,
+            use_nearest_sampling: false,
         }
     }
 
@@ -44,6 +46,12 @@ impl Primitive {
 
     pub fn with_mask(mut self, texture: Texture) -> Self {
         self.alpha_texture = Some(texture);
+        self
+    }
+
+    #[must_use]
+    pub fn with_nearest_sampling(mut self) -> Self {
+        self.use_nearest_sampling = true;
         self
     }
 }
@@ -182,6 +190,11 @@ impl Canvas {
         );
     }
 
+    pub fn draw_text_layout(&mut self, layout: &parley::Layout<Color>, origin: [f32; 2]) {
+        self.text_system
+            .draw(&mut self.storage, &self.texture_manager, layout, origin);
+    }
+
     pub fn draw(&mut self, primitive: Primitive) {
         self.storage.draw(&self.texture_manager, primitive);
     }
@@ -218,6 +231,7 @@ impl CanvasStorage {
             color: color_tint,
             color_texture,
             alpha_texture,
+            use_nearest_sampling,
         } = primitive;
 
         let color_texture = color_texture
@@ -237,10 +251,14 @@ impl CanvasStorage {
 
         self.primitives.push(GpuPrimitive {
             point,
-            size,
+            extent: size,
             color_uvwh,
             color_tint,
             alpha_uvwh,
+            use_nearest_sampling: if use_nearest_sampling { 1 } else { 0 },
+            _padding0: 0,
+            _padding1: 0,
+            _padding2: 0,
         });
 
         let DrawCommand::Draw {

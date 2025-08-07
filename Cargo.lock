@@ -2120,8 +2120,8 @@ name = "ui_base"
 version = "0.1.0"
 dependencies = [
  "graphics",
+ "parley",
  "smallvec",
- "tracing",
  "workspace-hack",
 ]
 

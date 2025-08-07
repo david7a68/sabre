@@ -20,6 +20,7 @@ use tracing::field::Empty;
 use tracing::info;
 use tracing::info_span;
 use tracing::instrument;
+use tracing::trace;
 use tracing::warn;
 
 new_key_type! {
@@ -280,7 +281,7 @@ impl TextureManagerInner {
             usage.refcount -= 1;
 
             if usage.refcount == 0 {
-                debug!(
+                trace!(
                     ?id,
                     "All texture references released, freeing texture storage"
                 );
