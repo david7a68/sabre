@@ -12,14 +12,34 @@ env:
   SCCACHE_GHA_ENABLED: "true"
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
+  check:
+    runs-on: windows-2025
 
     steps:
     # Setup
     - uses: actions/checkout@v4
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.9
+   
+   # Cache Cargo registry
+    - name: Cache cargo registry
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+        key: cargo-registry-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: |
+          cargo-registry-${{ runner.os }}-
+
+    # Cache Cargo index (for the package index itself)
+    - name: Cache cargo index
+      uses: actions/cache@v4
+      with:
+        path: ~/.cargo/.package-cache
+        key: cargo-index-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: |
+          cargo-index-${{ runner.os }}-
 
     # Checks
     - name: Build
