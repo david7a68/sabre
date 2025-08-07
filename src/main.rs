@@ -286,7 +286,26 @@ impl ApplicationHandler for App {
                                                 bottom: 15.0,
                                             })
                                             .add_text(
-                                                "Very Long Menu Item 2",
+                                                "modern morning merman",
+                                                &self.text_style,
+                                                None,
+                                                Color::LIGHT_GRAY,
+                                            )
+                                            .add_rect(None, Grow, None)
+                                            .add_rect(Color::RED, 45.0, 45.0);
+                                    })
+                                    .with_container(|ui| {
+                                        ui.with_child_minor_alignment(Alignment::Center)
+                                            .with_width(Grow)
+                                            .with_color(Color::WHITE)
+                                            .with_padding(Padding {
+                                                left: 15.0,
+                                                right: 15.0,
+                                                top: 15.0,
+                                                bottom: 15.0,
+                                            })
+                                            .add_text(
+                                                "VA To ff ti it tt ft",
                                                 &self.text_style,
                                                 None,
                                                 Color::LIGHT_GRAY,

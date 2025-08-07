@@ -96,7 +96,7 @@ impl Default for TextStyle {
             font_size: 32.0,
             font_style: FontStyle::Normal,
             font_weight: FontWeight::NORMAL,
-            font: Arc::new(FontStack::Source(Cow::Borrowed("system-ui"))),
+            font: Arc::new(FontStack::Source(Cow::Borrowed("Times New Roman"))),
             strikethrough_color: None,
             strikethrough_offset: None,
             underline_color: None,
@@ -455,11 +455,14 @@ fn draw_glyph_run(
             }
         };
 
+        let glyph_x = (x.floor() as i32 + entry.left) as f32;
+        let glyph_y = (y.floor() as i32 - entry.top) as f32;
+
         canvas.draw(
             textures,
             Primitive::new(
-                x.floor() + x_placement.offset + entry.left as f32,
-                y.floor() + y_placement.offset - entry.top as f32,
+                glyph_x,
+                glyph_y,
                 entry.width as f32,
                 entry.height as f32,
                 color,
