@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::sync::Arc;
 
 use tracing::instrument;
@@ -6,13 +5,9 @@ use tracing::trace;
 use winit::window::Window;
 use winit::window::WindowId;
 
-use crate::Canvas;
-use crate::draw::DrawCommand;
 use crate::pipeline::DrawBuffer;
-use crate::pipeline::DrawUniforms;
 use crate::pipeline::RenderPipeline;
 use crate::pipeline::RenderPipelineCache;
-use crate::texture::StorageId;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RenderError {
@@ -21,7 +16,7 @@ pub enum RenderError {
     Unknown,
 }
 
-pub struct Surface {
+pub(crate) struct Surface {
     window: Arc<Window>,
     config: wgpu::SurfaceConfiguration,
     handle: wgpu::Surface<'static>,
@@ -33,7 +28,7 @@ pub struct Surface {
 
 impl Surface {
     #[instrument(skip_all)]
-    pub(crate) fn new(
+    pub fn new(
         window: Arc<Window>,
         surface: wgpu::Surface<'static>,
         device: &wgpu::Device,
@@ -116,24 +111,18 @@ impl Surface {
         }
     }
 
-    pub(crate) fn pre_present_notify(&self) {
+    pub fn pre_present_notify(&self) {
         self.window.pre_present_notify();
     }
 
-    #[instrument(
-        skip_all,
-        fields(
-            frame_id = self.frame_counter,
-            num_primitives = canvas.primitives().len(),
-            num_commands = canvas.commands().len()
-        )
-    )]
-    pub(crate) fn write_commands(
+    pub fn frame_counter(&self) -> u64 {
+        self.frame_counter
+    }
+
+    pub fn next_frame(
         &mut self,
-        queue: &wgpu::Queue,
         device: &wgpu::Device,
-        canvas: &Canvas,
-    ) -> Result<(wgpu::SurfaceTexture, wgpu::CommandBuffer), RenderError> {
+    ) -> Result<(wgpu::SurfaceTexture, &mut Frame, &RenderPipeline), RenderError> {
         let output = tracing::info_span!("get_current_texture").in_scope(|| {
             let mut attempts = 0;
 
@@ -162,94 +151,14 @@ impl Surface {
         })?;
 
         let frame = &mut self.frames_in_flight[self.frame_counter as usize % 2];
-
-        let view = output
-            .texture
-            .create_view(&wgpu::TextureViewDescriptor::default());
-
-        let mut encoder =
-            device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
-
-        let load_op = if let Some(clear_color) = canvas.clear_color() {
-            wgpu::LoadOp::Clear(wgpu::Color {
-                r: clear_color.r.into(),
-                g: clear_color.g.into(),
-                b: clear_color.b.into(),
-                a: clear_color.a.into(),
-            })
-        } else {
-            wgpu::LoadOp::Load
-        };
-
-        tracing::info_span!("render_pass").in_scope(|| {
-            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("Render Pass"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &view,
-                    depth_slice: None,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: load_op,
-                        store: wgpu::StoreOp::Store,
-                    },
-                })],
-                depth_stencil_attachment: None,
-                occlusion_query_set: None,
-                timestamp_writes: None,
-            });
-
-            render_pass.set_pipeline(&self.render_pipeline.pipeline);
-
-            frame.draw_buffer.upload_and_bind(
-                device,
-                queue,
-                &mut render_pass,
-                DrawUniforms {
-                    viewport_size: [self.config.width, self.config.height],
-                },
-                canvas.primitives(),
-            );
-
-            let mut vertex_offset = 0;
-            let mut bind_groups = HashMap::<(StorageId, StorageId), wgpu::BindGroup>::new();
-
-            for command in canvas.commands() {
-                match command {
-                    DrawCommand::Draw {
-                        color_storage_id,
-                        alpha_storage_id,
-                        num_vertices,
-                    } => {
-                        let color_texture_view = canvas.texture_view(*color_storage_id).unwrap();
-                        let alpha_texture_view = canvas.texture_view(*alpha_storage_id).unwrap();
-
-                        let bind_group = bind_groups
-                            .entry((*color_storage_id, *alpha_storage_id))
-                            .or_insert_with(|| {
-                                self.render_pipeline.create_texure_bind_group(
-                                    color_texture_view,
-                                    alpha_texture_view,
-                                )
-                            });
-
-                        self.render_pipeline
-                            .bind_texture(&mut render_pass, bind_group);
-
-                        render_pass.draw(vertex_offset..vertex_offset + *num_vertices, 0..1);
-                        vertex_offset += *num_vertices;
-                    }
-                }
-            }
-        });
-
         self.frame_counter += 1;
 
-        Ok((output, encoder.finish()))
+        Ok((output, frame, &self.render_pipeline))
     }
 }
 
-struct Frame {
-    draw_buffer: DrawBuffer,
+pub struct Frame {
+    pub draw_buffer: DrawBuffer,
 }
 
 impl Frame {

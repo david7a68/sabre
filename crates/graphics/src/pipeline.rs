@@ -133,6 +133,7 @@ impl DrawBuffer {
         let required_size = std::mem::size_of_val(primitives) as u64;
         if self.primitive_buffer.size() < required_size {
             self.primitive_buffer.destroy();
+
             self.primitive_buffer = device.create_buffer(&wgpu::BufferDescriptor {
                 label: Some("Draw Info Uniforms"),
                 size: required_size,

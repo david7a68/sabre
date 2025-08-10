@@ -1,15 +1,13 @@
 use std::collections::HashMap;
 use std::path::Path;
-use std::sync::mpsc;
 
+use crate::TextureLoadError;
 use crate::color::Color;
+use crate::glyph_cache::GlyphCache;
 use crate::pipeline::GpuPrimitive;
-use crate::text::TextStyle;
-use crate::text::TextSystem;
 use crate::texture::StorageId;
 
 use super::texture::Texture;
-use super::texture::TextureLoadError;
 use super::texture::TextureManager;
 
 const VERTICES_PER_PRIMITIVE: u32 = 6;
@@ -56,38 +54,70 @@ impl Primitive {
     }
 }
 
-#[derive(Debug)]
-pub struct TextPrimitive<'a> {
-    pub text: &'a str,
-    pub style: &'a TextStyle,
-    pub max_width: Option<f32>,
-
-    pub point: [f32; 2],
-    pub color: Color,
-
-    pub color_texture: Option<Texture>,
+pub struct Canvas {
+    storage: CanvasStorage,
+    pub(super) texture_manager: TextureManager,
+    glyph_cache: GlyphCache,
 }
 
-impl<'a> TextPrimitive<'a> {
-    pub fn new(text: &'a str, style: &'a TextStyle, x: f32, y: f32, color: Color) -> Self {
+impl Canvas {
+    pub(super) fn new(
+        storage: CanvasStorage,
+        glyph_cache: GlyphCache,
+        texture_manager: TextureManager,
+    ) -> Self {
         Self {
-            text,
-            style,
-            max_width: None,
-            point: [x, y],
-            color,
-            color_texture: None,
+            storage,
+            glyph_cache,
+            texture_manager,
         }
     }
 
-    pub fn with_max_width(mut self, max_width: f32) -> Self {
-        self.max_width = Some(max_width);
-        self
+    pub(crate) fn storage(&self) -> &CanvasStorage {
+        &self.storage
     }
 
-    pub fn with_texture(mut self, texture: Texture) -> Self {
-        self.color_texture = Some(texture);
-        self
+    #[must_use]
+    pub fn has_unready_textures(&self) -> bool {
+        self.storage.has_unready_textures
+    }
+
+    pub fn reset(&mut self, clear_color: impl Into<Option<Color>>) {
+        self.storage.clear_color = clear_color.into();
+        self.storage.commands.clear();
+        self.storage.primitives.clear();
+        self.storage.textures.clear();
+        self.storage.has_unready_textures = false;
+
+        let white_pixel = self.texture_manager.white_pixel();
+        let opaque_pixel = self.texture_manager.opaque_pixel();
+
+        self.storage.commands.push(DrawCommand::Draw {
+            color_storage_id: white_pixel.storage_id(),
+            alpha_storage_id: opaque_pixel.storage_id(),
+            num_vertices: 0,
+        });
+
+        self.storage
+            .textures
+            .insert(white_pixel.storage_id(), white_pixel.texture_view().clone());
+        self.storage.textures.insert(
+            opaque_pixel.storage_id(),
+            opaque_pixel.texture_view().clone(),
+        );
+    }
+
+    pub fn load_texture(&mut self, path: impl AsRef<Path>) -> Result<Texture, TextureLoadError> {
+        self.texture_manager.load(path)
+    }
+
+    pub fn draw_text_layout(&mut self, layout: &parley::Layout<Color>, origin: [f32; 2]) {
+        self.glyph_cache
+            .draw(&mut self.storage, &self.texture_manager, layout, origin);
+    }
+
+    pub fn draw(&mut self, primitive: Primitive) {
+        self.storage.push(&self.texture_manager, primitive);
     }
 }
 
@@ -98,118 +128,6 @@ pub(crate) enum DrawCommand {
         alpha_storage_id: StorageId,
         num_vertices: u32,
     },
-}
-
-pub struct Canvas {
-    storage: CanvasStorage,
-    pub(super) texture_manager: TextureManager,
-    return_sender: mpsc::Sender<CanvasStorage>,
-    text_system: TextSystem,
-}
-
-impl Canvas {
-    pub(super) fn new(
-        mut storage: CanvasStorage,
-        text_system: TextSystem,
-        texture_manager: TextureManager,
-        return_sender: mpsc::Sender<CanvasStorage>,
-    ) -> Self {
-        storage.clear_color = None;
-        storage.commands.clear();
-        storage.primitives.clear();
-        storage.textures.clear();
-        storage.has_unready_textures = false;
-
-        let white_pixel = texture_manager.white_pixel();
-        let opaque_pixel = texture_manager.opaque_pixel();
-
-        storage.commands.push(DrawCommand::Draw {
-            color_storage_id: white_pixel.storage_id(),
-            alpha_storage_id: opaque_pixel.storage_id(),
-            num_vertices: 0,
-        });
-
-        storage
-            .textures
-            .insert(white_pixel.storage_id(), white_pixel.texture_view().clone());
-        storage.textures.insert(
-            opaque_pixel.storage_id(),
-            opaque_pixel.texture_view().clone(),
-        );
-
-        Self {
-            storage,
-            text_system,
-            texture_manager,
-            return_sender,
-        }
-    }
-
-    #[must_use]
-    pub fn has_unready_textures(&self) -> bool {
-        self.storage.has_unready_textures
-    }
-
-    #[must_use]
-    pub(crate) fn primitives(&self) -> &[GpuPrimitive] {
-        &self.storage.primitives
-    }
-
-    #[must_use]
-    pub(crate) fn commands(&self) -> &[DrawCommand] {
-        &self.storage.commands
-    }
-
-    #[must_use]
-    pub fn texture_view(&self, id: StorageId) -> Option<&wgpu::TextureView> {
-        self.storage.textures.get(&id)
-    }
-
-    #[must_use]
-    pub fn clear_color(&self) -> Option<Color> {
-        self.storage.clear_color
-    }
-
-    pub fn clear(&mut self, clear_color: impl Into<Option<Color>>) {
-        self.storage.clear_color = clear_color.into();
-    }
-
-    pub fn load_texture(&mut self, path: impl AsRef<Path>) -> Result<Texture, TextureLoadError> {
-        self.texture_manager.load(path)
-    }
-
-    pub fn draw_text(&mut self, text: TextPrimitive) {
-        self.text_system.simple_layout(
-            &mut self.storage,
-            &self.texture_manager,
-            text.text,
-            text.style,
-            text.max_width,
-            text.point,
-            text.color,
-        );
-    }
-
-    pub fn draw_text_layout(&mut self, layout: &parley::Layout<Color>, origin: [f32; 2]) {
-        self.text_system
-            .draw(&mut self.storage, &self.texture_manager, layout, origin);
-    }
-
-    pub fn draw(&mut self, primitive: Primitive) {
-        self.storage.draw(&self.texture_manager, primitive);
-    }
-}
-
-impl Drop for Canvas {
-    fn drop(&mut self) {
-        if self
-            .return_sender
-            .send(std::mem::take(&mut self.storage))
-            .is_err()
-        {
-            tracing::warn!("Failed to send canvas storage back to the pool");
-        }
-    }
 }
 
 #[derive(Default)]
@@ -224,7 +142,23 @@ pub(crate) struct CanvasStorage {
 }
 
 impl CanvasStorage {
-    pub(crate) fn draw(&mut self, texture_manager: &TextureManager, primitive: Primitive) {
+    pub(crate) fn clear_color(&self) -> Option<Color> {
+        self.clear_color
+    }
+
+    pub(crate) fn commands(&self) -> &[DrawCommand] {
+        &self.commands
+    }
+
+    pub(crate) fn primitives(&self) -> &[GpuPrimitive] {
+        &self.primitives
+    }
+
+    pub(crate) fn texture_view(&self, id: StorageId) -> Option<&wgpu::TextureView> {
+        self.textures.get(&id)
+    }
+
+    pub(crate) fn push(&mut self, texture_manager: &TextureManager, primitive: Primitive) {
         let Primitive {
             point,
             size,

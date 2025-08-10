@@ -1,6 +1,6 @@
+use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
-use std::sync::mpsc;
 
 use futures::executor::block_on;
 use smallvec::SmallVec;
@@ -15,10 +15,13 @@ use crate::Canvas;
 use crate::Texture;
 use crate::TextureLoadError;
 use crate::draw::CanvasStorage;
+use crate::draw::DrawCommand;
+use crate::glyph_cache::GlyphCache;
+use crate::pipeline::DrawUniforms;
 use crate::pipeline::RenderPipelineCache;
 use crate::surface::RenderError;
 use crate::surface::Surface;
-use crate::text::TextSystem;
+use crate::texture::StorageId;
 use crate::texture::TextureManager;
 
 pub struct GraphicsContext {
@@ -29,16 +32,9 @@ pub struct GraphicsContext {
 
     windows: Vec<Surface>,
     textures: TextureManager,
-    text_system: TextSystem,
+    glyph_cache: GlyphCache,
 
     render_pipelines: Arc<RenderPipelineCache>,
-
-    /// Send canvas storage back to the pool.
-    canvas_reclaim_sender: mpsc::Sender<CanvasStorage>,
-
-    /// Receive canvas storage after they have been used. Also used to buffer
-    /// them so as not to waste memory on another array.
-    canvas_reclaim_receiver: mpsc::Receiver<CanvasStorage>,
 }
 
 impl GraphicsContext {
@@ -106,10 +102,7 @@ impl GraphicsContext {
         )];
 
         let textures = TextureManager::new(queue.clone(), device.clone());
-
-        let (canvas_reclaim_sender, canvas_reclaim_receiver) = mpsc::channel();
-
-        let text_system = TextSystem::new();
+        let glyph_cache = GlyphCache::new();
 
         Self {
             instance,
@@ -119,10 +112,8 @@ impl GraphicsContext {
 
             windows,
             textures,
-            text_system,
+            glyph_cache,
 
-            canvas_reclaim_sender,
-            canvas_reclaim_receiver,
             render_pipelines,
         }
     }
@@ -154,25 +145,18 @@ impl GraphicsContext {
     }
 
     #[instrument(skip(self))]
-    pub fn get_canvas(&mut self) -> Canvas {
-        let storage = self
-            .canvas_reclaim_receiver
-            .try_recv()
-            .ok()
-            .unwrap_or_default();
-
+    pub fn create_canvas(&mut self) -> Canvas {
         Canvas::new(
-            storage,
-            self.text_system.clone(),
+            CanvasStorage::default(),
+            self.glyph_cache.clone(),
             self.textures.clone(),
-            self.canvas_reclaim_sender.clone(),
         )
     }
 
     #[instrument(skip(self, targets))]
     pub fn render(
         &mut self,
-        targets: SmallVec<[(WindowId, Canvas); 2]>,
+        targets: SmallVec<[(WindowId, &Canvas); 2]>,
     ) -> Result<(), RenderError> {
         let mut command_buffers = SmallVec::<[_; 2]>::new();
         let mut presents = SmallVec::<[_; 2]>::new();
@@ -180,6 +164,8 @@ impl GraphicsContext {
         self.textures.flush();
 
         for (window_id, canvas) in targets {
+            let canvas = canvas.storage();
+
             let Some(window) = self.windows.iter_mut().find(|w| w.window_id() == window_id) else {
                 warn!("Window not found, skipping render.");
                 continue;
@@ -188,7 +174,8 @@ impl GraphicsContext {
             window.resize_if_necessary(&self.device);
 
             let (target, command_buffer) =
-                window.write_commands(&self.queue, &self.device, &canvas)?;
+                write_commands(&self.device, &self.queue, window, canvas)?;
+
             command_buffers.push(command_buffer);
             presents.push((window_id, target));
         }
@@ -227,4 +214,99 @@ impl Drop for GraphicsContext {
 
         self.textures.end_frame();
     }
+}
+
+#[instrument(
+        skip_all,
+        fields(
+            frame_id = surface.frame_counter(),
+            num_primitives = canvas.primitives().len(),
+            num_commands = canvas.commands().len()
+        )
+    )]
+fn write_commands(
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    surface: &mut Surface,
+    canvas: &CanvasStorage,
+) -> Result<(wgpu::SurfaceTexture, wgpu::CommandBuffer), RenderError> {
+    let (target, frame, render_pipeline) = surface.next_frame(device)?;
+
+    let mut encoder =
+        device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+
+    let load_op = if let Some(clear_color) = canvas.clear_color() {
+        wgpu::LoadOp::Clear(wgpu::Color {
+            r: clear_color.r.into(),
+            g: clear_color.g.into(),
+            b: clear_color.b.into(),
+            a: clear_color.a.into(),
+        })
+    } else {
+        wgpu::LoadOp::Load
+    };
+
+    let view = target
+        .texture
+        .create_view(&wgpu::TextureViewDescriptor::default());
+
+    tracing::info_span!("render_pass").in_scope(|| {
+        let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("Render Pass"),
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                view: &view,
+                depth_slice: None,
+                resolve_target: None,
+                ops: wgpu::Operations {
+                    load: load_op,
+                    store: wgpu::StoreOp::Store,
+                },
+            })],
+            depth_stencil_attachment: None,
+            occlusion_query_set: None,
+            timestamp_writes: None,
+        });
+
+        render_pass.set_pipeline(&render_pipeline.pipeline);
+
+        frame.draw_buffer.upload_and_bind(
+            device,
+            queue,
+            &mut render_pass,
+            DrawUniforms {
+                viewport_size: [target.texture.width(), target.texture.height()],
+            },
+            canvas.primitives(),
+        );
+
+        let mut vertex_offset = 0;
+        let mut bind_groups = HashMap::<(StorageId, StorageId), wgpu::BindGroup>::new();
+
+        for command in canvas.commands() {
+            match command {
+                DrawCommand::Draw {
+                    color_storage_id,
+                    alpha_storage_id,
+                    num_vertices,
+                } => {
+                    let color_texture_view = canvas.texture_view(*color_storage_id).unwrap();
+                    let alpha_texture_view = canvas.texture_view(*alpha_storage_id).unwrap();
+
+                    let bind_group = bind_groups
+                        .entry((*color_storage_id, *alpha_storage_id))
+                        .or_insert_with(|| {
+                            render_pipeline
+                                .create_texure_bind_group(color_texture_view, alpha_texture_view)
+                        });
+
+                    render_pipeline.bind_texture(&mut render_pass, bind_group);
+
+                    render_pass.draw(vertex_offset..vertex_offset + *num_vertices, 0..1);
+                    vertex_offset += *num_vertices;
+                }
+            }
+        }
+    });
+
+    Ok((target, encoder.finish()))
 }

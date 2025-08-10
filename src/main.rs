@@ -1,6 +1,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
+use graphics::Canvas;
 use sabre::graphics::Color;
 use sabre::graphics::GraphicsContext;
 use sabre::ui::UiContext;
@@ -11,11 +12,13 @@ use tracing::info;
 use tracing::instrument;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
-use ui_base::TextStyle;
+use ui_base::DrawCommand;
 use ui_base::layout::Alignment;
 use ui_base::layout::LayoutDirection;
 use ui_base::layout::Padding;
 use ui_base::layout::Size::Grow;
+use ui_base::text::TextLayoutContext;
+use ui_base::text::TextStyle;
 use winit::application::ApplicationHandler;
 use winit::event::ElementState;
 use winit::event::MouseButton;
@@ -74,6 +77,8 @@ fn main() {
 struct AppWindow {
     window: Arc<Window>,
 
+    canvas: Canvas,
+
     input: InputState,
     ui_context: UiContext,
 }
@@ -82,6 +87,7 @@ struct App {
     graphics: Option<GraphicsContext>,
     windows: Vec<AppWindow>,
 
+    text_layout_context: TextLayoutContext,
     text_style: TextStyle,
 }
 
@@ -90,6 +96,7 @@ impl App {
         Self {
             graphics: None,
             windows: vec![],
+            text_layout_context: TextLayoutContext::new(),
             text_style: TextStyle::default(),
         }
     }
@@ -120,16 +127,17 @@ impl ApplicationHandler for App {
 
         // Render to the window before showing it to avoid flashing when
         // creating the window for the first time.
-        let mut canvas = graphics_context.get_canvas();
-        canvas.clear(Color::BLACK);
+        let mut canvas = graphics_context.create_canvas();
+        canvas.reset(Color::BLACK);
         graphics_context
-            .render(smallvec![(window.id(), canvas)])
+            .render(smallvec![(window.id(), &canvas)])
             .unwrap();
 
         window.set_visible(true);
 
         self.windows.push(AppWindow {
             window,
+            canvas,
             input: InputState::default(),
             ui_context: UiContext::new(),
         });
@@ -242,87 +250,92 @@ impl ApplicationHandler for App {
                     .find(|rc| rc.window.id() == window_id)
                     .unwrap();
 
-                let graphics = self.graphics.as_mut().unwrap();
-                let mut canvas = graphics.get_canvas();
+                let mut ui = window.ui_context.begin_frame(
+                    &mut self.text_layout_context,
+                    window.input.clone(),
+                    Duration::ZERO,
+                );
 
-                canvas.clear(Color::srgb(0.1, 0.2, 0.3, 1.0));
-
-                window
-                    .ui_context
-                    .next_frame(window.input.clone(), Duration::ZERO, |ui| {
-                        ui.with_color(Color::srgb(0.1, 0.2, 0.3, 1.0))
-                            .with_child_major_alignment(Alignment::Center)
-                            .with_child_minor_alignment(Alignment::Center)
+                ui.color(Color::srgb(0.1, 0.2, 0.3, 1.0))
+                    .child_alignment(Alignment::Center, Alignment::Center)
+                    .with_container(|ui| {
+                        ui.width(200.0)
+                            .child_direction(LayoutDirection::Vertical)
                             .with_container(|ui| {
-                                ui.with_width(200.0)
-                                    .with_child_direction(LayoutDirection::Vertical)
-                                    .with_container(|ui| {
-                                        ui.with_child_minor_alignment(Alignment::Center)
-                                            .with_width(Grow)
-                                            .with_color(Color::WHITE)
-                                            .with_padding(Padding {
-                                                left: 15.0,
-                                                right: 15.0,
-                                                top: 15.0,
-                                                bottom: 15.0,
-                                            })
-                                            .add_text(
-                                                "Menu Item 1",
-                                                &self.text_style,
-                                                None,
-                                                Color::LIGHT_GRAY,
-                                            )
-                                            .add_rect(None, Grow, None)
-                                            .add_rect(45.0, 45.0, Color::RED);
+                                ui.child_minor_alignment(Alignment::Center)
+                                    .width(Grow)
+                                    .color(Color::WHITE)
+                                    .padding(Padding {
+                                        left: 15.0,
+                                        right: 15.0,
+                                        top: 15.0,
+                                        bottom: 15.0,
                                     })
-                                    .with_container(|ui| {
-                                        ui.with_child_minor_alignment(Alignment::Center)
-                                            .with_width(Grow)
-                                            .with_color(Color::WHITE)
-                                            .with_padding(Padding {
-                                                left: 15.0,
-                                                right: 15.0,
-                                                top: 15.0,
-                                                bottom: 15.0,
-                                            })
-                                            .add_text(
-                                                "modern morning merman",
-                                                &self.text_style,
-                                                None,
-                                                Color::LIGHT_GRAY,
-                                            )
-                                            .add_rect(None, Grow, None)
-                                            .add_rect(45.0, 45.0, Color::RED);
+                                    .label("Menu Item 1", &self.text_style, None, Color::LIGHT_GRAY)
+                                    .rect(None, Grow, None)
+                                    .rect(45.0, 45.0, Color::RED);
+                            })
+                            .with_container(|ui| {
+                                ui.child_minor_alignment(Alignment::Center)
+                                    .width(Grow)
+                                    .color(Color::WHITE)
+                                    .padding(Padding {
+                                        left: 15.0,
+                                        right: 15.0,
+                                        top: 15.0,
+                                        bottom: 15.0,
                                     })
-                                    .with_container(|ui| {
-                                        ui.with_child_minor_alignment(Alignment::Center)
-                                            .with_width(Grow)
-                                            .with_color(Color::WHITE)
-                                            .with_padding(Padding {
-                                                left: 15.0,
-                                                right: 15.0,
-                                                top: 15.0,
-                                                bottom: 15.0,
-                                            })
-                                            .add_text(
-                                                "VA To ff ti it tt ft",
-                                                &self.text_style,
-                                                None,
-                                                Color::LIGHT_GRAY,
-                                            )
-                                            .add_rect(None, Grow, None)
-                                            .add_rect(45.0, 45.0, Color::RED);
-                                    });
+                                    .label(
+                                        "modern morning merman",
+                                        &self.text_style,
+                                        None,
+                                        Color::LIGHT_GRAY,
+                                    )
+                                    .rect(None, Grow, None)
+                                    .rect(45.0, 45.0, Color::RED);
+                            })
+                            .with_container(|ui| {
+                                ui.child_minor_alignment(Alignment::Center)
+                                    .width(Grow)
+                                    .color(Color::WHITE)
+                                    .padding(Padding {
+                                        left: 15.0,
+                                        right: 15.0,
+                                        top: 15.0,
+                                        bottom: 15.0,
+                                    })
+                                    .label(
+                                        "VA To ff ti it tt ft",
+                                        &self.text_style,
+                                        None,
+                                        Color::LIGHT_GRAY,
+                                    )
+                                    .rect(None, Grow, None)
+                                    .rect(45.0, 45.0, Color::RED);
                             });
-                    })
-                    .finish(&mut canvas);
+                    });
+
+                let graphics = self.graphics.as_mut().unwrap();
+                let canvas = &mut window.canvas;
+                canvas.reset(Color::srgb(0.1, 0.2, 0.3, 1.0));
+
+                for draw_command in window.ui_context.finish() {
+                    match draw_command {
+                        DrawCommand::Primitive(primitive) => {
+                            canvas.draw(primitive);
+                        }
+                        DrawCommand::TextLayout(layout, coords) => {
+                            canvas.draw_text_layout(layout, coords);
+                        }
+                    }
+                }
 
                 if canvas.has_unready_textures() {
                     window.window.request_redraw();
                 }
 
                 graphics
-                    .render(smallvec![(window.window.id(), canvas)])
+                    .render(smallvec![(window.window.id(), &*canvas)])
                     .unwrap();
             }
             _ => (),

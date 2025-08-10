@@ -1,9 +1,22 @@
 use std::borrow::Cow;
 use std::sync::Arc;
 
+use graphics::Color;
+use parley::FontContext;
+use parley::LayoutContext;
 use smallvec::SmallVec;
 
-use crate::Color;
+#[derive(Default)]
+pub struct TextLayoutContext {
+    pub(crate) fonts: FontContext,
+    pub(crate) layouts: LayoutContext<Color>,
+}
+
+impl TextLayoutContext {
+    pub fn new() -> Self {
+        Self::default()
+    }
+}
 
 #[derive(Clone, Debug)]
 pub struct TextStyle {
