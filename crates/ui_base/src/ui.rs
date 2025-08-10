@@ -4,12 +4,8 @@ use std::time::Duration;
 use arrayvec::ArrayVec;
 use graphics::Color;
 use graphics::Primitive;
-use graphics::text::TextAlignment;
-use parley::FontContext;
-use parley::LayoutContext;
 use smallvec::SmallVec;
 
-use crate::TextStyle;
 use crate::input::InputState;
 use crate::layout::Alignment;
 use crate::layout::Flex;
@@ -21,6 +17,9 @@ use crate::layout::MeasureText;
 use crate::layout::Padding;
 use crate::layout::Size;
 use crate::layout::compute_layout;
+use crate::text::TextAlignment;
+use crate::text::TextLayoutContext;
+use crate::text::TextStyle;
 
 #[derive(Default)]
 pub struct UiContext {
@@ -32,8 +31,6 @@ pub struct UiContext {
     children: Vec<NodeIndexArray>,
 
     text_layouts: TextLayoutPool,
-    font_context: FontContext,
-    layout_context: LayoutContext<Color>,
 }
 
 impl UiContext {
@@ -41,43 +38,12 @@ impl UiContext {
         Self::default()
     }
 
-    pub fn next_frame(
-        &mut self,
+    pub fn begin_frame<'a>(
+        &'a mut self,
+        text_context: &'a mut TextLayoutContext,
         input: InputState,
         time_delta: Duration,
-        callback: impl FnOnce(&mut UiBuilder),
-    ) -> &mut Self {
-        self.ui_nodes.clear();
-        self.children.clear();
-        self.text_layouts.clear();
-
-        // Set up the root node.
-        self.ui_nodes.push(UiNode {
-            color: Color::WHITE,
-            layout_text: None,
-            layout_spec: LayoutNodeSpec {
-                width: input.window_size.width.into(),
-                height: input.window_size.height.into(),
-                ..Default::default()
-            },
-            layout_result: LayoutNodeResult::default(),
-        });
-        self.children.push(NodeIndexArray::new());
-
-        self.input = input;
-        self.time_delta = time_delta;
-
-        let mut recorder = UiBuilder {
-            index: 0,
-            context: self,
-        };
-
-        callback(&mut recorder);
-
-        self
-    }
-
-    pub fn begin_frame(&mut self, input: InputState, time_delta: Duration) -> UiBuilder {
+    ) -> UiBuilder<'a> {
         self.ui_nodes.clear();
         self.children.clear();
         self.text_layouts.clear();
@@ -101,6 +67,7 @@ impl UiContext {
         UiBuilder {
             index: 0,
             context: self,
+            text_context,
         }
     }
 
@@ -148,6 +115,7 @@ impl UiContext {
 pub struct UiBuilder<'a> {
     index: usize,
     context: &'a mut UiContext,
+    text_context: &'a mut TextLayoutContext,
 }
 
 impl UiBuilder<'_> {
@@ -224,7 +192,7 @@ impl UiBuilder<'_> {
         self
     }
 
-    pub fn text(
+    pub fn label(
         &mut self,
         text: &str,
         style: &TextStyle,
@@ -234,12 +202,10 @@ impl UiBuilder<'_> {
         let (id, layout, alignment) = self.context.text_layouts.allocate();
 
         *alignment = style.align;
-        let mut compute = self.context.layout_context.ranged_builder(
-            &mut self.context.font_context,
-            text,
-            1.0,
-            true,
-        );
+        let mut compute =
+            self.text_context
+                .layouts
+                .ranged_builder(&mut self.text_context.fonts, text, 1.0, true);
 
         style.as_defaults(&mut compute);
         compute.build_into(layout, text);
@@ -265,6 +231,7 @@ impl UiBuilder<'_> {
         UiBuilder {
             context: self.context,
             index: child_index,
+            text_context: self.text_context,
         }
     }
 

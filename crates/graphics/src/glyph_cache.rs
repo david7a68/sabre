@@ -4,11 +4,8 @@ use std::collections::hash_map::Entry;
 use std::hash::Hash;
 use std::rc::Rc;
 
-use parley::AlignmentOptions;
-use parley::FontContext;
 use parley::GlyphRun;
 use parley::Layout;
-use parley::LayoutContext;
 use parley::PositionedLayoutItem;
 use parley::swash::FontRef;
 use parley::swash::GlyphId;
@@ -28,33 +25,21 @@ use crate::Texture;
 use crate::draw::CanvasStorage;
 use crate::texture::TextureManager;
 
-pub use crate::text_style::*;
-
 #[derive(Clone)]
-pub(crate) struct TextSystem {
-    inner: Rc<RefCell<TextSystemInner>>,
+pub(crate) struct GlyphCache {
+    inner: Rc<RefCell<GlyphCacheInner>>,
 }
 
-impl TextSystem {
-    pub fn new() -> Self {
-        let inner = Rc::new(RefCell::new(TextSystemInner::new()));
-        Self { inner }
+impl Default for GlyphCache {
+    fn default() -> Self {
+        Self::new()
     }
+}
 
-    #[allow(clippy::too_many_arguments)]
-    pub fn simple_layout(
-        &self,
-        canvas: &mut CanvasStorage,
-        textures: &TextureManager,
-        text: &str,
-        style: &TextStyle,
-        max_width: Option<f32>,
-        origin: [f32; 2],
-        color: Color,
-    ) {
-        self.inner
-            .borrow_mut()
-            .simple_layout(canvas, textures, text, style, max_width, origin, color);
+impl GlyphCache {
+    pub fn new() -> Self {
+        let inner = Rc::new(RefCell::new(GlyphCacheInner::new()));
+        Self { inner }
     }
 
     pub fn draw(
@@ -70,9 +55,7 @@ impl TextSystem {
     }
 }
 
-struct TextSystemInner {
-    fonts: FontContext,
-    layout_cx: LayoutContext<Color>,
+struct GlyphCacheInner {
     scaler_cx: ScaleContext,
 
     /// A cache of mappings from glyphs (and their aligned x-offsets) to textures.
@@ -80,69 +63,16 @@ struct TextSystemInner {
 
     /// Scratch space for rendering glyphs.
     image_place: Image,
-
-    quick_layout: Layout<Color>,
 }
 
-impl TextSystemInner {
+impl GlyphCacheInner {
     fn new() -> Self {
-        let fonts = FontContext::new();
-        let layout_cx = LayoutContext::new();
         let scaler_cx = ScaleContext::new();
 
-        let quick_layout = Layout::new();
-
         Self {
-            fonts,
-            layout_cx,
             scaler_cx,
             glyph_cache: HashMap::new(),
             image_place: Image::new(),
-            quick_layout,
-        }
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    #[instrument(skip(self, canvas, textures, style))]
-    fn simple_layout(
-        &mut self,
-        canvas: &mut CanvasStorage,
-        textures: &TextureManager,
-        text: &str,
-        style: &TextStyle,
-        max_width: Option<f32>,
-        origin: [f32; 2],
-        color: Color,
-    ) {
-        let mut compute = self
-            .layout_cx
-            .ranged_builder(&mut self.fonts, text, 1.0, false);
-
-        style.as_defaults(&mut compute);
-
-        compute.build_into(&mut self.quick_layout, text);
-
-        self.quick_layout.break_all_lines(max_width);
-        self.quick_layout
-            .align(max_width, style.align.into(), AlignmentOptions::default());
-
-        let layout: &Layout<Color> = &self.quick_layout;
-
-        for line in layout.lines() {
-            for item in line.items() {
-                match item {
-                    PositionedLayoutItem::GlyphRun(glyphs) => draw_glyph_run(
-                        &mut self.scaler_cx,
-                        &mut self.image_place,
-                        &mut self.glyph_cache,
-                        canvas,
-                        textures,
-                        &glyphs,
-                        origin,
-                    ),
-                    PositionedLayoutItem::InlineBox(_) => {}
-                }
-            }
         }
     }
 
@@ -292,7 +222,7 @@ fn draw_glyph_run(
         let glyph_x = (x as i32 + entry.left) as f32;
         let glyph_y = (y as i32 - entry.top) as f32;
 
-        canvas.draw(
+        canvas.push(
             textures,
             Primitive::new(
                 glyph_x,

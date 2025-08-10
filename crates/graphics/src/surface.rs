@@ -6,7 +6,7 @@ use tracing::trace;
 use winit::window::Window;
 use winit::window::WindowId;
 
-use crate::Canvas;
+use crate::draw::CanvasStorage;
 use crate::draw::DrawCommand;
 use crate::pipeline::DrawBuffer;
 use crate::pipeline::DrawUniforms;
@@ -132,7 +132,7 @@ impl Surface {
         &mut self,
         queue: &wgpu::Queue,
         device: &wgpu::Device,
-        canvas: &Canvas,
+        canvas: &CanvasStorage,
     ) -> Result<(wgpu::SurfaceTexture, wgpu::CommandBuffer), RenderError> {
         let output = tracing::info_span!("get_current_texture").in_scope(|| {
             let mut attempts = 0;

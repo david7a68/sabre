@@ -1,6 +1,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
+use graphics::Canvas;
 use sabre::graphics::Color;
 use sabre::graphics::GraphicsContext;
 use sabre::ui::UiContext;
@@ -15,6 +16,7 @@ use ui_base::DrawCommand;
 use ui_base::layout::Alignment;
 use ui_base::layout::LayoutDirection;
 use ui_base::layout::Padding;
+use ui_base::text::TextLayoutContext;
 use winit::application::ApplicationHandler;
 use winit::event::ElementState;
 use winit::event::MouseButton;
@@ -52,6 +54,7 @@ fn main() {
 struct AppWindow {
     window: Arc<Window>,
 
+    canvas: Canvas,
     input: InputState,
     ui_context: UiContext,
 }
@@ -59,6 +62,7 @@ struct AppWindow {
 struct App {
     graphics: Option<GraphicsContext>,
     windows: Vec<AppWindow>,
+    text_layout_context: TextLayoutContext,
 }
 
 impl App {
@@ -66,6 +70,7 @@ impl App {
         Self {
             graphics: None,
             windows: vec![],
+            text_layout_context: TextLayoutContext::new(),
         }
     }
 }
@@ -95,16 +100,17 @@ impl ApplicationHandler for App {
 
         // Render to the window before showing it to avoid flashing when
         // creating the window for the first time.
-        let mut canvas = graphics_context.get_canvas();
-        canvas.clear(Color::BLACK);
+        let mut canvas = graphics_context.create_canvas();
+        canvas.reset(Color::BLACK);
         graphics_context
-            .render(smallvec![(window.id(), canvas)])
+            .render(smallvec![(window.id(), &canvas)])
             .unwrap();
 
         window.set_visible(true);
 
         self.windows.push(AppWindow {
             window,
+            canvas,
             input: InputState::default(),
             ui_context: UiContext::new(),
         });
@@ -217,14 +223,11 @@ impl ApplicationHandler for App {
                     .find(|rc| rc.window.id() == window_id)
                     .unwrap();
 
-                let graphics = self.graphics.as_mut().unwrap();
-                let mut canvas = graphics.get_canvas();
-
-                canvas.clear(Color::srgb(0.1, 0.2, 0.3, 1.0));
-
-                let mut ui = window
-                    .ui_context
-                    .begin_frame(window.input.clone(), Duration::ZERO);
+                let mut ui = window.ui_context.begin_frame(
+                    &mut self.text_layout_context,
+                    window.input.clone(),
+                    Duration::ZERO,
+                );
 
                 ui.color(Color::srgb(0.1, 0.2, 0.3, 1.0))
                     .child_alignment(Alignment::Center, Alignment::Center)
@@ -258,6 +261,11 @@ impl ApplicationHandler for App {
                             });
                     });
 
+                let graphics = self.graphics.as_mut().unwrap();
+                let canvas = &mut window.canvas;
+
+                canvas.reset(Color::srgb(0.1, 0.2, 0.3, 1.0));
+
                 for draw_command in window.ui_context.finish() {
                     match draw_command {
                         DrawCommand::Primitive(primitive) => {
@@ -274,7 +282,7 @@ impl ApplicationHandler for App {
                 }
 
                 graphics
-                    .render(smallvec![(window.window.id(), canvas)])
+                    .render(smallvec![(window.window.id(), &*canvas)])
                     .unwrap();
             }
             _ => (),
