@@ -11,6 +11,7 @@ use tracing::info;
 use tracing::instrument;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
+use ui_base::DrawCommand;
 use ui_base::TextStyle;
 use ui_base::layout::Alignment;
 use ui_base::layout::LayoutDirection;
@@ -247,75 +248,79 @@ impl ApplicationHandler for App {
 
                 canvas.clear(Color::srgb(0.1, 0.2, 0.3, 1.0));
 
-                window
+                let mut ui = window
                     .ui_context
-                    .next_frame(window.input.clone(), Duration::ZERO, |ui| {
-                        ui.with_color(Color::srgb(0.1, 0.2, 0.3, 1.0))
-                            .with_child_major_alignment(Alignment::Center)
-                            .with_child_minor_alignment(Alignment::Center)
+                    .begin_frame(window.input.clone(), Duration::ZERO);
+
+                ui.color(Color::srgb(0.1, 0.2, 0.3, 1.0))
+                    .child_alignment(Alignment::Center, Alignment::Center)
+                    .with_container(|ui| {
+                        ui.width(200.0)
+                            .child_direction(LayoutDirection::Vertical)
                             .with_container(|ui| {
-                                ui.with_width(200.0)
-                                    .with_child_direction(LayoutDirection::Vertical)
-                                    .with_container(|ui| {
-                                        ui.with_child_minor_alignment(Alignment::Center)
-                                            .with_width(Grow)
-                                            .with_color(Color::WHITE)
-                                            .with_padding(Padding {
-                                                left: 15.0,
-                                                right: 15.0,
-                                                top: 15.0,
-                                                bottom: 15.0,
-                                            })
-                                            .add_text(
-                                                "Menu Item 1",
-                                                &self.text_style,
-                                                None,
-                                                Color::LIGHT_GRAY,
-                                            )
-                                            .add_rect(None, Grow, None)
-                                            .add_rect(45.0, 45.0, Color::RED);
+                                ui.child_minor_alignment(Alignment::Center)
+                                    .width(Grow)
+                                    .color(Color::WHITE)
+                                    .padding(Padding {
+                                        left: 15.0,
+                                        right: 15.0,
+                                        top: 15.0,
+                                        bottom: 15.0,
                                     })
-                                    .with_container(|ui| {
-                                        ui.with_child_minor_alignment(Alignment::Center)
-                                            .with_width(Grow)
-                                            .with_color(Color::WHITE)
-                                            .with_padding(Padding {
-                                                left: 15.0,
-                                                right: 15.0,
-                                                top: 15.0,
-                                                bottom: 15.0,
-                                            })
-                                            .add_text(
-                                                "modern morning merman",
-                                                &self.text_style,
-                                                None,
-                                                Color::LIGHT_GRAY,
-                                            )
-                                            .add_rect(None, Grow, None)
-                                            .add_rect(45.0, 45.0, Color::RED);
+                                    .text("Menu Item 1", &self.text_style, None, Color::LIGHT_GRAY)
+                                    .rect(None, Grow, None)
+                                    .rect(45.0, 45.0, Color::RED);
+                            })
+                            .with_container(|ui| {
+                                ui.child_minor_alignment(Alignment::Center)
+                                    .width(Grow)
+                                    .color(Color::WHITE)
+                                    .padding(Padding {
+                                        left: 15.0,
+                                        right: 15.0,
+                                        top: 15.0,
+                                        bottom: 15.0,
                                     })
-                                    .with_container(|ui| {
-                                        ui.with_child_minor_alignment(Alignment::Center)
-                                            .with_width(Grow)
-                                            .with_color(Color::WHITE)
-                                            .with_padding(Padding {
-                                                left: 15.0,
-                                                right: 15.0,
-                                                top: 15.0,
-                                                bottom: 15.0,
-                                            })
-                                            .add_text(
-                                                "VA To ff ti it tt ft",
-                                                &self.text_style,
-                                                None,
-                                                Color::LIGHT_GRAY,
-                                            )
-                                            .add_rect(None, Grow, None)
-                                            .add_rect(45.0, 45.0, Color::RED);
-                                    });
+                                    .text(
+                                        "modern morning merman",
+                                        &self.text_style,
+                                        None,
+                                        Color::LIGHT_GRAY,
+                                    )
+                                    .rect(None, Grow, None)
+                                    .rect(45.0, 45.0, Color::RED);
+                            })
+                            .with_container(|ui| {
+                                ui.child_minor_alignment(Alignment::Center)
+                                    .width(Grow)
+                                    .color(Color::WHITE)
+                                    .padding(Padding {
+                                        left: 15.0,
+                                        right: 15.0,
+                                        top: 15.0,
+                                        bottom: 15.0,
+                                    })
+                                    .text(
+                                        "VA To ff ti it tt ft",
+                                        &self.text_style,
+                                        None,
+                                        Color::LIGHT_GRAY,
+                                    )
+                                    .rect(None, Grow, None)
+                                    .rect(45.0, 45.0, Color::RED);
                             });
-                    })
-                    .finish(&mut canvas);
+                    });
+
+                for draw_command in window.ui_context.finish() {
+                    match draw_command {
+                        DrawCommand::Primitive(primitive) => {
+                            canvas.draw(primitive);
+                        }
+                        DrawCommand::TextLayout(layout, coords) => {
+                            canvas.draw_text_layout(layout, coords);
+                        }
+                    }
+                }
 
                 if canvas.has_unready_textures() {
                     window.window.request_redraw();

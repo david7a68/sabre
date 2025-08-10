@@ -16,6 +16,7 @@ unused_crate_dependencies = "warn"
 graphics = { path = "crates/graphics" }
 
 # External dependencies
+arrayvec = "0.7"
 bytemuck = "1"
 color = "0.3"
 color-backtrace = { version = "0.7" }

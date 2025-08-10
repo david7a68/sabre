@@ -11,6 +11,7 @@ use tracing::info;
 use tracing::instrument;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
+use ui_base::DrawCommand;
 use ui_base::layout::Alignment;
 use ui_base::layout::LayoutDirection;
 use ui_base::layout::Padding;
@@ -221,43 +222,52 @@ impl ApplicationHandler for App {
 
                 canvas.clear(Color::srgb(0.1, 0.2, 0.3, 1.0));
 
-                window
+                let mut ui = window
                     .ui_context
-                    .next_frame(window.input.clone(), Duration::ZERO, |ui| {
-                        ui.with_color(Color::srgb(0.1, 0.2, 0.3, 1.0))
-                            .with_child_major_alignment(Alignment::Center)
-                            .with_child_minor_alignment(Alignment::Center)
+                    .begin_frame(window.input.clone(), Duration::ZERO);
+
+                ui.color(Color::srgb(0.1, 0.2, 0.3, 1.0))
+                    .child_alignment(Alignment::Center, Alignment::Center)
+                    .with_container(|ui| {
+                        ui.child_direction(LayoutDirection::Vertical)
                             .with_container(|ui| {
-                                ui.with_child_direction(LayoutDirection::Vertical)
-                                    .with_container(|ui| {
-                                        ui.with_child_spacing(10.0)
-                                            .with_padding(Padding {
-                                                left: 15.0,
-                                                right: 15.0,
-                                                top: 15.0,
-                                                bottom: 15.0,
-                                            })
-                                            .with_color(Color::BLUE)
-                                            .add_rect(100.0, 100.0, Color::WHITE)
-                                            .add_rect(100.0, 200.0, Color::WHITE)
-                                            .add_rect(30.0, 150.0, Color::WHITE);
+                                ui.child_spacing(10.0)
+                                    .padding(Padding {
+                                        left: 15.0,
+                                        right: 15.0,
+                                        top: 15.0,
+                                        bottom: 15.0,
                                     })
-                                    .with_container(|ui| {
-                                        ui.with_child_spacing(10.0)
-                                            .with_color(Color::GREEN)
-                                            .with_padding(Padding {
-                                                left: 15.0,
-                                                right: 15.0,
-                                                top: 15.0,
-                                                bottom: 15.0,
-                                            })
-                                            .add_rect(100.0, 91.0, Color::WHITE)
-                                            .add_rect(100.0, 15.0, Color::WHITE)
-                                            .add_rect(100.0, 299.0, Color::WHITE);
-                                    });
+                                    .color(Color::BLUE)
+                                    .rect(100.0, 100.0, Color::WHITE)
+                                    .rect(100.0, 200.0, Color::WHITE)
+                                    .rect(30.0, 150.0, Color::WHITE);
+                            })
+                            .with_container(|ui| {
+                                ui.child_spacing(10.0)
+                                    .color(Color::GREEN)
+                                    .padding(Padding {
+                                        left: 15.0,
+                                        right: 15.0,
+                                        top: 15.0,
+                                        bottom: 15.0,
+                                    })
+                                    .rect(100.0, 91.0, Color::WHITE)
+                                    .rect(100.0, 15.0, Color::WHITE)
+                                    .rect(100.0, 299.0, Color::WHITE);
                             });
-                    })
-                    .finish(&mut canvas);
+                    });
+
+                for draw_command in window.ui_context.finish() {
+                    match draw_command {
+                        DrawCommand::Primitive(primitive) => {
+                            canvas.draw(primitive);
+                        }
+                        DrawCommand::TextLayout(layout, coords) => {
+                            canvas.draw_text_layout(layout, coords);
+                        }
+                    }
+                }
 
                 if canvas.has_unready_textures() {
                     window.window.request_redraw();

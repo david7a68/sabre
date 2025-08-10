@@ -1,7 +1,7 @@
 use std::num::NonZeroU32;
 use std::time::Duration;
 
-use graphics::Canvas;
+use arrayvec::ArrayVec;
 use graphics::Color;
 use graphics::Primitive;
 use graphics::text::TextAlignment;
@@ -77,7 +77,34 @@ impl UiContext {
         self
     }
 
-    pub fn finish(&mut self, canvas: &mut Canvas) {
+    pub fn begin_frame(&mut self, input: InputState, time_delta: Duration) -> UiBuilder {
+        self.ui_nodes.clear();
+        self.children.clear();
+        self.text_layouts.clear();
+
+        // Set up the root node.
+        self.ui_nodes.push(UiNode {
+            color: Color::WHITE,
+            layout_text: None,
+            layout_spec: LayoutNodeSpec {
+                width: input.window_size.width.into(),
+                height: input.window_size.height.into(),
+                ..Default::default()
+            },
+            layout_result: LayoutNodeResult::default(),
+        });
+        self.children.push(NodeIndexArray::new());
+
+        self.input = input;
+        self.time_delta = time_delta;
+
+        UiBuilder {
+            index: 0,
+            context: self,
+        }
+    }
+
+    pub fn finish(&mut self) -> impl Iterator<Item = DrawCommand<'_>> {
         compute_layout(
             &mut self.text_layouts,
             &mut self.ui_nodes,
@@ -85,29 +112,36 @@ impl UiContext {
             UiElementId(0),
         );
 
-        for node in &self.ui_nodes {
-            let layout = &node.layout_result;
+        self.ui_nodes
+            .iter()
+            .filter_map(|node| {
+                let layout = &node.layout_result;
 
-            if layout.width == 0.0 || layout.height == 0.0 {
-                continue; // Skip empty nodes.
-            }
+                if layout.width == 0.0 || layout.height == 0.0 {
+                    return None; // Skip empty nodes.
+                }
 
-            if node.color != Color::default() {
-                canvas.draw(Primitive::new(
-                    layout.x,
-                    layout.y,
-                    layout.width,
-                    layout.height,
-                    node.color,
-                ));
-            }
+                let mut vec = ArrayVec::<_, 2>::new();
 
-            if let Some(text_id) = node.layout_text
-                && let Some(text_layout) = self.text_layouts.get(text_id)
-            {
-                canvas.draw_text_layout(text_layout, [layout.x, layout.y]);
-            }
-        }
+                if node.color != Color::default() {
+                    vec.push(DrawCommand::Primitive(Primitive::new(
+                        layout.x,
+                        layout.y,
+                        layout.width,
+                        layout.height,
+                        node.color,
+                    )));
+                }
+
+                if let Some(text_id) = node.layout_text
+                    && let Some(text_layout) = self.text_layouts.get(text_id)
+                {
+                    vec.push(DrawCommand::TextLayout(text_layout, [layout.x, layout.y]));
+                }
+
+                (!vec.is_empty()).then(|| vec.into_iter())
+            })
+            .flatten()
     }
 }
 
@@ -125,49 +159,56 @@ impl UiBuilder<'_> {
         &self.context.time_delta
     }
 
-    pub fn with_color(&mut self, color: impl Into<Color>) -> &mut Self {
+    pub fn color(&mut self, color: impl Into<Color>) -> &mut Self {
         self.context.ui_nodes[self.index].color = color.into();
         self
     }
 
-    pub fn with_width(&mut self, width: impl Into<Size>) -> &mut Self {
+    pub fn width(&mut self, width: impl Into<Size>) -> &mut Self {
         self.context.ui_nodes[self.index].layout_spec.width = width.into();
         self
     }
 
-    pub fn with_height(&mut self, height: impl Into<Size>) -> &mut Self {
+    pub fn height(&mut self, height: impl Into<Size>) -> &mut Self {
         self.context.ui_nodes[self.index].layout_spec.height = height.into();
         self
     }
 
-    pub fn with_child_major_alignment(&mut self, alignment: Alignment) -> &mut Self {
+    pub fn child_major_alignment(&mut self, alignment: Alignment) -> &mut Self {
         self.context.ui_nodes[self.index].layout_spec.major_align = alignment;
         self
     }
 
-    pub fn with_child_minor_alignment(&mut self, alignment: Alignment) -> &mut Self {
+    pub fn child_minor_alignment(&mut self, alignment: Alignment) -> &mut Self {
         self.context.ui_nodes[self.index].layout_spec.minor_align = alignment;
         self
     }
 
-    pub fn with_child_direction(&mut self, direction: LayoutDirection) -> &mut Self {
+    pub fn child_alignment(&mut self, major: Alignment, minor: Alignment) -> &mut Self {
+        let node = &mut self.context.ui_nodes[self.index];
+        node.layout_spec.major_align = major;
+        node.layout_spec.minor_align = minor;
+        self
+    }
+
+    pub fn child_direction(&mut self, direction: LayoutDirection) -> &mut Self {
         self.context.ui_nodes[self.index].layout_spec.direction = direction;
         self
     }
 
-    pub fn with_child_spacing(&mut self, spacing: f32) -> &mut Self {
+    pub fn child_spacing(&mut self, spacing: f32) -> &mut Self {
         self.context.ui_nodes[self.index]
             .layout_spec
             .inter_child_padding = spacing;
         self
     }
 
-    pub fn with_padding(&mut self, padding: Padding) -> &mut Self {
+    pub fn padding(&mut self, padding: Padding) -> &mut Self {
         self.context.ui_nodes[self.index].layout_spec.inner_padding = padding;
         self
     }
 
-    pub fn add_rect(
+    pub fn rect(
         &mut self,
         width: impl Into<Size>,
         height: impl Into<Size>,
@@ -183,7 +224,7 @@ impl UiBuilder<'_> {
         self
     }
 
-    pub fn add_text(
+    pub fn text(
         &mut self,
         text: &str,
         style: &TextStyle,
@@ -218,7 +259,7 @@ impl UiBuilder<'_> {
         self
     }
 
-    pub fn add_container(&mut self) -> UiBuilder {
+    pub fn container(&mut self) -> UiBuilder {
         let child_index = self.add(self.index);
 
         UiBuilder {
@@ -228,7 +269,7 @@ impl UiBuilder<'_> {
     }
 
     pub fn with_container(&mut self, callback: impl FnOnce(&mut UiBuilder)) -> &mut Self {
-        callback(&mut self.add_container());
+        callback(&mut self.container());
         self
     }
 
@@ -245,6 +286,12 @@ impl UiBuilder<'_> {
 
         child_index
     }
+}
+
+#[expect(clippy::large_enum_variant)]
+pub enum DrawCommand<'a> {
+    Primitive(Primitive),
+    TextLayout(&'a parley::Layout<Color>, [f32; 2]),
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
