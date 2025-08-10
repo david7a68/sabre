@@ -278,7 +278,7 @@ fn compute_major_axis_offsets<D: LayoutDirectionExt, T: LayoutInfo>(
                 content_size += D::major_size_result(&nodes[child_id.0 as usize]);
             }
 
-            let half_unused_space = (size - content_size) / 2.0;
+            let half_unused_space = ((size - content_size) / 2.0).round();
 
             let mut advance = current_offset + padding_start + half_unused_space;
             for child_id in node_children {
@@ -449,7 +449,7 @@ fn compute_minor_axis_offsets<D: LayoutDirectionExt, T: LayoutInfo>(
 
                 // Ignore the padding for centering since the child has already
                 // been sized appropriately.
-                let inset = current_offset + (size - child_size).max(0.0) / 2.0;
+                let inset = (current_offset + (size - child_size).max(0.0) / 2.0).round();
 
                 compute_minor_axis_offsets::<D, T>(nodes, children, *child_id, inset);
             }
