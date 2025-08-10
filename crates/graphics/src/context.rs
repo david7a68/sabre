@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
 
@@ -14,10 +15,13 @@ use crate::Canvas;
 use crate::Texture;
 use crate::TextureLoadError;
 use crate::draw::CanvasStorage;
+use crate::draw::DrawCommand;
 use crate::glyph_cache::GlyphCache;
+use crate::pipeline::DrawUniforms;
 use crate::pipeline::RenderPipelineCache;
 use crate::surface::RenderError;
 use crate::surface::Surface;
+use crate::texture::StorageId;
 use crate::texture::TextureManager;
 
 pub struct GraphicsContext {
@@ -170,7 +174,8 @@ impl GraphicsContext {
             window.resize_if_necessary(&self.device);
 
             let (target, command_buffer) =
-                window.write_commands(&self.queue, &self.device, canvas)?;
+                write_commands(&self.device, &self.queue, window, canvas)?;
+
             command_buffers.push(command_buffer);
             presents.push((window_id, target));
         }
@@ -209,4 +214,99 @@ impl Drop for GraphicsContext {
 
         self.textures.end_frame();
     }
+}
+
+#[instrument(
+        skip_all,
+        fields(
+            frame_id = surface.frame_counter(),
+            num_primitives = canvas.primitives().len(),
+            num_commands = canvas.commands().len()
+        )
+    )]
+fn write_commands(
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    surface: &mut Surface,
+    canvas: &CanvasStorage,
+) -> Result<(wgpu::SurfaceTexture, wgpu::CommandBuffer), RenderError> {
+    let (target, frame, render_pipeline) = surface.next_frame(device)?;
+
+    let mut encoder =
+        device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+
+    let load_op = if let Some(clear_color) = canvas.clear_color() {
+        wgpu::LoadOp::Clear(wgpu::Color {
+            r: clear_color.r.into(),
+            g: clear_color.g.into(),
+            b: clear_color.b.into(),
+            a: clear_color.a.into(),
+        })
+    } else {
+        wgpu::LoadOp::Load
+    };
+
+    let view = target
+        .texture
+        .create_view(&wgpu::TextureViewDescriptor::default());
+
+    tracing::info_span!("render_pass").in_scope(|| {
+        let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("Render Pass"),
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                view: &view,
+                depth_slice: None,
+                resolve_target: None,
+                ops: wgpu::Operations {
+                    load: load_op,
+                    store: wgpu::StoreOp::Store,
+                },
+            })],
+            depth_stencil_attachment: None,
+            occlusion_query_set: None,
+            timestamp_writes: None,
+        });
+
+        render_pass.set_pipeline(&render_pipeline.pipeline);
+
+        frame.draw_buffer.upload_and_bind(
+            device,
+            queue,
+            &mut render_pass,
+            DrawUniforms {
+                viewport_size: [target.texture.width(), target.texture.height()],
+            },
+            canvas.primitives(),
+        );
+
+        let mut vertex_offset = 0;
+        let mut bind_groups = HashMap::<(StorageId, StorageId), wgpu::BindGroup>::new();
+
+        for command in canvas.commands() {
+            match command {
+                DrawCommand::Draw {
+                    color_storage_id,
+                    alpha_storage_id,
+                    num_vertices,
+                } => {
+                    let color_texture_view = canvas.texture_view(*color_storage_id).unwrap();
+                    let alpha_texture_view = canvas.texture_view(*alpha_storage_id).unwrap();
+
+                    let bind_group = bind_groups
+                        .entry((*color_storage_id, *alpha_storage_id))
+                        .or_insert_with(|| {
+                            render_pipeline
+                                .create_texure_bind_group(color_texture_view, alpha_texture_view)
+                        });
+
+                    render_pipeline.bind_texture(&mut render_pass, bind_group);
+
+                    render_pass.draw(vertex_offset..vertex_offset + *num_vertices, 0..1);
+                    vertex_offset += *num_vertices;
+                }
+            }
+        }
+    });
+
+    Ok((target, encoder.finish()))
 }
