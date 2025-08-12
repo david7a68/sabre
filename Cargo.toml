@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/graphics", "crates/ui_base", "crates/workspace-hack"]
+members = ["crates/*"]
 
 [workspace.package]
 version = "0.1.0"
@@ -59,9 +59,10 @@ profile = ["dep:tracing-tracy", "tracing-tracy/enable"]
 workspace-hack = { version = "0.1", path = "crates/workspace-hack" }
 
 graphics = { path = "crates/graphics" }
-ui_base = { path = "crates/ui_base" }
 
+arrayvec = { workspace = true }
 futures = { workspace = true }
+slotmap = { workspace = true }
 smallvec = { workspace = true, features = [
     "const_generics",
     "const_new",
@@ -84,6 +85,7 @@ tracing-tracy = { workspace = true, optional = true, features = [
     "system-tracing",
 ] }
 winit = { workspace = true }
+parley = { workspace = true }
 
 [dev-dependencies]
 color-backtrace = { workspace = true }

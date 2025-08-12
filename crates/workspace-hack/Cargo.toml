@@ -15,6 +15,7 @@ publish = false
 
 ### BEGIN HAKARI SECTION
 [dependencies]
+arrayvec = { version = "0.7" }
 smallvec = { version = "1", default-features = false, features = ["const_new", "union"] }
 tracing-core = { version = "0.1" }
 tracing-subscriber = { version = "0.3", features = ["parking_lot"] }

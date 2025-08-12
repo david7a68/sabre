@@ -106,7 +106,7 @@ impl UiContext {
                     vec.push(DrawCommand::TextLayout(text_layout, [layout.x, layout.y]));
                 }
 
-                (!vec.is_empty()).then(|| vec.into_iter())
+                Some(vec.into_iter())
             })
             .flatten()
     }

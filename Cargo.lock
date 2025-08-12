@@ -1714,14 +1714,16 @@ checksum = "b39cdef0fa800fc44525c84ccb54a029961a8215f9619753635a9c0d2538d46d"
 name = "sabre"
 version = "0.1.0"
 dependencies = [
+ "arrayvec",
  "color-backtrace",
  "futures",
  "graphics",
+ "parley",
+ "slotmap",
  "smallvec",
  "tracing",
  "tracing-subscriber",
  "tracing-tracy",
- "ui_base",
  "winit",
  "workspace-hack",
 ]
@@ -2114,17 +2116,6 @@ name = "ttf-parser"
 version = "0.25.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d2df906b07856748fa3f6e0ad0cbaa047052d4a7dd609e231c4f72cee8c36f31"
-
-[[package]]
-name = "ui_base"
-version = "0.1.0"
-dependencies = [
- "arrayvec",
- "graphics",
- "parley",
- "smallvec",
- "workspace-hack",
-]
 
 [[package]]
 name = "unicode-ident"
@@ -3037,6 +3028,7 @@ dependencies = [
 name = "workspace-hack"
 version = "0.1.0"
 dependencies = [
+ "arrayvec",
  "smallvec",
  "tracing-core",
  "tracing-subscriber",
