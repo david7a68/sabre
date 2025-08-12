@@ -221,7 +221,7 @@ impl UiBuilder<'_> {
         self
     }
 
-    pub fn container(&mut self) -> UiBuilder {
+    pub fn container(&mut self) -> UiBuilder<'_> {
         let child_index = self.add(self.index);
 
         UiBuilder {
