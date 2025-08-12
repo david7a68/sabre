@@ -22,7 +22,7 @@ use crate::text::TextLayoutContext;
 use crate::text::TextStyle;
 
 #[derive(Default)]
-pub struct UiContext {
+pub(crate) struct UiContext {
     input: InputState,
     time_delta: Duration,
 
@@ -34,10 +34,6 @@ pub struct UiContext {
 }
 
 impl UiContext {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
     pub fn begin_frame<'a>(
         &'a mut self,
         text_context: &'a mut TextLayoutContext,
@@ -256,7 +252,7 @@ impl UiBuilder<'_> {
 }
 
 #[expect(clippy::large_enum_variant)]
-pub enum DrawCommand<'a> {
+pub(crate) enum DrawCommand<'a> {
     Primitive(Primitive),
     TextLayout(&'a parley::Layout<Color>, [f32; 2]),
 }

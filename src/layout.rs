@@ -1,8 +1,6 @@
 use crate::ui::NodeIndexArray;
 use crate::ui::UiElementId;
 
-pub use Size::*;
-
 /// Single-dimension size for UI elements.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Size {
@@ -11,6 +9,8 @@ pub enum Size {
     Grow,
     Flex { min: f32, max: f32 },
 }
+
+pub(crate) use Size::*;
 
 impl From<f32> for Size {
     fn from(value: f32) -> Self {
