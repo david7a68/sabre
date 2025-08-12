@@ -56,8 +56,6 @@ default = []
 profile = ["dep:tracing-tracy", "tracing-tracy/enable"]
 
 [dependencies]
-workspace-hack = { version = "0.1", path = "crates/workspace-hack" }
-
 graphics = { path = "crates/graphics" }
 
 arrayvec = { workspace = true }

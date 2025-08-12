@@ -735,7 +735,6 @@ dependencies = [
  "tracing-tracy",
  "wgpu",
  "winit",
- "workspace-hack",
 ]
 
 [[package]]
@@ -1725,7 +1724,6 @@ dependencies = [
  "tracing-subscriber",
  "tracing-tracy",
  "winit",
- "workspace-hack",
 ]
 
 [[package]]
@@ -3022,19 +3020,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6f42320e61fe2cfd34354ecb597f86f413484a798ba44a8ca1165c58d42da6c1"
 dependencies = [
  "bitflags 2.9.1",
-]
-
-[[package]]
-name = "workspace-hack"
-version = "0.1.0"
-dependencies = [
- "arrayvec",
- "smallvec",
- "tracing-core",
- "tracing-subscriber",
- "tracing-tracy",
- "tracy-client",
- "tracy-client-sys",
 ]
 
 [[package]]

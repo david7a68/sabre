@@ -9,7 +9,6 @@ use tracing::instrument;
 use tracing::warn;
 use winit::window::Window;
 use winit::window::WindowId;
-use workspace_hack as _;
 
 use crate::Canvas;
 use crate::Texture;
