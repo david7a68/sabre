@@ -5,7 +5,7 @@ use graphics::Color;
 use graphics::Primitive;
 use smallvec::SmallVec;
 
-use crate::LayoutNode;
+use crate::Atom;
 use crate::LayoutNodeContent;
 use crate::LayoutNodeContentRef;
 use crate::LayoutTree;
@@ -13,8 +13,6 @@ use crate::input::InputState;
 use crate::layout::Alignment;
 use crate::layout::Flex;
 use crate::layout::LayoutDirection;
-use crate::layout::LayoutNodeResult;
-use crate::layout::LayoutNodeSpec;
 use crate::layout::Padding;
 use crate::layout::Size;
 use crate::text::TextLayoutContext;
@@ -40,15 +38,11 @@ impl UiContext {
         // Set up the root node.
         let root = self.ui_tree.add(
             None,
-            LayoutNode {
+            Atom {
                 color: Color::WHITE,
-                has_content: None,
-                layout_spec: LayoutNodeSpec {
-                    width: input.window_size.width.into(),
-                    height: input.window_size.height.into(),
-                    ..Default::default()
-                },
-                layout_result: LayoutNodeResult::default(),
+                width: input.window_size.width.into(),
+                height: input.window_size.height.into(),
+                ..Default::default()
             },
             None,
         );
@@ -71,7 +65,7 @@ impl UiContext {
         self.ui_tree
             .iter_nodes()
             .filter_map(|(node, content)| {
-                let layout = &node.layout_result;
+                let layout = &node.result;
 
                 if layout.width == 0.0 || layout.height == 0.0 {
                     return None; // Skip empty nodes.
@@ -79,13 +73,13 @@ impl UiContext {
 
                 let mut vec = ArrayVec::<_, 2>::new();
 
-                if node.color != Color::default() {
+                if node.atom.color != Color::default() {
                     vec.push(DrawCommand::Primitive(Primitive::new(
                         layout.x,
                         layout.y,
                         layout.width,
                         layout.height,
-                        node.color,
+                        node.atom.color,
                     )));
                 }
 
@@ -120,64 +114,44 @@ impl UiBuilder<'_> {
     }
 
     pub fn width(&mut self, width: impl Into<Size>) -> &mut Self {
-        self.context.ui_tree.get_mut(self.index).layout_spec.width = width.into();
+        self.context.ui_tree.get_mut(self.index).width = width.into();
         self
     }
 
     pub fn height(&mut self, height: impl Into<Size>) -> &mut Self {
-        self.context.ui_tree.get_mut(self.index).layout_spec.height = height.into();
+        self.context.ui_tree.get_mut(self.index).height = height.into();
         self
     }
 
     pub fn child_major_alignment(&mut self, alignment: Alignment) -> &mut Self {
-        self.context
-            .ui_tree
-            .get_mut(self.index)
-            .layout_spec
-            .major_align = alignment;
+        self.context.ui_tree.get_mut(self.index).major_align = alignment;
         self
     }
 
     pub fn child_minor_alignment(&mut self, alignment: Alignment) -> &mut Self {
-        self.context
-            .ui_tree
-            .get_mut(self.index)
-            .layout_spec
-            .minor_align = alignment;
+        self.context.ui_tree.get_mut(self.index).minor_align = alignment;
         self
     }
 
     pub fn child_alignment(&mut self, major: Alignment, minor: Alignment) -> &mut Self {
         let node = self.context.ui_tree.get_mut(self.index);
-        node.layout_spec.major_align = major;
-        node.layout_spec.minor_align = minor;
+        node.major_align = major;
+        node.minor_align = minor;
         self
     }
 
     pub fn child_direction(&mut self, direction: LayoutDirection) -> &mut Self {
-        self.context
-            .ui_tree
-            .get_mut(self.index)
-            .layout_spec
-            .direction = direction;
+        self.context.ui_tree.get_mut(self.index).direction = direction;
         self
     }
 
     pub fn child_spacing(&mut self, spacing: f32) -> &mut Self {
-        self.context
-            .ui_tree
-            .get_mut(self.index)
-            .layout_spec
-            .inter_child_padding = spacing;
+        self.context.ui_tree.get_mut(self.index).inter_child_padding = spacing;
         self
     }
 
     pub fn padding(&mut self, padding: Padding) -> &mut Self {
-        self.context
-            .ui_tree
-            .get_mut(self.index)
-            .layout_spec
-            .inner_padding = padding;
+        self.context.ui_tree.get_mut(self.index).inner_padding = padding;
         self
     }
 
@@ -189,15 +163,11 @@ impl UiBuilder<'_> {
     ) -> &mut Self {
         self.context.ui_tree.add(
             Some(self.index),
-            LayoutNode {
+            Atom {
                 color: color.into(),
-                has_content: None,
-                layout_spec: LayoutNodeSpec {
-                    width: width.into(),
-                    height: height.into(),
-                    ..Default::default()
-                },
-                layout_result: LayoutNodeResult::default(),
+                width: width.into(),
+                height: height.into(),
+                ..Default::default()
             },
             None,
         );
@@ -226,18 +196,14 @@ impl UiBuilder<'_> {
 
         self.context.ui_tree.add(
             Some(self.index),
-            LayoutNode {
+            Atom {
                 color: background_color.into(),
-                layout_spec: LayoutNodeSpec {
-                    width: Flex {
-                        min: size.min,
-                        max: size.max,
-                    },
-                    height: height.into(),
-                    ..Default::default()
+                width: Flex {
+                    min: size.min,
+                    max: size.max,
                 },
-                layout_result: LayoutNodeResult::default(),
-                has_content: None,
+                height: height.into(),
+                ..Default::default()
             },
             Some(LayoutNodeContent::Text {
                 layout,
@@ -252,7 +218,7 @@ impl UiBuilder<'_> {
         let child_index = self
             .context
             .ui_tree
-            .add(Some(self.index), LayoutNode::default(), None);
+            .add(Some(self.index), Atom::default(), None);
 
         UiBuilder {
             context: self.context,

@@ -73,7 +73,9 @@ pub enum Alignment {
 }
 
 #[derive(Debug, Default)]
-pub(crate) struct LayoutNodeSpec {
+pub(crate) struct Atom {
+    pub color: Color,
+
     pub width: Size,
     pub height: Size,
     pub inner_padding: Padding,
@@ -93,10 +95,22 @@ pub(crate) struct LayoutNodeResult {
     pub height: f32,
 }
 
+#[derive(Default, Debug)]
+pub(crate) struct LayoutNode {
+    pub atom: Atom,
+    pub result: LayoutNodeResult,
+    has_content: Option<UiElementId>,
+}
+
 pub(crate) struct LayoutTree {
     nodes: Vec<LayoutNode>,
     children: Vec<NodeIndexArray>,
 
+    /// Content associated with nodes, such as text layouts.
+    ///
+    /// These are stored separately under the assumption that they occur much
+    /// less frequently than the nodes themselves, and that they are often much
+    /// larger in size.
     content: HashMap<UiElementId, LayoutNodeContent>,
 }
 
@@ -129,17 +143,23 @@ impl LayoutTree {
         })
     }
 
-    pub fn get_mut(&mut self, node: UiElementId) -> &mut LayoutNode {
-        &mut self.nodes[node.0 as usize]
+    pub fn get_mut(&mut self, node: UiElementId) -> &mut Atom {
+        &mut self.nodes[node.0 as usize].atom
     }
 
     pub fn add(
         &mut self,
         parent: Option<UiElementId>,
-        mut node: LayoutNode,
+        atom: Atom,
         content: Option<LayoutNodeContent>,
     ) -> UiElementId {
         let node_id = UiElementId(self.nodes.len() as u16);
+
+        let mut node = LayoutNode {
+            atom,
+            result: LayoutNodeResult::default(),
+            has_content: None,
+        };
 
         if let Some(content) = content {
             self.content.insert(node_id, content);
@@ -189,14 +209,6 @@ impl LayoutTree {
     }
 }
 
-#[derive(Default, Debug)]
-pub(crate) struct LayoutNode {
-    pub color: Color,
-    pub layout_spec: LayoutNodeSpec,
-    pub layout_result: LayoutNodeResult,
-    pub has_content: Option<UiElementId>,
-}
-
 pub(crate) enum LayoutNodeContent {
     Text {
         layout: parley::Layout<Color>,
@@ -215,7 +227,7 @@ pub(crate) fn compute_layout(
     node_id: UiElementId,
 ) {
     debug_assert_eq!(
-        nodes[node_id.0 as usize].layout_spec.direction,
+        nodes[node_id.0 as usize].atom.direction,
         LayoutDirection::Horizontal,
         "The root node must have a horizontal layout direction"
     );
@@ -240,7 +252,7 @@ fn compute_major_axis_fit_sizes<D: LayoutDirectionExt>(
     let node = &nodes[node_id.0 as usize];
     let node_children = &children[node_id.0 as usize];
 
-    if !(node.layout_spec.direction == D::DIRECTION) {
+    if !(node.atom.direction == D::DIRECTION) {
         return compute_minor_axis_fit_sizes::<D::Other>(nodes, children, node_id);
     }
 
@@ -277,7 +289,7 @@ fn compute_major_axis_grow_sizes<D: LayoutDirectionExt>(
     let node = &nodes[node_id.0 as usize];
     let node_children = &children[node_id.0 as usize];
 
-    if !(node.layout_spec.direction == D::DIRECTION) {
+    if !(node.atom.direction == D::DIRECTION) {
         return compute_minor_axis_grow_sizes::<D::Other>(nodes, children, node_id);
     }
 
@@ -356,7 +368,7 @@ fn compute_major_axis_offsets<D: LayoutDirectionExt>(
 ) -> f32 {
     let node = &mut nodes[node_id.0 as usize];
 
-    if node.layout_spec.direction != D::DIRECTION {
+    if node.atom.direction != D::DIRECTION {
         return compute_minor_axis_offsets::<D::Other>(nodes, children, node_id, current_offset);
     }
 
@@ -365,11 +377,11 @@ fn compute_major_axis_offsets<D: LayoutDirectionExt>(
     let size = D::major_size_result(node);
 
     let padding_start = D::major_axis_padding_start(node);
-    let padding_internal = node.layout_spec.inter_child_padding;
+    let padding_internal = node.atom.inter_child_padding;
     let padding_end = D::major_axis_padding_end(node);
 
     let node_children = &children[node_id.0 as usize];
-    match node.layout_spec.major_align {
+    match node.atom.major_align {
         Alignment::Start => {
             let mut advance = current_offset + padding_start;
             for child_id in node_children {
@@ -445,11 +457,11 @@ fn compute_text_heights(
     nodes: &mut [LayoutNode],
 ) {
     for node in nodes {
-        let Some(text_height) = measure_text(node, node.layout_result.width) else {
+        let Some(text_height) = measure_text(node, node.result.width) else {
             continue;
         };
 
-        node.layout_spec.height = match node.layout_spec.height {
+        node.atom.height = match node.atom.height {
             Fixed(height) => Fixed(height),
             Fit { min, max } => Fixed(text_height.clamp(min, max)),
             Grow => Grow,
@@ -468,7 +480,7 @@ fn compute_minor_axis_fit_sizes<D: LayoutDirectionExt>(
 ) -> f32 {
     let node = &nodes[node_id.0 as usize];
 
-    if node.layout_spec.direction != D::DIRECTION {
+    if node.atom.direction != D::DIRECTION {
         return compute_major_axis_fit_sizes::<D::Other>(nodes, children, node_id);
     }
 
@@ -503,7 +515,7 @@ fn compute_minor_axis_grow_sizes<D: LayoutDirectionExt>(
 ) {
     let node = &nodes[node_id.0 as usize];
 
-    if !(node.layout_spec.direction == D::DIRECTION) {
+    if !(node.atom.direction == D::DIRECTION) {
         return compute_major_axis_grow_sizes::<D::Other>(nodes, children, node_id);
     }
 
@@ -530,7 +542,7 @@ fn compute_minor_axis_offsets<D: LayoutDirectionExt>(
     let node = &mut nodes[node_id.0 as usize];
     let node_children = &children[node_id.0 as usize];
 
-    if node.layout_spec.direction != D::DIRECTION {
+    if node.atom.direction != D::DIRECTION {
         return compute_major_axis_offsets::<D::Other>(nodes, children, node_id, current_offset);
     }
 
@@ -540,7 +552,7 @@ fn compute_minor_axis_offsets<D: LayoutDirectionExt>(
     let padding_start = D::minor_axis_padding_start(node);
     let padding_end = D::minor_axis_padding_end(node);
 
-    match node.layout_spec.minor_align {
+    match node.atom.minor_align {
         // Justified layouts don't make sense in the minor axis, so we treat
         // them as start-aligned.
         Alignment::Start | Alignment::Justify => {
@@ -582,7 +594,7 @@ fn get_inter_child_padding<D: LayoutDirectionExt>(
     node: &LayoutNode,
     children: &NodeIndexArray,
 ) -> f32 {
-    node.layout_spec.inter_child_padding * (children.len().saturating_sub(1)) as f32
+    node.atom.inter_child_padding * (children.len().saturating_sub(1)) as f32
 }
 
 fn get_major_axis_empty_size<D: LayoutDirectionExt>(
@@ -630,51 +642,51 @@ impl LayoutDirectionExt for HorizontalMode {
     const DIRECTION: LayoutDirection = LayoutDirection::Horizontal;
 
     fn major_size_spec(node: &LayoutNode) -> Size {
-        node.layout_spec.width
+        node.atom.width
     }
 
     fn minor_size_spec(node: &LayoutNode) -> Size {
-        node.layout_spec.height
+        node.atom.height
     }
 
     fn set_major_size(node: &mut LayoutNode, size: f32) {
-        node.layout_result.width = size;
+        node.result.width = size;
     }
 
     fn set_minor_size(node: &mut LayoutNode, size: f32) {
-        node.layout_result.height = size;
+        node.result.height = size;
     }
 
     fn major_size_result(node: &LayoutNode) -> f32 {
-        node.layout_result.width
+        node.result.width
     }
 
     fn minor_size_result(node: &LayoutNode) -> f32 {
-        node.layout_result.height
+        node.result.height
     }
 
     fn set_major_offset(node: &mut LayoutNode, offset: f32) {
-        node.layout_result.x = offset;
+        node.result.x = offset;
     }
 
     fn set_minor_offset(node: &mut LayoutNode, offset: f32) {
-        node.layout_result.y = offset;
+        node.result.y = offset;
     }
 
     fn major_axis_padding_start(node: &LayoutNode) -> f32 {
-        node.layout_spec.inner_padding.left
+        node.atom.inner_padding.left
     }
 
     fn major_axis_padding_end(node: &LayoutNode) -> f32 {
-        node.layout_spec.inner_padding.right
+        node.atom.inner_padding.right
     }
 
     fn minor_axis_padding_start(node: &LayoutNode) -> f32 {
-        node.layout_spec.inner_padding.top
+        node.atom.inner_padding.top
     }
 
     fn minor_axis_padding_end(node: &LayoutNode) -> f32 {
-        node.layout_spec.inner_padding.bottom
+        node.atom.inner_padding.bottom
     }
 }
 
@@ -685,51 +697,51 @@ impl LayoutDirectionExt for VerticalMode {
     const DIRECTION: LayoutDirection = LayoutDirection::Vertical;
 
     fn major_size_spec(node: &LayoutNode) -> Size {
-        node.layout_spec.height
+        node.atom.height
     }
 
     fn minor_size_spec(node: &LayoutNode) -> Size {
-        node.layout_spec.width
+        node.atom.width
     }
 
     fn set_major_size(node: &mut LayoutNode, size: f32) {
-        node.layout_result.height = size;
+        node.result.height = size;
     }
 
     fn set_minor_size(node: &mut LayoutNode, size: f32) {
-        node.layout_result.width = size;
+        node.result.width = size;
     }
 
     fn major_size_result(node: &LayoutNode) -> f32 {
-        node.layout_result.height
+        node.result.height
     }
 
     fn minor_size_result(node: &LayoutNode) -> f32 {
-        node.layout_result.width
+        node.result.width
     }
 
     fn set_major_offset(node: &mut LayoutNode, offset: f32) {
-        node.layout_result.y = offset;
+        node.result.y = offset;
     }
 
     fn set_minor_offset(node: &mut LayoutNode, offset: f32) {
-        node.layout_result.x = offset;
+        node.result.x = offset;
     }
 
     fn major_axis_padding_start(node: &LayoutNode) -> f32 {
-        node.layout_spec.inner_padding.top
+        node.atom.inner_padding.top
     }
 
     fn major_axis_padding_end(node: &LayoutNode) -> f32 {
-        node.layout_spec.inner_padding.bottom
+        node.atom.inner_padding.bottom
     }
 
     fn minor_axis_padding_start(node: &LayoutNode) -> f32 {
-        node.layout_spec.inner_padding.left
+        node.atom.inner_padding.left
     }
 
     fn minor_axis_padding_end(node: &LayoutNode) -> f32 {
-        node.layout_spec.inner_padding.right
+        node.atom.inner_padding.right
     }
 }
 
