@@ -1,14 +1,24 @@
+use std::hash::Hash;
 use std::time::Duration;
 
 use arrayvec::ArrayVec;
+use glamour::Point2;
+use glamour::Rect;
+use glamour::Size2;
+use glamour::Unit;
 use graphics::Color;
 use graphics::Primitive;
-use smallvec::SmallVec;
 
 use crate::Atom;
 use crate::LayoutNodeContent;
 use crate::LayoutNodeContentRef;
 use crate::LayoutTree;
+use crate::Response;
+use crate::UiElementId;
+use crate::Widget;
+use crate::WidgetState;
+use crate::id::IdMap;
+use crate::id::WidgetId;
 use crate::input::InputState;
 use crate::layout::Alignment;
 use crate::layout::Flex;
@@ -18,88 +28,26 @@ use crate::layout::Size;
 use crate::text::TextLayoutContext;
 use crate::text::TextStyle;
 
-#[derive(Default)]
-pub(crate) struct UiContext {
-    input: InputState,
-    time_delta: Duration,
+pub struct Pixels;
 
-    ui_tree: LayoutTree,
-}
-
-impl UiContext {
-    pub fn begin_frame<'a>(
-        &'a mut self,
-        text_context: &'a mut TextLayoutContext,
-        input: InputState,
-        time_delta: Duration,
-    ) -> UiBuilder<'a> {
-        self.ui_tree.clear();
-
-        // Set up the root node.
-        let root = self.ui_tree.add(
-            None,
-            Atom {
-                color: Color::WHITE,
-                width: input.window_size.width.into(),
-                height: input.window_size.height.into(),
-                ..Default::default()
-            },
-            None,
-        );
-
-        self.input = input;
-        self.time_delta = time_delta;
-
-        debug_assert_eq!(root, UiElementId(0));
-
-        UiBuilder {
-            index: root,
-            context: self,
-            text_context,
-        }
-    }
-
-    pub fn finish(&mut self) -> impl Iterator<Item = DrawCommand<'_>> {
-        self.ui_tree.compute_layout();
-
-        self.ui_tree
-            .iter_nodes()
-            .filter_map(|(node, content)| {
-                let layout = &node.result;
-
-                if layout.width == 0.0 || layout.height == 0.0 {
-                    return None; // Skip empty nodes.
-                }
-
-                let mut vec = ArrayVec::<_, 2>::new();
-
-                if node.atom.color != Color::default() {
-                    vec.push(DrawCommand::Primitive(Primitive::new(
-                        layout.x,
-                        layout.y,
-                        layout.width,
-                        layout.height,
-                        node.atom.color,
-                    )));
-                }
-
-                if let Some(LayoutNodeContentRef::Text(text_layout)) = content {
-                    vec.push(DrawCommand::TextLayout(text_layout, [layout.x, layout.y]));
-                }
-
-                Some(vec.into_iter())
-            })
-            .flatten()
-    }
+impl Unit for Pixels {
+    type Scalar = f32;
 }
 
 pub struct UiBuilder<'a> {
+    id: WidgetId,
     index: UiElementId,
     context: &'a mut UiContext,
     text_context: &'a mut TextLayoutContext,
+
+    num_child_widgets: usize,
 }
 
 impl UiBuilder<'_> {
+    pub fn add(&mut self, widget: impl Widget) -> Response {
+        widget.apply(self)
+    }
+
     pub fn input(&self) -> &InputState {
         &self.context.input
     }
@@ -153,6 +101,13 @@ impl UiBuilder<'_> {
     pub fn padding(&mut self, padding: Padding) -> &mut Self {
         self.context.ui_tree.get_mut(self.index).inner_padding = padding;
         self
+    }
+
+    pub fn prev_state(&self) -> Option<&WidgetState> {
+        self.context
+            .widget_states
+            .get(&self.id)
+            .map(|container| &container.state)
     }
 
     pub fn rect(
@@ -214,23 +169,172 @@ impl UiBuilder<'_> {
         self
     }
 
-    pub fn container(&mut self) -> UiBuilder<'_> {
+    pub fn child(&mut self) -> UiBuilder<'_> {
         let child_index = self
             .context
             .ui_tree
             .add(Some(self.index), Atom::default(), None);
 
+        self.num_child_widgets += 1;
         UiBuilder {
+            id: self.id.then(self.num_child_widgets),
             context: self.context,
             index: child_index,
             text_context: self.text_context,
+            num_child_widgets: 0,
         }
     }
 
-    pub fn with_container(&mut self, callback: impl FnOnce(&mut UiBuilder)) -> &mut Self {
-        callback(&mut self.container());
+    pub fn named_child(&mut self, name: impl Hash) -> UiBuilder<'_> {
+        let child_id = self.id.then(name);
+
+        let child_index =
+            self.context
+                .ui_tree
+                .add_with_ref(Some(self.index), Atom::default(), None, child_id);
+
+        self.num_child_widgets += 1;
+        UiBuilder {
+            id: child_id,
+            context: self.context,
+            index: child_index,
+            text_context: self.text_context,
+            num_child_widgets: 0,
+        }
+    }
+
+    pub fn with_child(&mut self, callback: impl FnOnce(&mut UiBuilder)) -> &mut Self {
+        callback(&mut self.child());
         self
     }
+
+    pub fn with_named_child(
+        &mut self,
+        name: impl Hash,
+        callback: impl FnOnce(&mut UiBuilder),
+    ) -> &mut Self {
+        callback(&mut self.named_child(name));
+        self
+    }
+}
+
+#[derive(Default)]
+pub(crate) struct UiContext {
+    input: InputState,
+    time_delta: Duration,
+
+    ui_tree: LayoutTree<WidgetId>,
+    widget_states: IdMap<WidgetContainer>,
+
+    frame_counter: u64,
+}
+
+impl UiContext {
+    pub fn begin_frame<'a>(
+        &'a mut self,
+        text_context: &'a mut TextLayoutContext,
+        input: InputState,
+        time_delta: Duration,
+    ) -> UiBuilder<'a> {
+        self.ui_tree.clear();
+
+        // Set up the root node.
+        let id = WidgetId::new("root");
+
+        let root = self.ui_tree.add_with_ref(
+            None,
+            Atom {
+                color: Color::WHITE,
+                width: input.window_size.width.into(),
+                height: input.window_size.height.into(),
+                ..Default::default()
+            },
+            None,
+            id,
+        );
+
+        self.input = input;
+        self.time_delta = time_delta;
+
+        debug_assert_eq!(root, UiElementId(0));
+
+        UiBuilder {
+            id,
+            index: root,
+            context: self,
+            text_context,
+            num_child_widgets: 0,
+        }
+    }
+
+    pub fn finish(&mut self) -> impl Iterator<Item = DrawCommand<'_>> {
+        self.ui_tree.compute_layout();
+
+        self.widget_states
+            .retain(|_, container| container.frame_last_used == self.frame_counter);
+
+        if self.widget_states.len() * 2 < self.widget_states.capacity() {
+            self.widget_states.shrink_to_fit();
+        }
+
+        self.frame_counter += 1;
+
+        self.ui_tree
+            .iter_references()
+            .for_each(|(node, widget_id)| {
+                let container = WidgetContainer {
+                    state: WidgetState {
+                        placement: Rect {
+                            origin: Point2 {
+                                x: node.result.x,
+                                y: node.result.y,
+                            },
+                            size: Size2 {
+                                width: node.result.width,
+                                height: node.result.height,
+                            },
+                        },
+                    },
+                    frame_last_used: self.frame_counter,
+                };
+
+                self.widget_states.insert(*widget_id, container);
+            });
+
+        self.ui_tree
+            .iter_nodes()
+            .filter_map(|(_, node, content)| {
+                let layout = &node.result;
+
+                if layout.width == 0.0 || layout.height == 0.0 {
+                    return None; // Skip empty nodes.
+                }
+
+                let mut vec = ArrayVec::<_, 2>::new();
+
+                if node.atom.color != Color::default() {
+                    vec.push(DrawCommand::Primitive(Primitive::new(
+                        layout.x,
+                        layout.y,
+                        layout.width,
+                        layout.height,
+                        node.atom.color,
+                    )));
+                }
+
+                if let Some(LayoutNodeContentRef::Text(text_layout)) = content {
+                    vec.push(DrawCommand::TextLayout(text_layout, [layout.x, layout.y]));
+                }
+
+                Some(vec.into_iter())
+            })
+            .flatten()
+    }
+}
+
+struct WidgetContainer {
+    state: WidgetState,
+    frame_last_used: u64,
 }
 
 #[expect(clippy::large_enum_variant)]
@@ -238,8 +342,3 @@ pub(crate) enum DrawCommand<'a> {
     Primitive(Primitive),
     TextLayout(&'a parley::Layout<Color>, [f32; 2]),
 }
-
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
-pub(crate) struct UiElementId(pub(crate) u16);
-
-pub(crate) type NodeIndexArray = SmallVec<[UiElementId; 8]>;

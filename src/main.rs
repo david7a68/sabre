@@ -11,6 +11,7 @@ use sabre::Size::Grow;
 use sabre::UiBuilder;
 use sabre::ViewportConfig;
 use sabre::text::TextStyle;
+use sabre::widgets::Button;
 use tracing::Level;
 use tracing::info;
 use tracing_subscriber::layer::SubscriberExt;
@@ -96,61 +97,72 @@ impl ViewportState {
         ui.color(Color::srgb(0.1, 0.2, 0.3, 1.0))
             .child_alignment(Alignment::Center, Alignment::Center);
 
-        let _menu = ui
-            .container()
-            .width(200.0)
-            .child_direction(LayoutDirection::Vertical)
-            .with_container(|ui| {
-                ui.child_minor_alignment(Alignment::Center)
-                    .width(Grow)
-                    .color(Color::WHITE)
-                    .padding(Padding {
-                        left: 15.0,
-                        right: 15.0,
-                        top: 15.0,
-                        bottom: 15.0,
-                    })
-                    .label("Menu Item 1", &self.text_style, None, Color::LIGHT_GRAY)
-                    .rect(None, Grow, None)
-                    .rect(45.0, 45.0, Color::RED);
-            })
-            .with_container(|ui| {
-                ui.child_minor_alignment(Alignment::Center)
-                    .width(Grow)
-                    .color(Color::WHITE)
-                    .padding(Padding {
-                        left: 15.0,
-                        right: 15.0,
-                        top: 15.0,
-                        bottom: 15.0,
-                    })
-                    .label(
-                        "modern morning merman",
-                        &self.text_style,
-                        None,
-                        Color::LIGHT_GRAY,
-                    )
-                    .rect(None, Grow, None)
-                    .rect(45.0, 45.0, Color::RED);
-            })
-            .with_container(|ui| {
-                ui.child_minor_alignment(Alignment::Center)
-                    .width(Grow)
-                    .color(Color::WHITE)
-                    .padding(Padding {
-                        left: 15.0,
-                        right: 15.0,
-                        top: 15.0,
-                        bottom: 15.0,
-                    })
-                    .label(
-                        "VA To ff ti it tt ft",
-                        &self.text_style,
-                        None,
-                        Color::LIGHT_GRAY,
-                    )
-                    .rect(None, Grow, None)
-                    .rect(45.0, 45.0, Color::RED);
-            });
+        let mut menu = ui.child();
+
+        menu.width(200.0).child_direction(LayoutDirection::Vertical);
+
+        if menu
+            .add(
+                Button::new()
+                    .size(Grow, None)
+                    .label("Menu Item 1", &self.text_style),
+            )
+            .is_clicked
+        {
+            info!("Menu Item 1 clicked");
+        };
+
+        menu.with_child(|ui| {
+            ui.child_minor_alignment(Alignment::Center)
+                .width(Grow)
+                .color(Color::WHITE)
+                .padding(Padding {
+                    left: 15.0,
+                    right: 15.0,
+                    top: 15.0,
+                    bottom: 15.0,
+                })
+                .label("Menu Item 1", &self.text_style, None, Color::LIGHT_GRAY)
+                .rect(None, Grow, None)
+                .rect(45.0, 45.0, Color::RED);
+        })
+        .with_child(|ui| {
+            ui.child_minor_alignment(Alignment::Center)
+                .width(Grow)
+                .color(Color::WHITE)
+                .padding(Padding {
+                    left: 15.0,
+                    right: 15.0,
+                    top: 15.0,
+                    bottom: 15.0,
+                })
+                .label(
+                    "modern morning merman",
+                    &self.text_style,
+                    None,
+                    Color::LIGHT_GRAY,
+                )
+                .rect(None, Grow, None)
+                .rect(45.0, 45.0, Color::RED);
+        })
+        .with_child(|ui| {
+            ui.child_minor_alignment(Alignment::Center)
+                .width(Grow)
+                .color(Color::WHITE)
+                .padding(Padding {
+                    left: 15.0,
+                    right: 15.0,
+                    top: 15.0,
+                    bottom: 15.0,
+                })
+                .label(
+                    "VA To ff ti it tt ft",
+                    &self.text_style,
+                    None,
+                    Color::LIGHT_GRAY,
+                )
+                .rect(None, Grow, None)
+                .rect(45.0, 45.0, Color::RED);
+        });
     }
 }

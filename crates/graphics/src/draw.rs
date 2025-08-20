@@ -77,6 +77,10 @@ impl Canvas {
         &self.storage
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.storage.primitives.is_empty()
+    }
+
     #[must_use]
     pub fn has_unready_textures(&self) -> bool {
         self.storage.has_unready_textures

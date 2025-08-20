@@ -1,10 +1,9 @@
 use std::collections::HashMap;
 
 use graphics::Color;
+use smallvec::SmallVec;
 
 use crate::text::TextAlignment;
-use crate::ui::NodeIndexArray;
-use crate::ui::UiElementId;
 pub(crate) use Size::*;
 
 /// Single-dimension size for UI elements.
@@ -95,6 +94,11 @@ pub(crate) struct LayoutNodeResult {
     pub height: f32,
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub(crate) struct UiElementId(pub(crate) u16);
+
+pub(crate) type NodeIndexArray = SmallVec<[UiElementId; 8]>;
+
 #[derive(Default, Debug)]
 pub(crate) struct LayoutNode {
     pub atom: Atom,
@@ -102,7 +106,7 @@ pub(crate) struct LayoutNode {
     has_content: Option<UiElementId>,
 }
 
-pub(crate) struct LayoutTree {
+pub(crate) struct LayoutTree<T> {
     nodes: Vec<LayoutNode>,
     children: Vec<NodeIndexArray>,
 
@@ -112,34 +116,49 @@ pub(crate) struct LayoutTree {
     /// less frequently than the nodes themselves, and that they are often much
     /// larger in size.
     content: HashMap<UiElementId, LayoutNodeContent>,
+
+    references: Vec<Reference<T>>,
 }
 
-impl Default for LayoutTree {
+struct Reference<T> {
+    id: UiElementId,
+    value: T,
+}
+
+impl<T> Default for LayoutTree<T> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl LayoutTree {
+impl<T> LayoutTree<T> {
     pub fn new() -> Self {
         Self {
             nodes: Vec::new(),
             children: Vec::new(),
             content: HashMap::new(),
+            references: Vec::new(),
         }
     }
 
     pub fn iter_nodes(
         &self,
-    ) -> impl Iterator<Item = (&LayoutNode, Option<LayoutNodeContentRef<'_>>)> {
-        self.nodes.iter().map(|n| {
+    ) -> impl Iterator<Item = (UiElementId, &LayoutNode, Option<LayoutNodeContentRef<'_>>)> {
+        self.nodes.iter().enumerate().map(|(id, n)| {
             let content = n.has_content.and_then(|id| {
                 self.content.get(&id).map(|t| match t {
                     LayoutNodeContent::Text { layout, .. } => LayoutNodeContentRef::Text(layout),
                 })
             });
 
-            (n, content)
+            (UiElementId(id as u16), n, content)
+        })
+    }
+
+    pub fn iter_references(&self) -> impl Iterator<Item = (&LayoutNode, &T)> {
+        self.references.iter().map(|r| {
+            let node = &self.nodes[r.id.0 as usize];
+            (node, &r.value)
         })
     }
 
@@ -172,6 +191,23 @@ impl LayoutTree {
         if let Some(parent_id) = parent {
             self.children[parent_id.0 as usize].push(node_id);
         }
+
+        node_id
+    }
+
+    pub fn add_with_ref(
+        &mut self,
+        parent: Option<UiElementId>,
+        atom: Atom,
+        content: Option<LayoutNodeContent>,
+        reference: T,
+    ) -> UiElementId {
+        let node_id = self.add(parent, atom, content);
+
+        self.references.push(Reference {
+            id: node_id,
+            value: reference,
+        });
 
         node_id
     }
@@ -244,6 +280,7 @@ pub(crate) fn compute_layout(
     compute_minor_axis_offsets::<HorizontalMode>(nodes, children, node_id, 0.0);
 }
 
+#[tracing::instrument(skip(nodes, children))]
 fn compute_major_axis_fit_sizes<D: LayoutDirectionExt>(
     nodes: &mut [LayoutNode],
     children: &[NodeIndexArray],
@@ -278,9 +315,11 @@ fn compute_major_axis_fit_sizes<D: LayoutDirectionExt>(
     };
 
     D::set_major_size(&mut nodes[node_id.0 as usize], size);
+
     size
 }
 
+#[tracing::instrument(skip(nodes, children), fields(direction = ?D::DIRECTION))]
 fn compute_major_axis_grow_sizes<D: LayoutDirectionExt>(
     nodes: &mut [LayoutNode],
     children: &[NodeIndexArray],
@@ -293,7 +332,7 @@ fn compute_major_axis_grow_sizes<D: LayoutDirectionExt>(
         return compute_minor_axis_grow_sizes::<D::Other>(nodes, children, node_id);
     }
 
-    let mut grow_children = NodeIndexArray::new();
+    let mut grow_children = Vec::new();
     let mut remaining_size =
         D::major_size_result(node) - get_major_axis_empty_size::<D>(node, node_children);
 
@@ -341,7 +380,7 @@ fn compute_major_axis_grow_sizes<D: LayoutDirectionExt>(
                     remaining_size -= actual_size - child_size;
 
                     // Stop growing the child if it has reached its max size
-                    is_done
+                    !is_done
                 }
                 Grow => {
                     D::set_major_size(child, child_size + even_size);
@@ -360,6 +399,7 @@ fn compute_major_axis_grow_sizes<D: LayoutDirectionExt>(
     }
 }
 
+#[tracing::instrument(skip(nodes, children))]
 fn compute_major_axis_offsets<D: LayoutDirectionExt>(
     nodes: &mut [LayoutNode],
     children: &[NodeIndexArray],
@@ -452,6 +492,7 @@ fn compute_major_axis_offsets<D: LayoutDirectionExt>(
     current_offset + size
 }
 
+#[tracing::instrument(skip_all)]
 fn compute_text_heights(
     measure_text: &mut impl FnMut(&LayoutNode, f32) -> Option<f32>,
     nodes: &mut [LayoutNode],
@@ -473,6 +514,7 @@ fn compute_text_heights(
     }
 }
 
+#[tracing::instrument(skip(nodes, children))]
 fn compute_minor_axis_fit_sizes<D: LayoutDirectionExt>(
     nodes: &mut [LayoutNode],
     children: &[NodeIndexArray],
@@ -508,6 +550,7 @@ fn compute_minor_axis_fit_sizes<D: LayoutDirectionExt>(
     size
 }
 
+#[tracing::instrument(skip(nodes, children), fields(direction = ?D::DIRECTION))]
 fn compute_minor_axis_grow_sizes<D: LayoutDirectionExt>(
     nodes: &mut [LayoutNode],
     children: &[NodeIndexArray],
@@ -533,6 +576,7 @@ fn compute_minor_axis_grow_sizes<D: LayoutDirectionExt>(
     }
 }
 
+#[tracing::instrument(skip(nodes, children))]
 fn compute_minor_axis_offsets<D: LayoutDirectionExt>(
     nodes: &mut [LayoutNode],
     children: &[NodeIndexArray],
