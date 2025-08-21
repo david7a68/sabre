@@ -332,7 +332,7 @@ fn compute_major_axis_grow_sizes<D: LayoutDirectionExt>(
         return compute_minor_axis_grow_sizes::<D::Other>(nodes, children, node_id);
     }
 
-    let mut grow_children = Vec::new();
+    let mut grow_children = NodeIndexArray::new();
     let mut remaining_size =
         D::major_size_result(node) - get_major_axis_empty_size::<D>(node, node_children);
 
@@ -373,7 +373,7 @@ fn compute_major_axis_grow_sizes<D: LayoutDirectionExt>(
                     let (is_done, actual_size) = if tentative_size > max {
                         (true, max)
                     } else {
-                        (false, child_size + even_size)
+                        (false, tentative_size)
                     };
 
                     D::set_major_size(child, actual_size);

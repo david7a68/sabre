@@ -11,7 +11,7 @@ use sabre::Size::Grow;
 use sabre::UiBuilder;
 use sabre::ViewportConfig;
 use sabre::text::TextStyle;
-use sabre::widgets::Button;
+use sabre::widgets::UiBuilderWidgetsExt;
 use tracing::Level;
 use tracing::info;
 use tracing_subscriber::layer::SubscriberExt;
@@ -101,14 +101,7 @@ impl ViewportState {
 
         menu.width(200.0).child_direction(LayoutDirection::Vertical);
 
-        if menu
-            .add(
-                Button::new()
-                    .size(Grow, None)
-                    .label("Menu Item 1", &self.text_style),
-            )
-            .is_clicked
-        {
+        if menu.text_button("Menu Button", &self.text_style).is_clicked {
             info!("Menu Item 1 clicked");
         };
 

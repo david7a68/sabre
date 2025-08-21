@@ -1,15 +1,51 @@
+use core::f32;
 use std::borrow::Cow;
 
 use glamour::Contains;
 use graphics::Color;
 
 use crate::Alignment;
-use crate::Fixed;
 use crate::Response;
 use crate::Size;
 use crate::UiBuilder;
 use crate::Widget;
 use crate::text::TextStyle;
+
+pub trait UiBuilderWidgetsExt {
+    fn plane(
+        &mut self,
+        width: impl Into<Size>,
+        height: impl Into<Size>,
+        color: Option<Color>,
+    ) -> Response;
+
+    fn text_button<'a>(&mut self, label: impl Into<Cow<'a, str>>, style: &'a TextStyle)
+    -> Response;
+}
+
+impl UiBuilderWidgetsExt for UiBuilder<'_> {
+    fn plane(
+        &mut self,
+        width: impl Into<Size>,
+        height: impl Into<Size>,
+        color: Option<Color>,
+    ) -> Response {
+        Plane {
+            width: width.into(),
+            height: height.into(),
+            color,
+        }
+        .apply(self)
+    }
+
+    fn text_button<'a>(
+        &mut self,
+        label: impl Into<Cow<'a, str>>,
+        style: &'a TextStyle,
+    ) -> Response {
+        Button::new().label(label, style).apply(self)
+    }
+}
 
 pub struct Plane {
     pub width: Size,
@@ -45,8 +81,14 @@ impl<'a> Button<'a> {
     pub fn new() -> Self {
         Self {
             label: None,
-            width: Fixed(20.0),
-            height: Fixed(10.0),
+            width: Size::Flex {
+                min: 20.0,
+                max: f32::MAX,
+            },
+            height: Size::Flex {
+                min: 10.0,
+                max: f32::MAX,
+            },
         }
     }
 
