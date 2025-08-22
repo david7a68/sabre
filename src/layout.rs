@@ -2,7 +2,7 @@ use graphics::Color;
 use smallvec::SmallVec;
 
 use crate::text::TextAlignment;
-pub(crate) use Size::*;
+pub use Size::*;
 
 /// Single-dimension size for UI elements.
 #[derive(Clone, Copy, Debug, PartialEq)]

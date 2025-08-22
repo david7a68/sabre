@@ -17,7 +17,7 @@ impl WidgetId {
         value.hash(&mut hasher);
 
         let value = hasher.finish();
-        WidgetId(NonZeroU64::new(value).expect("WidgetId cannot be zero"))
+        WidgetId(NonZeroU64::new(value).unwrap_or(NonZeroU64::MIN))
     }
 
     pub fn then(self, other: impl Hash) -> Self {
@@ -27,7 +27,7 @@ impl WidgetId {
         other.hash(&mut hasher);
 
         let value = hasher.finish();
-        WidgetId(NonZeroU64::new(value).expect("WidgetId cannot be zero"))
+        WidgetId(NonZeroU64::new(value).unwrap_or(NonZeroU64::MIN))
     }
 }
 

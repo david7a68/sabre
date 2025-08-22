@@ -73,6 +73,13 @@ impl UiBuilder<'_> {
         self
     }
 
+    pub fn size(&mut self, width: impl Into<Size>, height: impl Into<Size>) -> &mut Self {
+        let atom = self.context.ui_tree.atom_mut(self.index);
+        atom.width = width.into();
+        atom.height = height.into();
+        self
+    }
+
     pub fn child_major_alignment(&mut self, alignment: Alignment) -> &mut Self {
         self.context.ui_tree.atom_mut(self.index).major_align = alignment;
         self

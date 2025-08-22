@@ -151,8 +151,8 @@ impl Widget for Button<'_> {
 
         widget
             .child_alignment(Alignment::Center, Alignment::Center)
-            .width(self.width)
-            .height(self.height)
+            .size(self.width, self.height)
+            .padding(self.padding)
             .color(color);
 
         if let Some((label, style)) = self.label {

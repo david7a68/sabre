@@ -7,6 +7,7 @@ use sabre::Color;
 use sabre::Context;
 use sabre::LayoutDirection;
 use sabre::Padding;
+use sabre::Size::Flex;
 use sabre::Size::Grow;
 use sabre::UiBuilder;
 use sabre::ViewportConfig;
@@ -99,7 +100,11 @@ impl ViewportState {
 
         let mut menu = ui.child();
 
-        menu.width(Grow).child_direction(LayoutDirection::Vertical);
+        menu.width(Flex {
+            min: 200.0,
+            max: 600.0,
+        })
+        .child_direction(LayoutDirection::Vertical);
 
         if menu.text_button("Menu Button", &self.text_style).is_clicked {
             info!("Menu Item 1 clicked");
@@ -116,7 +121,7 @@ impl ViewportState {
                     bottom: 15.0,
                 })
                 .label("Menu Item 1", &self.text_style, None)
-                .rect(None, Grow, None)
+                .rect(Grow, None, None)
                 .rect(45.0, 45.0, Color::RED);
         });
 
@@ -131,7 +136,7 @@ impl ViewportState {
                     bottom: 15.0,
                 })
                 .label("modern morning merman even longer", &self.text_style, None)
-                .rect(None, Grow, None)
+                .rect(Grow, None, None)
                 .rect(45.0, 45.0, Color::RED);
         });
 
@@ -146,7 +151,7 @@ impl ViewportState {
                     bottom: 15.0,
                 })
                 .label("VA To ff ti it tt ft", &self.text_style, None)
-                .rect(None, Grow, None)
+                .rect(Grow, None, None)
                 .rect(45.0, 45.0, Color::RED);
         });
     }
