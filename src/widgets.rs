@@ -5,6 +5,7 @@ use glamour::Contains;
 use graphics::Color;
 
 use crate::Alignment;
+use crate::Padding;
 use crate::Response;
 use crate::Size;
 use crate::UiBuilder;
@@ -68,6 +69,7 @@ impl Widget for Plane {
 pub struct Button<'a> {
     pub width: Size,
     pub height: Size,
+    pub padding: Padding,
     pub label: Option<(Cow<'a, str>, &'a TextStyle)>,
 }
 
@@ -81,11 +83,17 @@ impl<'a> Button<'a> {
     pub fn new() -> Self {
         Self {
             label: None,
-            width: Size::Flex {
+            padding: Padding {
+                left: 10.0,
+                right: 10.0,
+                top: 5.0,
+                bottom: 5.0,
+            },
+            width: Size::Fit {
                 min: 20.0,
                 max: f32::MAX,
             },
-            height: Size::Flex {
+            height: Size::Fit {
                 min: 10.0,
                 max: f32::MAX,
             },
@@ -105,6 +113,11 @@ impl<'a> Button<'a> {
     pub fn size(mut self, width: impl Into<Size>, height: impl Into<Size>) -> Self {
         self.width = width.into();
         self.height = height.into();
+        self
+    }
+
+    pub fn padding(mut self, padding: Padding) -> Self {
+        self.padding = padding;
         self
     }
 

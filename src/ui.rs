@@ -294,6 +294,14 @@ impl UiContext {
 
         self.frame_counter += 1;
 
+        // println!(
+        //     "{:#?}",
+        //     self.ui_tree
+        //         .iter_nodes()
+        //         .map(|(node, _, _)| &node.result)
+        //         .collect::<Vec<_>>()
+        // );
+
         self.ui_tree
             .iter_nodes()
             .map(|(node, content, widget_id)| {

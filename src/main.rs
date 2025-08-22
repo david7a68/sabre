@@ -99,7 +99,7 @@ impl ViewportState {
 
         let mut menu = ui.child();
 
-        menu.width(200.0).child_direction(LayoutDirection::Vertical);
+        menu.width(Grow).child_direction(LayoutDirection::Vertical);
 
         if menu.text_button("Menu Button", &self.text_style).is_clicked {
             info!("Menu Item 1 clicked");
@@ -118,8 +118,9 @@ impl ViewportState {
                 .label("Menu Item 1", &self.text_style, None)
                 .rect(None, Grow, None)
                 .rect(45.0, 45.0, Color::RED);
-        })
-        .with_child(|ui| {
+        });
+
+        menu.with_child(|ui| {
             ui.child_minor_alignment(Alignment::Center)
                 .width(Grow)
                 .color(Color::WHITE)
@@ -129,11 +130,12 @@ impl ViewportState {
                     top: 15.0,
                     bottom: 15.0,
                 })
-                .label("modern morning merman", &self.text_style, None)
+                .label("modern morning merman even longer", &self.text_style, None)
                 .rect(None, Grow, None)
                 .rect(45.0, 45.0, Color::RED);
-        })
-        .with_child(|ui| {
+        });
+
+        menu.with_child(|ui| {
             ui.child_minor_alignment(Alignment::Center)
                 .width(Grow)
                 .color(Color::WHITE)

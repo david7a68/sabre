@@ -237,7 +237,7 @@ impl<T> LayoutTree<T> {
         compute_minor_axis_offsets::<HorizontalMode>(nodes, &self.children, node_id, 0.0);
     }
 }
-#[tracing::instrument(skip(nodes, children))]
+
 fn compute_major_axis_fit_sizes<D: LayoutDirectionExt>(
     nodes: &mut [LayoutNode],
     children: &[NodeIndexArray],
@@ -264,7 +264,8 @@ fn compute_major_axis_fit_sizes<D: LayoutDirectionExt>(
 
     let size = match size_spec {
         Size::Fixed(size) => size,
-        Size::Fit { min, max } | Size::Flex { min, max } => child_sizes.clamp(min, max),
+        Size::Fit { min, max } => child_sizes.clamp(min, max),
+        Size::Flex { max, .. } => max,
         Size::Grow => {
             // Grow is handled in the offsets phase
             0.0
@@ -276,7 +277,6 @@ fn compute_major_axis_fit_sizes<D: LayoutDirectionExt>(
     size
 }
 
-#[tracing::instrument(skip(nodes, children), fields(direction = ?D::DIRECTION))]
 fn compute_major_axis_grow_sizes<D: LayoutDirectionExt>(
     nodes: &mut [LayoutNode],
     children: &[NodeIndexArray],
@@ -308,8 +308,8 @@ fn compute_major_axis_grow_sizes<D: LayoutDirectionExt>(
     }
 
     // Step 2: Distribute the remaining size evenly among the grow children.
-    while remaining_size > 0.0 && !grow_children.is_empty() {
-        let even_size = remaining_size / grow_children.len() as f32;
+    while remaining_size.abs() > 0.5 && !grow_children.is_empty() {
+        let distributed_size = remaining_size / grow_children.len() as f32;
 
         // For each grow child, distribute the available grow size evenly
         // between all of them, unless it exceeds their max size. If that
@@ -325,7 +325,7 @@ fn compute_major_axis_grow_sizes<D: LayoutDirectionExt>(
                     false
                 }
                 Flex { max, .. } => {
-                    let tentative_size = child_size + even_size;
+                    let tentative_size = child_size + distributed_size;
 
                     let (is_done, actual_size) = if tentative_size > max {
                         (true, max)
@@ -339,13 +339,14 @@ fn compute_major_axis_grow_sizes<D: LayoutDirectionExt>(
                     // Stop growing the child if it has reached its max size
                     !is_done
                 }
-                Grow => {
-                    D::set_major_size(child, child_size + even_size);
-                    remaining_size -= even_size;
+                Grow if remaining_size > 0.0 => {
+                    D::set_major_size(child, child_size + distributed_size);
+                    remaining_size -= distributed_size;
 
                     // Grow children are always considered to have space
                     true
                 }
+                Grow => false,
             }
         });
     }
@@ -356,7 +357,6 @@ fn compute_major_axis_grow_sizes<D: LayoutDirectionExt>(
     }
 }
 
-#[tracing::instrument(skip(nodes, children))]
 fn compute_major_axis_offsets<D: LayoutDirectionExt>(
     nodes: &mut [LayoutNode],
     children: &[NodeIndexArray],
@@ -449,7 +449,6 @@ fn compute_major_axis_offsets<D: LayoutDirectionExt>(
     current_offset + size
 }
 
-#[tracing::instrument(skip_all)]
 fn compute_text_heights(
     measure_text: &mut impl FnMut(UiElementId, f32) -> Option<f32>,
     nodes: &mut [LayoutNode],
@@ -473,7 +472,6 @@ fn compute_text_heights(
     }
 }
 
-#[tracing::instrument(skip(nodes, children))]
 fn compute_minor_axis_fit_sizes<D: LayoutDirectionExt>(
     nodes: &mut [LayoutNode],
     children: &[NodeIndexArray],
@@ -501,7 +499,8 @@ fn compute_minor_axis_fit_sizes<D: LayoutDirectionExt>(
 
     let size = match size_spec {
         Fixed(size) => size,
-        Fit { min, max } | Flex { min, max } => (child_sizes + size_padding).clamp(min, max),
+        Fit { min, max } => (child_sizes + size_padding).clamp(min, max),
+        Flex { max, .. } => max,
         Grow => 0.0, // Grow is handled later
     };
 
@@ -509,7 +508,6 @@ fn compute_minor_axis_fit_sizes<D: LayoutDirectionExt>(
     size
 }
 
-#[tracing::instrument(skip(nodes, children), fields(direction = ?D::DIRECTION))]
 fn compute_minor_axis_grow_sizes<D: LayoutDirectionExt>(
     nodes: &mut [LayoutNode],
     children: &[NodeIndexArray],
@@ -535,7 +533,6 @@ fn compute_minor_axis_grow_sizes<D: LayoutDirectionExt>(
     }
 }
 
-#[tracing::instrument(skip(nodes, children))]
 fn compute_minor_axis_offsets<D: LayoutDirectionExt>(
     nodes: &mut [LayoutNode],
     children: &[NodeIndexArray],
