@@ -308,7 +308,7 @@ impl<App: AppLifecycleHandler> ApplicationHandler<WinitEvent> for WinitApp<App> 
                 window.window.request_redraw();
             }
             WindowEvent::Resized(physical_size) => {
-                let window = self.windows.get_mut(&window_id).unwrap();
+                let window = self.windows.get(&window_id).unwrap();
                 let viewport = self.runtime.viewports.get_mut(window.viewport).unwrap();
 
                 viewport.config.width = physical_size.width;
@@ -316,9 +316,6 @@ impl<App: AppLifecycleHandler> ApplicationHandler<WinitEvent> for WinitApp<App> 
 
                 viewport.input.window_size.width = physical_size.width as f32;
                 viewport.input.window_size.height = physical_size.height as f32;
-
-                let input = viewport.input.clone();
-                self.runtime.repaint([(window, input)]);
             }
             WindowEvent::CloseRequested => {
                 let window = self.windows.remove(&window_id).unwrap();
