@@ -93,12 +93,30 @@ pub(crate) struct LayoutNodeResult {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub(crate) struct UiElementId(pub(crate) u16);
 
-pub(crate) type NodeIndexArray = SmallVec<[UiElementId; 8]>;
+type NodeIndexArray = SmallVec<[UiElementId; 8]>;
 
 #[derive(Default, Debug)]
 pub(crate) struct LayoutNode {
     pub atom: Atom,
     pub result: LayoutNodeResult,
+}
+
+#[expect(clippy::large_enum_variant)]
+pub(crate) enum LayoutNodeContent {
+    None,
+    Fill {
+        color: Color,
+    },
+    Text {
+        layout: parley::Layout<Color>,
+        alignment: TextAlignment,
+    },
+}
+
+impl From<Option<LayoutNodeContent>> for LayoutNodeContent {
+    fn from(content: Option<LayoutNodeContent>) -> Self {
+        content.unwrap_or(LayoutNodeContent::None)
+    }
 }
 
 pub(crate) struct LayoutTree<T> {
@@ -110,14 +128,7 @@ pub(crate) struct LayoutTree<T> {
     /// These are stored separately under the assumption that they occur much
     /// less frequently than the nodes themselves, and that they are often much
     /// larger in size.
-    content: Vec<LayoutNodeContent>,
-
-    references: Vec<Reference<T>>,
-}
-
-struct Reference<T> {
-    id: UiElementId,
-    value: T,
+    content: Vec<(LayoutNodeContent, Option<T>)>,
 }
 
 impl<T> Default for LayoutTree<T> {
@@ -132,23 +143,20 @@ impl<T> LayoutTree<T> {
             nodes: Vec::new(),
             children: Vec::new(),
             content: Vec::new(),
-            references: Vec::new(),
         }
     }
 
-    pub fn iter_nodes(&self) -> impl Iterator<Item = (&LayoutNode, LayoutNodeContentRef<'_>)> {
-        self.nodes.iter().zip(self.content.iter().map(|t| match t {
-            LayoutNodeContent::None => LayoutNodeContentRef::None,
-            LayoutNodeContent::Fill { color } => LayoutNodeContentRef::Color(color),
-            LayoutNodeContent::Text { layout, .. } => LayoutNodeContentRef::Text(layout),
-        }))
-    }
-
-    pub fn iter_references(&self) -> impl Iterator<Item = (&LayoutNode, &T)> {
-        self.references.iter().map(|r| {
-            let node = &self.nodes[r.id.0 as usize];
-            (node, &r.value)
-        })
+    pub fn iter_nodes(
+        &self,
+    ) -> impl Iterator<Item = (&LayoutNode, &LayoutNodeContent, Option<&T>)> {
+        self.nodes
+            .iter()
+            .zip(
+                self.content
+                    .iter()
+                    .map(|(content, t)| (content, t.as_ref())),
+            )
+            .map(|(node, (content, reference))| (node, content, reference))
     }
 
     pub fn atom_mut(&mut self, node: UiElementId) -> &mut Atom {
@@ -156,7 +164,7 @@ impl<T> LayoutTree<T> {
     }
 
     pub fn content_mut(&mut self, node: UiElementId) -> &mut LayoutNodeContent {
-        &mut self.content[node.0 as usize]
+        &mut self.content[node.0 as usize].0
     }
 
     pub fn add(
@@ -164,6 +172,7 @@ impl<T> LayoutTree<T> {
         parent: Option<UiElementId>,
         atom: Atom,
         content: impl Into<LayoutNodeContent>,
+        reference: Option<T>,
     ) -> UiElementId {
         let node_id = UiElementId(self.nodes.len() as u16);
 
@@ -173,29 +182,12 @@ impl<T> LayoutTree<T> {
         };
 
         self.nodes.push(node);
-        self.content.push(content.into());
+        self.content.push((content.into(), reference));
         self.children.push(NodeIndexArray::new());
 
         if let Some(parent_id) = parent {
             self.children[parent_id.0 as usize].push(node_id);
         }
-
-        node_id
-    }
-
-    pub fn add_with_ref(
-        &mut self,
-        parent: Option<UiElementId>,
-        atom: Atom,
-        content: impl Into<LayoutNodeContent>,
-        reference: T,
-    ) -> UiElementId {
-        let node_id = self.add(parent, atom, content);
-
-        self.references.push(Reference {
-            id: node_id,
-            value: reference,
-        });
 
         node_id
     }
@@ -225,7 +217,7 @@ impl<T> LayoutTree<T> {
         compute_text_heights(
             &mut |node_id, max_width| {
                 let LayoutNodeContent::Text { layout, alignment } =
-                    &mut self.content[node_id.0 as usize]
+                    &mut self.content[node_id.0 as usize].0
                 else {
                     return None;
                 };
@@ -245,31 +237,6 @@ impl<T> LayoutTree<T> {
         compute_minor_axis_offsets::<HorizontalMode>(nodes, &self.children, node_id, 0.0);
     }
 }
-
-#[expect(clippy::large_enum_variant)]
-pub(crate) enum LayoutNodeContent {
-    None,
-    Fill {
-        color: Color,
-    },
-    Text {
-        layout: parley::Layout<Color>,
-        alignment: TextAlignment,
-    },
-}
-
-impl From<Option<LayoutNodeContent>> for LayoutNodeContent {
-    fn from(content: Option<LayoutNodeContent>) -> Self {
-        content.unwrap_or(LayoutNodeContent::None)
-    }
-}
-
-pub(crate) enum LayoutNodeContentRef<'a> {
-    None,
-    Color(&'a Color),
-    Text(&'a parley::Layout<Color>),
-}
-
 #[tracing::instrument(skip(nodes, children))]
 fn compute_major_axis_fit_sizes<D: LayoutDirectionExt>(
     nodes: &mut [LayoutNode],
@@ -667,12 +634,6 @@ trait LayoutDirectionExt {
 
 struct HorizontalMode;
 
-impl std::fmt::Debug for HorizontalMode {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "horizontal")
-    }
-}
-
 impl LayoutDirectionExt for HorizontalMode {
     type Other = VerticalMode;
     const DIRECTION: LayoutDirection = LayoutDirection::Horizontal;
@@ -778,11 +739,5 @@ impl LayoutDirectionExt for VerticalMode {
 
     fn minor_axis_padding_end(node: &LayoutNode) -> f32 {
         node.atom.inner_padding.right
-    }
-}
-
-impl std::fmt::Debug for VerticalMode {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "vertical")
     }
 }

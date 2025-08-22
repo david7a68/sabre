@@ -11,7 +11,6 @@ use graphics::Primitive;
 
 use crate::Atom;
 use crate::LayoutNodeContent;
-use crate::LayoutNodeContentRef;
 use crate::LayoutTree;
 use crate::Response;
 use crate::UiElementId;
@@ -132,6 +131,7 @@ impl UiBuilder<'_> {
             LayoutNodeContent::Fill {
                 color: color.into(),
             },
+            None,
         );
 
         self
@@ -160,20 +160,21 @@ impl UiBuilder<'_> {
                 height: height.into(),
                 ..Default::default()
             },
-            Some(LayoutNodeContent::Text {
+            LayoutNodeContent::Text {
                 layout,
                 alignment: style.align,
-            }),
+            },
+            None,
         );
 
         self
     }
 
     pub fn container(&mut self) -> UiBuilder<'_> {
-        let container_index = self
-            .context
-            .ui_tree
-            .add(Some(self.index), Atom::default(), None);
+        let container_index =
+            self.context
+                .ui_tree
+                .add(Some(self.index), Atom::default(), None, None);
 
         UiBuilder {
             id: self.id,
@@ -188,7 +189,7 @@ impl UiBuilder<'_> {
         let child_index = self
             .context
             .ui_tree
-            .add(Some(self.index), Atom::default(), None);
+            .add(Some(self.index), Atom::default(), None, None);
 
         self.num_child_widgets += 1;
         UiBuilder {
@@ -206,7 +207,7 @@ impl UiBuilder<'_> {
         let child_index =
             self.context
                 .ui_tree
-                .add_with_ref(Some(self.index), Atom::default(), None, child_id);
+                .add(Some(self.index), Atom::default(), None, Some(child_id));
 
         self.num_child_widgets += 1;
         UiBuilder {
@@ -256,7 +257,7 @@ impl UiContext {
         // Set up the root node.
         let id = WidgetId::new("root");
 
-        let root = self.ui_tree.add_with_ref(
+        let root = self.ui_tree.add(
             None,
             Atom {
                 width: input.window_size.width.into(),
@@ -266,13 +267,11 @@ impl UiContext {
             LayoutNodeContent::Fill {
                 color: Color::WHITE,
             },
-            id,
+            Some(id),
         );
 
         self.input = input;
         self.time_delta = time_delta;
-
-        debug_assert_eq!(root, UiElementId(0));
 
         UiBuilder {
             id,
@@ -296,29 +295,30 @@ impl UiContext {
         self.frame_counter += 1;
 
         self.ui_tree
-            .iter_references()
-            .for_each(|(node, widget_id)| {
-                let container = WidgetContainer {
-                    state: WidgetState {
-                        placement: Rect {
-                            origin: Point2 {
-                                x: node.result.x,
-                                y: node.result.y,
-                            },
-                            size: Size2 {
-                                width: node.result.width,
-                                height: node.result.height,
+            .iter_nodes()
+            .map(|(node, content, widget_id)| {
+                if let Some(widget_id) = widget_id {
+                    let container = WidgetContainer {
+                        state: WidgetState {
+                            placement: Rect {
+                                origin: Point2 {
+                                    x: node.result.x,
+                                    y: node.result.y,
+                                },
+                                size: Size2 {
+                                    width: node.result.width,
+                                    height: node.result.height,
+                                },
                             },
                         },
-                    },
-                    frame_last_used: self.frame_counter,
-                };
+                        frame_last_used: self.frame_counter,
+                    };
 
-                self.widget_states.insert(*widget_id, container);
-            });
+                    self.widget_states.insert(*widget_id, container);
+                }
 
-        self.ui_tree
-            .iter_nodes()
+                (node, content)
+            })
             .filter_map(|(node, content)| {
                 let layout = &node.result;
 
@@ -329,8 +329,8 @@ impl UiContext {
                 let mut vec = ArrayVec::<_, 2>::new();
 
                 match content {
-                    LayoutNodeContentRef::None => {}
-                    LayoutNodeContentRef::Color(color) => {
+                    LayoutNodeContent::None => {}
+                    LayoutNodeContent::Fill { color } => {
                         vec.push(DrawCommand::Primitive(Primitive::new(
                             layout.x,
                             layout.y,
@@ -339,7 +339,7 @@ impl UiContext {
                             *color,
                         )));
                     }
-                    LayoutNodeContentRef::Text(text) => {
+                    LayoutNodeContent::Text { layout: text, .. } => {
                         vec.push(DrawCommand::TextLayout(text, [layout.x, layout.y]));
                     }
                 }
