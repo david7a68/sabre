@@ -57,49 +57,55 @@ impl UiBuilder<'_> {
     }
 
     pub fn color(&mut self, color: impl Into<Color>) -> &mut Self {
-        self.context.ui_tree.get_mut(self.index).color = color.into();
+        *self.context.ui_tree.content_mut(self.index) = LayoutNodeContent::Fill {
+            color: color.into(),
+        };
+
         self
     }
 
     pub fn width(&mut self, width: impl Into<Size>) -> &mut Self {
-        self.context.ui_tree.get_mut(self.index).width = width.into();
+        self.context.ui_tree.atom_mut(self.index).width = width.into();
         self
     }
 
     pub fn height(&mut self, height: impl Into<Size>) -> &mut Self {
-        self.context.ui_tree.get_mut(self.index).height = height.into();
+        self.context.ui_tree.atom_mut(self.index).height = height.into();
         self
     }
 
     pub fn child_major_alignment(&mut self, alignment: Alignment) -> &mut Self {
-        self.context.ui_tree.get_mut(self.index).major_align = alignment;
+        self.context.ui_tree.atom_mut(self.index).major_align = alignment;
         self
     }
 
     pub fn child_minor_alignment(&mut self, alignment: Alignment) -> &mut Self {
-        self.context.ui_tree.get_mut(self.index).minor_align = alignment;
+        self.context.ui_tree.atom_mut(self.index).minor_align = alignment;
         self
     }
 
     pub fn child_alignment(&mut self, major: Alignment, minor: Alignment) -> &mut Self {
-        let node = self.context.ui_tree.get_mut(self.index);
+        let node = self.context.ui_tree.atom_mut(self.index);
         node.major_align = major;
         node.minor_align = minor;
         self
     }
 
     pub fn child_direction(&mut self, direction: LayoutDirection) -> &mut Self {
-        self.context.ui_tree.get_mut(self.index).direction = direction;
+        self.context.ui_tree.atom_mut(self.index).direction = direction;
         self
     }
 
     pub fn child_spacing(&mut self, spacing: f32) -> &mut Self {
-        self.context.ui_tree.get_mut(self.index).inter_child_padding = spacing;
+        self.context
+            .ui_tree
+            .atom_mut(self.index)
+            .inter_child_padding = spacing;
         self
     }
 
     pub fn padding(&mut self, padding: Padding) -> &mut Self {
-        self.context.ui_tree.get_mut(self.index).inner_padding = padding;
+        self.context.ui_tree.atom_mut(self.index).inner_padding = padding;
         self
     }
 
@@ -119,24 +125,19 @@ impl UiBuilder<'_> {
         self.context.ui_tree.add(
             Some(self.index),
             Atom {
-                color: color.into(),
                 width: width.into(),
                 height: height.into(),
                 ..Default::default()
             },
-            None,
+            LayoutNodeContent::Fill {
+                color: color.into(),
+            },
         );
 
         self
     }
 
-    pub fn label(
-        &mut self,
-        text: &str,
-        style: &TextStyle,
-        height: impl Into<Size>,
-        background_color: impl Into<Color>,
-    ) -> &mut Self {
+    pub fn label(&mut self, text: &str, style: &TextStyle, height: impl Into<Size>) -> &mut Self {
         let mut layout = parley::Layout::new();
 
         let mut compute =
@@ -152,7 +153,6 @@ impl UiBuilder<'_> {
         self.context.ui_tree.add(
             Some(self.index),
             Atom {
-                color: background_color.into(),
                 width: Flex {
                     min: size.min,
                     max: size.max,
@@ -167,6 +167,21 @@ impl UiBuilder<'_> {
         );
 
         self
+    }
+
+    pub fn container(&mut self) -> UiBuilder<'_> {
+        let container_index = self
+            .context
+            .ui_tree
+            .add(Some(self.index), Atom::default(), None);
+
+        UiBuilder {
+            id: self.id,
+            context: self.context,
+            index: container_index,
+            text_context: self.text_context,
+            num_child_widgets: 0,
+        }
     }
 
     pub fn child(&mut self) -> UiBuilder<'_> {
@@ -244,12 +259,13 @@ impl UiContext {
         let root = self.ui_tree.add_with_ref(
             None,
             Atom {
-                color: Color::WHITE,
                 width: input.window_size.width.into(),
                 height: input.window_size.height.into(),
                 ..Default::default()
             },
-            None,
+            LayoutNodeContent::Fill {
+                color: Color::WHITE,
+            },
             id,
         );
 
@@ -303,7 +319,7 @@ impl UiContext {
 
         self.ui_tree
             .iter_nodes()
-            .filter_map(|(_, node, content)| {
+            .filter_map(|(node, content)| {
                 let layout = &node.result;
 
                 if layout.width == 0.0 || layout.height == 0.0 {
@@ -312,18 +328,20 @@ impl UiContext {
 
                 let mut vec = ArrayVec::<_, 2>::new();
 
-                if node.atom.color != Color::default() {
-                    vec.push(DrawCommand::Primitive(Primitive::new(
-                        layout.x,
-                        layout.y,
-                        layout.width,
-                        layout.height,
-                        node.atom.color,
-                    )));
-                }
-
-                if let Some(LayoutNodeContentRef::Text(text_layout)) = content {
-                    vec.push(DrawCommand::TextLayout(text_layout, [layout.x, layout.y]));
+                match content {
+                    LayoutNodeContentRef::None => {}
+                    LayoutNodeContentRef::Color(color) => {
+                        vec.push(DrawCommand::Primitive(Primitive::new(
+                            layout.x,
+                            layout.y,
+                            layout.width,
+                            layout.height,
+                            *color,
+                        )));
+                    }
+                    LayoutNodeContentRef::Text(text) => {
+                        vec.push(DrawCommand::TextLayout(text, [layout.x, layout.y]));
+                    }
                 }
 
                 Some(vec.into_iter())

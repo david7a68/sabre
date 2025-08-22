@@ -115,7 +115,7 @@ impl ViewportState {
                     top: 15.0,
                     bottom: 15.0,
                 })
-                .label("Menu Item 1", &self.text_style, None, Color::LIGHT_GRAY)
+                .label("Menu Item 1", &self.text_style, None)
                 .rect(None, Grow, None)
                 .rect(45.0, 45.0, Color::RED);
         })
@@ -129,12 +129,7 @@ impl ViewportState {
                     top: 15.0,
                     bottom: 15.0,
                 })
-                .label(
-                    "modern morning merman",
-                    &self.text_style,
-                    None,
-                    Color::LIGHT_GRAY,
-                )
+                .label("modern morning merman", &self.text_style, None)
                 .rect(None, Grow, None)
                 .rect(45.0, 45.0, Color::RED);
         })
@@ -148,12 +143,7 @@ impl ViewportState {
                     top: 15.0,
                     bottom: 15.0,
                 })
-                .label(
-                    "VA To ff ti it tt ft",
-                    &self.text_style,
-                    None,
-                    Color::LIGHT_GRAY,
-                )
+                .label("VA To ff ti it tt ft", &self.text_style, None)
                 .rect(None, Grow, None)
                 .rect(45.0, 45.0, Color::RED);
         });

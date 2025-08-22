@@ -143,7 +143,7 @@ impl Widget for Button<'_> {
             .color(color);
 
         if let Some((label, style)) = self.label {
-            widget.label(&label, style, None, None);
+            widget.label(&label, style, None);
         }
 
         Response {
