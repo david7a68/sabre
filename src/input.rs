@@ -1,13 +1,11 @@
+use glamour::Point2;
+
+use crate::Pixels;
+
 #[derive(Clone, Copy, Debug, Default)]
 pub struct WindowSize {
     pub width: f32,
     pub height: f32,
-}
-
-#[derive(Clone, Copy, Debug, Default)]
-pub struct PointerLocation {
-    pub x: f32,
-    pub y: f32,
 }
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -19,7 +17,7 @@ pub struct MouseButtonState {
 
 #[derive(Clone, Debug, Default)]
 pub struct InputState {
-    pub pointer: PointerLocation,
+    pub pointer: Point2<Pixels>,
     pub mouse_state: MouseButtonState,
     pub window_size: WindowSize,
 }

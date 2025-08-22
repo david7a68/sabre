@@ -1,11 +1,8 @@
-use std::collections::HashMap;
-
 use graphics::Color;
+use smallvec::SmallVec;
 
 use crate::text::TextAlignment;
-use crate::ui::NodeIndexArray;
-use crate::ui::UiElementId;
-pub(crate) use Size::*;
+pub use Size::*;
 
 /// Single-dimension size for UI elements.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -74,8 +71,6 @@ pub enum Alignment {
 
 #[derive(Debug, Default)]
 pub(crate) struct Atom {
-    pub color: Color,
-
     pub width: Size,
     pub height: Size,
     pub inner_padding: Padding,
@@ -95,14 +90,36 @@ pub(crate) struct LayoutNodeResult {
     pub height: f32,
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub(crate) struct UiElementId(pub(crate) u16);
+
+type NodeIndexArray = SmallVec<[UiElementId; 8]>;
+
 #[derive(Default, Debug)]
 pub(crate) struct LayoutNode {
     pub atom: Atom,
     pub result: LayoutNodeResult,
-    has_content: Option<UiElementId>,
 }
 
-pub(crate) struct LayoutTree {
+#[expect(clippy::large_enum_variant)]
+pub(crate) enum LayoutNodeContent {
+    None,
+    Fill {
+        color: Color,
+    },
+    Text {
+        layout: parley::Layout<Color>,
+        alignment: TextAlignment,
+    },
+}
+
+impl From<Option<LayoutNodeContent>> for LayoutNodeContent {
+    fn from(content: Option<LayoutNodeContent>) -> Self {
+        content.unwrap_or(LayoutNodeContent::None)
+    }
+}
+
+pub(crate) struct LayoutTree<T> {
     nodes: Vec<LayoutNode>,
     children: Vec<NodeIndexArray>,
 
@@ -111,62 +128,61 @@ pub(crate) struct LayoutTree {
     /// These are stored separately under the assumption that they occur much
     /// less frequently than the nodes themselves, and that they are often much
     /// larger in size.
-    content: HashMap<UiElementId, LayoutNodeContent>,
+    content: Vec<(LayoutNodeContent, Option<T>)>,
 }
 
-impl Default for LayoutTree {
+impl<T> Default for LayoutTree<T> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl LayoutTree {
+impl<T> LayoutTree<T> {
     pub fn new() -> Self {
         Self {
             nodes: Vec::new(),
             children: Vec::new(),
-            content: HashMap::new(),
+            content: Vec::new(),
         }
     }
 
     pub fn iter_nodes(
         &self,
-    ) -> impl Iterator<Item = (&LayoutNode, Option<LayoutNodeContentRef<'_>>)> {
-        self.nodes.iter().map(|n| {
-            let content = n.has_content.and_then(|id| {
-                self.content.get(&id).map(|t| match t {
-                    LayoutNodeContent::Text { layout, .. } => LayoutNodeContentRef::Text(layout),
-                })
-            });
-
-            (n, content)
-        })
+    ) -> impl Iterator<Item = (&LayoutNode, &LayoutNodeContent, Option<&T>)> {
+        self.nodes
+            .iter()
+            .zip(
+                self.content
+                    .iter()
+                    .map(|(content, t)| (content, t.as_ref())),
+            )
+            .map(|(node, (content, reference))| (node, content, reference))
     }
 
-    pub fn get_mut(&mut self, node: UiElementId) -> &mut Atom {
+    pub fn atom_mut(&mut self, node: UiElementId) -> &mut Atom {
         &mut self.nodes[node.0 as usize].atom
+    }
+
+    pub fn content_mut(&mut self, node: UiElementId) -> &mut LayoutNodeContent {
+        &mut self.content[node.0 as usize].0
     }
 
     pub fn add(
         &mut self,
         parent: Option<UiElementId>,
         atom: Atom,
-        content: Option<LayoutNodeContent>,
+        content: impl Into<LayoutNodeContent>,
+        reference: Option<T>,
     ) -> UiElementId {
         let node_id = UiElementId(self.nodes.len() as u16);
 
-        let mut node = LayoutNode {
+        let node = LayoutNode {
             atom,
             result: LayoutNodeResult::default(),
-            has_content: None,
         };
 
-        if let Some(content) = content {
-            self.content.insert(node_id, content);
-            node.has_content = Some(node_id);
-        }
-
         self.nodes.push(node);
+        self.content.push((content.into(), reference));
         self.children.push(NodeIndexArray::new());
 
         if let Some(parent_id) = parent {
@@ -186,13 +202,22 @@ impl LayoutTree {
             return;
         }
 
-        compute_layout(
-            &mut |node, max_width| {
-                let content_id = node.has_content?;
+        let nodes: &mut [LayoutNode] = &mut self.nodes;
+        let node_id = UiElementId(0);
 
-                #[expect(irrefutable_let_patterns)]
+        debug_assert_eq!(
+            nodes[node_id.0 as usize].atom.direction,
+            LayoutDirection::Horizontal,
+            "The root node must have a horizontal layout direction"
+        );
+
+        compute_major_axis_fit_sizes::<HorizontalMode>(nodes, &self.children, node_id);
+        compute_major_axis_grow_sizes::<HorizontalMode>(nodes, &self.children, node_id);
+
+        compute_text_heights(
+            &mut |node_id, max_width| {
                 let LayoutNodeContent::Text { layout, alignment } =
-                    self.content.get_mut(&content_id)?
+                    &mut self.content[node_id.0 as usize].0
                 else {
                     return None;
                 };
@@ -202,46 +227,15 @@ impl LayoutTree {
 
                 Some(layout.height())
             },
-            &mut self.nodes,
-            &self.children,
-            UiElementId(0),
+            nodes,
         );
+
+        compute_minor_axis_fit_sizes::<HorizontalMode>(nodes, &self.children, node_id);
+        compute_minor_axis_grow_sizes::<HorizontalMode>(nodes, &self.children, node_id);
+
+        compute_major_axis_offsets::<HorizontalMode>(nodes, &self.children, node_id, 0.0);
+        compute_minor_axis_offsets::<HorizontalMode>(nodes, &self.children, node_id, 0.0);
     }
-}
-
-pub(crate) enum LayoutNodeContent {
-    Text {
-        layout: parley::Layout<Color>,
-        alignment: TextAlignment,
-    },
-}
-
-pub(crate) enum LayoutNodeContentRef<'a> {
-    Text(&'a parley::Layout<Color>),
-}
-
-pub(crate) fn compute_layout(
-    measure_text: &mut impl FnMut(&LayoutNode, f32) -> Option<f32>,
-    nodes: &mut [LayoutNode],
-    children: &[NodeIndexArray],
-    node_id: UiElementId,
-) {
-    debug_assert_eq!(
-        nodes[node_id.0 as usize].atom.direction,
-        LayoutDirection::Horizontal,
-        "The root node must have a horizontal layout direction"
-    );
-
-    compute_major_axis_fit_sizes::<HorizontalMode>(nodes, children, node_id);
-    compute_major_axis_grow_sizes::<HorizontalMode>(nodes, children, node_id);
-
-    compute_text_heights(measure_text, nodes);
-
-    compute_minor_axis_fit_sizes::<HorizontalMode>(nodes, children, node_id);
-    compute_minor_axis_grow_sizes::<HorizontalMode>(nodes, children, node_id);
-
-    compute_major_axis_offsets::<HorizontalMode>(nodes, children, node_id, 0.0);
-    compute_minor_axis_offsets::<HorizontalMode>(nodes, children, node_id, 0.0);
 }
 
 fn compute_major_axis_fit_sizes<D: LayoutDirectionExt>(
@@ -270,7 +264,8 @@ fn compute_major_axis_fit_sizes<D: LayoutDirectionExt>(
 
     let size = match size_spec {
         Size::Fixed(size) => size,
-        Size::Fit { min, max } | Size::Flex { min, max } => child_sizes.clamp(min, max),
+        Size::Fit { min, max } => child_sizes.clamp(min, max),
+        Size::Flex { max, .. } => max,
         Size::Grow => {
             // Grow is handled in the offsets phase
             0.0
@@ -278,6 +273,7 @@ fn compute_major_axis_fit_sizes<D: LayoutDirectionExt>(
     };
 
     D::set_major_size(&mut nodes[node_id.0 as usize], size);
+
     size
 }
 
@@ -312,8 +308,8 @@ fn compute_major_axis_grow_sizes<D: LayoutDirectionExt>(
     }
 
     // Step 2: Distribute the remaining size evenly among the grow children.
-    while remaining_size > 0.0 && !grow_children.is_empty() {
-        let even_size = remaining_size / grow_children.len() as f32;
+    while remaining_size.abs() > 0.5 && !grow_children.is_empty() {
+        let distributed_size = remaining_size / grow_children.len() as f32;
 
         // For each grow child, distribute the available grow size evenly
         // between all of them, unless it exceeds their max size. If that
@@ -329,27 +325,28 @@ fn compute_major_axis_grow_sizes<D: LayoutDirectionExt>(
                     false
                 }
                 Flex { max, .. } => {
-                    let tentative_size = child_size + even_size;
+                    let tentative_size = child_size + distributed_size;
 
                     let (is_done, actual_size) = if tentative_size > max {
                         (true, max)
                     } else {
-                        (false, child_size + even_size)
+                        (false, tentative_size)
                     };
 
                     D::set_major_size(child, actual_size);
                     remaining_size -= actual_size - child_size;
 
                     // Stop growing the child if it has reached its max size
-                    is_done
+                    !is_done
                 }
-                Grow => {
-                    D::set_major_size(child, child_size + even_size);
-                    remaining_size -= even_size;
+                Grow if remaining_size > 0.0 => {
+                    D::set_major_size(child, child_size + distributed_size);
+                    remaining_size -= distributed_size;
 
                     // Grow children are always considered to have space
                     true
                 }
+                Grow => false,
             }
         });
     }
@@ -453,11 +450,13 @@ fn compute_major_axis_offsets<D: LayoutDirectionExt>(
 }
 
 fn compute_text_heights(
-    measure_text: &mut impl FnMut(&LayoutNode, f32) -> Option<f32>,
+    measure_text: &mut impl FnMut(UiElementId, f32) -> Option<f32>,
     nodes: &mut [LayoutNode],
 ) {
-    for node in nodes {
-        let Some(text_height) = measure_text(node, node.result.width) else {
+    for (id, node) in nodes.iter_mut().enumerate() {
+        let id = UiElementId(id as u16);
+
+        let Some(text_height) = measure_text(id, node.result.width) else {
             continue;
         };
 
@@ -500,7 +499,8 @@ fn compute_minor_axis_fit_sizes<D: LayoutDirectionExt>(
 
     let size = match size_spec {
         Fixed(size) => size,
-        Fit { min, max } | Flex { min, max } => (child_sizes + size_padding).clamp(min, max),
+        Fit { min, max } => (child_sizes + size_padding).clamp(min, max),
+        Flex { max, .. } => max,
         Grow => 0.0, // Grow is handled later
     };
 
@@ -631,12 +631,6 @@ trait LayoutDirectionExt {
 
 struct HorizontalMode;
 
-impl std::fmt::Debug for HorizontalMode {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "horizontal")
-    }
-}
-
 impl LayoutDirectionExt for HorizontalMode {
     type Other = VerticalMode;
     const DIRECTION: LayoutDirection = LayoutDirection::Horizontal;
@@ -742,11 +736,5 @@ impl LayoutDirectionExt for VerticalMode {
 
     fn minor_axis_padding_end(node: &LayoutNode) -> f32 {
         node.atom.inner_padding.right
-    }
-}
-
-impl std::fmt::Debug for VerticalMode {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "vertical")
     }
 }

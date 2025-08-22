@@ -57,9 +57,9 @@ impl AppWindow {
     fn update(&mut self, _context: Context, mut ui: UiBuilder) {
         ui.color(Color::srgb(0.1, 0.2, 0.3, 1.0))
             .child_alignment(Alignment::Center, Alignment::Center)
-            .with_container(|ui| {
+            .with_child(|ui| {
                 ui.child_direction(LayoutDirection::Vertical)
-                    .with_container(|ui| {
+                    .with_child(|ui| {
                         ui.child_spacing(10.0)
                             .padding(Padding {
                                 left: 15.0,
@@ -72,7 +72,7 @@ impl AppWindow {
                             .rect(100.0, 200.0, Color::WHITE)
                             .rect(30.0, 150.0, Color::WHITE);
                     })
-                    .with_container(|ui| {
+                    .with_child(|ui| {
                         ui.child_spacing(10.0)
                             .color(Color::GREEN)
                             .padding(Padding {

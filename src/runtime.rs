@@ -259,8 +259,56 @@ impl<App: AppLifecycleHandler> ApplicationHandler<WinitEvent> for WinitApp<App> 
         event: WindowEvent,
     ) {
         match event {
+            WindowEvent::CursorMoved {
+                device_id,
+                position,
+            } => {
+                let window = self.windows.get_mut(&window_id).unwrap();
+                let viewport = self.runtime.viewports.get_mut(window.viewport).unwrap();
+
+                viewport.input.pointer = glamour::Point2 {
+                    x: position.x as f32,
+                    y: position.y as f32,
+                };
+
+                window.window.request_redraw();
+            }
+            WindowEvent::MouseInput {
+                device_id,
+                state,
+                button,
+            } => {
+                let window = self.windows.get_mut(&window_id).unwrap();
+                let viewport = self.runtime.viewports.get_mut(window.viewport).unwrap();
+
+                match (button, state) {
+                    (winit::event::MouseButton::Left, winit::event::ElementState::Pressed) => {
+                        viewport.input.mouse_state.is_left_down = true;
+                    }
+                    (winit::event::MouseButton::Left, winit::event::ElementState::Released) => {
+                        viewport.input.mouse_state.is_left_down = false;
+                    }
+                    (winit::event::MouseButton::Right, winit::event::ElementState::Pressed) => {
+                        viewport.input.mouse_state.is_right_down = true;
+                    }
+                    (winit::event::MouseButton::Right, winit::event::ElementState::Released) => {
+                        viewport.input.mouse_state.is_right_down = false;
+                    }
+                    (winit::event::MouseButton::Middle, winit::event::ElementState::Pressed) => {
+                        viewport.input.mouse_state.is_middle_down = true;
+                    }
+                    (winit::event::MouseButton::Middle, winit::event::ElementState::Released) => {
+                        viewport.input.mouse_state.is_middle_down = false;
+                    }
+                    _ => {
+                        return;
+                    }
+                }
+
+                window.window.request_redraw();
+            }
             WindowEvent::Resized(physical_size) => {
-                let window = self.windows.get(&window_id).unwrap();
+                let window = self.windows.get_mut(&window_id).unwrap();
                 let viewport = self.runtime.viewports.get_mut(window.viewport).unwrap();
 
                 viewport.config.width = physical_size.width;
@@ -268,6 +316,9 @@ impl<App: AppLifecycleHandler> ApplicationHandler<WinitEvent> for WinitApp<App> 
 
                 viewport.input.window_size.width = physical_size.width as f32;
                 viewport.input.window_size.height = physical_size.height as f32;
+
+                let input = viewport.input.clone();
+                self.runtime.repaint([(window, input)]);
             }
             WindowEvent::CloseRequested => {
                 let window = self.windows.remove(&window_id).unwrap();

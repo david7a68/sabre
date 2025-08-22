@@ -26,6 +26,13 @@ impl Color {
         a: 1.0,
     };
 
+    pub const DARK_GRAY: Self = Self {
+        r: 0.2,
+        g: 0.2,
+        b: 0.2,
+        a: 1.0,
+    };
+
     pub const WHITE: Self = Self {
         r: 1.0,
         g: 1.0,
