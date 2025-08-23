@@ -6,26 +6,23 @@ use glamour::Point2;
 use glamour::Rect;
 use glamour::Size2;
 use glamour::Unit;
-use graphics::Color;
-use graphics::Primitive;
 
-use crate::Atom;
-use crate::LayoutNodeContent;
-use crate::LayoutTree;
-use crate::Response;
-use crate::UiElementId;
-use crate::Widget;
-use crate::WidgetState;
-use crate::id::IdMap;
-use crate::id::WidgetId;
-use crate::input::InputState;
-use crate::layout::Alignment;
-use crate::layout::Flex;
-use crate::layout::LayoutDirection;
-use crate::layout::Padding;
-use crate::layout::Size;
-use crate::text::TextLayoutContext;
-use crate::text::TextStyle;
+use crate::graphics::Color;
+use crate::graphics::Primitive;
+use crate::ui::text::TextLayoutContext;
+use crate::ui::text::TextStyle;
+
+pub use id::*;
+pub use input::*;
+pub use layout::*;
+pub use widget::*;
+
+mod id;
+mod input;
+mod layout;
+pub mod text;
+mod widget;
+pub mod widgets;
 
 pub struct Pixels;
 
@@ -242,7 +239,7 @@ impl UiBuilder<'_> {
 }
 
 #[derive(Default)]
-pub(crate) struct UiContext {
+pub struct UiContext {
     input: InputState,
     time_delta: Duration,
 
@@ -300,14 +297,6 @@ impl UiContext {
         }
 
         self.frame_counter += 1;
-
-        // println!(
-        //     "{:#?}",
-        //     self.ui_tree
-        //         .iter_nodes()
-        //         .map(|(node, _, _)| &node.result)
-        //         .collect::<Vec<_>>()
-        // );
 
         self.ui_tree
             .iter_nodes()
@@ -371,7 +360,7 @@ struct WidgetContainer {
 }
 
 #[expect(clippy::large_enum_variant)]
-pub(crate) enum DrawCommand<'a> {
+pub enum DrawCommand<'a> {
     Primitive(Primitive),
     TextLayout(&'a parley::Layout<Color>, [f32; 2]),
 }

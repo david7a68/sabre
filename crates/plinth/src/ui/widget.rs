@@ -1,7 +1,7 @@
 use glamour::Rect;
 
-use crate::Pixels;
-use crate::UiBuilder;
+use crate::ui::Pixels;
+use crate::ui::UiBuilder;
 
 #[derive(Clone, Debug)]
 pub struct Response {

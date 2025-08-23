@@ -2,15 +2,15 @@ use core::f32;
 use std::borrow::Cow;
 
 use glamour::Contains;
-use graphics::Color;
 
-use crate::Alignment;
-use crate::Padding;
-use crate::Response;
-use crate::Size;
-use crate::UiBuilder;
-use crate::Widget;
-use crate::text::TextStyle;
+use crate::graphics::Color;
+use crate::ui::Alignment;
+use crate::ui::Padding;
+use crate::ui::Response;
+use crate::ui::Size;
+use crate::ui::UiBuilder;
+use crate::ui::Widget;
+use crate::ui::text::TextStyle;
 
 pub trait UiBuilderWidgetsExt {
     fn plane(

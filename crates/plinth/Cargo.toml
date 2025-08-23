@@ -1,13 +1,17 @@
 [package]
-name = "graphics"
+name = "plinth"
 version.workspace = true
 edition.workspace = true
+
+[lints]
+workspace = true
 
 [features]
 profile = ["dep:tracing-tracy"]
 
 [dependencies]
 
+arrayvec = { workspace = true }
 bytemuck = { workspace = true }
 color = { workspace = true }
 futures = { workspace = true }
@@ -16,9 +20,10 @@ guillotiere = { workspace = true }
 image = { workspace = true, features = ["jpeg", "png"] }
 memmap2 = { workspace = true }
 parley = { workspace = true }
+rapidhash = { workspace = true }
 slotmap = { workspace = true }
-smallvec = { workspace = true }
-swash = { workspace = true }
+smallvec = { workspace = true, features = ["union", "const_generics"] }
+swash = { workspace = true, features = ["scale"] }
 tracing = { workspace = true }
 tracing-tracy = { workspace = true, optional = true }
 winit = { workspace = true }

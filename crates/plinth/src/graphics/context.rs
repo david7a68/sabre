@@ -10,18 +10,18 @@ use tracing::warn;
 use winit::window::Window;
 use winit::window::WindowId;
 
-use crate::Canvas;
-use crate::Texture;
-use crate::TextureLoadError;
-use crate::draw::CanvasStorage;
-use crate::draw::DrawCommand;
-use crate::glyph_cache::GlyphCache;
-use crate::pipeline::DrawUniforms;
-use crate::pipeline::RenderPipelineCache;
-use crate::surface::RenderError;
-use crate::surface::Surface;
-use crate::texture::StorageId;
-use crate::texture::TextureManager;
+use crate::graphics::Canvas;
+use crate::graphics::Texture;
+use crate::graphics::TextureLoadError;
+use crate::graphics::draw::CanvasStorage;
+use crate::graphics::draw::DrawCommand;
+use crate::graphics::glyph_cache::GlyphCache;
+use crate::graphics::pipeline::DrawUniforms;
+use crate::graphics::pipeline::RenderPipelineCache;
+use crate::graphics::surface::RenderError;
+use crate::graphics::surface::Surface;
+use crate::graphics::texture::StorageId;
+use crate::graphics::texture::TextureManager;
 
 pub struct GraphicsContext {
     pub instance: wgpu::Instance,

@@ -3,14 +3,6 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 
-use crate::DrawCommand;
-use crate::UiBuilder;
-use crate::input::InputState;
-use crate::text::TextLayoutContext;
-use crate::ui::UiContext;
-use graphics::Canvas;
-use graphics::Color;
-use graphics::GraphicsContext;
 use slotmap::SlotMap;
 use slotmap::new_key_type;
 use smallvec::SmallVec;
@@ -25,6 +17,15 @@ use winit::platform::windows::EventLoopBuilderExtWindows;
 use winit::platform::windows::WindowAttributesExtWindows;
 use winit::window::Window;
 use winit::window::WindowId;
+
+use crate::graphics::Canvas;
+use crate::graphics::Color;
+use crate::graphics::GraphicsContext;
+use crate::ui::DrawCommand;
+use crate::ui::InputState;
+use crate::ui::UiBuilder;
+use crate::ui::UiContext;
+use crate::ui::text::TextLayoutContext;
 
 #[derive(Default)]
 pub struct AppContextBuilder {}

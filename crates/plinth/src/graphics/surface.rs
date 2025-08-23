@@ -5,9 +5,9 @@ use tracing::trace;
 use winit::window::Window;
 use winit::window::WindowId;
 
-use crate::pipeline::DrawBuffer;
-use crate::pipeline::RenderPipeline;
-use crate::pipeline::RenderPipelineCache;
+use crate::graphics::pipeline::DrawBuffer;
+use crate::graphics::pipeline::RenderPipeline;
+use crate::graphics::pipeline::RenderPipelineCache;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RenderError {
