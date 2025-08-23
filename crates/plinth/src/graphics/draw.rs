@@ -1,14 +1,13 @@
 use std::collections::HashMap;
 use std::path::Path;
 
-use crate::TextureLoadError;
-use crate::color::Color;
-use crate::glyph_cache::GlyphCache;
-use crate::pipeline::GpuPrimitive;
-use crate::texture::StorageId;
-
-use super::texture::Texture;
-use super::texture::TextureManager;
+use crate::graphics::TextureLoadError;
+use crate::graphics::color::Color;
+use crate::graphics::glyph_cache::GlyphCache;
+use crate::graphics::pipeline::GpuPrimitive;
+use crate::graphics::texture::StorageId;
+use crate::graphics::texture::Texture;
+use crate::graphics::texture::TextureManager;
 
 const VERTICES_PER_PRIMITIVE: u32 = 6;
 

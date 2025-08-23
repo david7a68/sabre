@@ -1,6 +1,6 @@
 use glamour::Point2;
 
-use crate::Pixels;
+use crate::ui::Pixels;
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct WindowSize {

@@ -5,7 +5,7 @@ use bytemuck::Pod;
 use bytemuck::Zeroable;
 use tracing::info;
 
-use crate::Color;
+use crate::graphics::Color;
 
 const SHADER_SOURCE: &str = include_str!("shader.wgsl");
 

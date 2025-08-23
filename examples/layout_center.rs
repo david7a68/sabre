@@ -1,19 +1,18 @@
-use sabre::Alignment;
-use sabre::AppContextBuilder;
-use sabre::AppLifecycleHandler;
-use sabre::Color;
-use sabre::Context;
-use sabre::LayoutDirection;
-use sabre::Padding;
-use sabre::UiBuilder;
-use sabre::ViewportConfig;
+use plinth::graphics::Color;
+use plinth::runtime::AppContext;
+use plinth::runtime::AppContextBuilder;
+use plinth::runtime::AppLifecycleHandler;
+use plinth::runtime::Context;
+use plinth::runtime::ViewportConfig;
+use plinth::ui::Alignment;
+use plinth::ui::LayoutDirection;
+use plinth::ui::Padding;
+use plinth::ui::UiBuilder;
 use tracing::Level;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 
 fn main() {
-    color_backtrace::install();
-
     let def_filter = tracing_subscriber::filter::Targets::new()
         .with_default(Level::DEBUG)
         .with_targets([
@@ -34,7 +33,7 @@ fn main() {
 struct App {}
 
 impl AppLifecycleHandler for App {
-    fn resume(&mut self, runtime: &mut sabre::AppContext) {
+    fn resume(&mut self, runtime: &mut AppContext) {
         runtime.create_viewport(
             ViewportConfig {
                 title: "Sabre App".into(),

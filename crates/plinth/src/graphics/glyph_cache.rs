@@ -17,13 +17,14 @@ use parley::swash::scale::image::Content;
 use parley::swash::scale::image::Image;
 use parley::swash::zeno::Format;
 use parley::swash::zeno::Vector;
-use tracing::instrument;
+use swash as _;
+use tracing::instrument; // so that we can enable the "scale" feature
 
-use crate::Color;
-use crate::Primitive;
-use crate::Texture;
-use crate::draw::CanvasStorage;
-use crate::texture::TextureManager;
+use crate::graphics::Color;
+use crate::graphics::Primitive;
+use crate::graphics::Texture;
+use crate::graphics::draw::CanvasStorage;
+use crate::graphics::texture::TextureManager;
 
 #[derive(Clone)]
 pub(crate) struct GlyphCache {

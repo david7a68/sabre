@@ -1,10 +1,11 @@
 use std::borrow::Cow;
 use std::sync::Arc;
 
-use graphics::Color;
 use parley::FontContext;
 use parley::LayoutContext;
 use smallvec::SmallVec;
+
+use crate::graphics::Color;
 
 #[derive(Default)]
 pub struct TextLayoutContext {

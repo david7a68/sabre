@@ -1,18 +1,19 @@
 use std::rc::Rc;
 
-use sabre::Alignment;
-use sabre::AppContextBuilder;
-use sabre::AppLifecycleHandler;
-use sabre::Color;
-use sabre::Context;
-use sabre::LayoutDirection;
-use sabre::Padding;
-use sabre::Size::Flex;
-use sabre::Size::Grow;
-use sabre::UiBuilder;
-use sabre::ViewportConfig;
-use sabre::text::TextStyle;
-use sabre::widgets::UiBuilderWidgetsExt;
+use plinth::graphics::Color;
+use plinth::runtime::AppContext;
+use plinth::runtime::AppContextBuilder;
+use plinth::runtime::AppLifecycleHandler;
+use plinth::runtime::Context;
+use plinth::runtime::ViewportConfig;
+use plinth::ui::Alignment;
+use plinth::ui::LayoutDirection;
+use plinth::ui::Padding;
+use plinth::ui::Size::Flex;
+use plinth::ui::Size::Grow;
+use plinth::ui::UiBuilder;
+use plinth::ui::text::TextStyle;
+use plinth::ui::widgets::UiBuilderWidgetsExt;
 use tracing::Level;
 use tracing::info;
 use tracing_subscriber::layer::SubscriberExt;
@@ -67,7 +68,7 @@ struct SabreApp {
 }
 
 impl AppLifecycleHandler for SabreApp {
-    fn resume(&mut self, runtime: &mut sabre::AppContext) {
+    fn resume(&mut self, runtime: &mut AppContext) {
         info!("Starting up Sabre application...");
 
         runtime.create_viewport(

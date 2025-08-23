@@ -1,7 +1,8 @@
-use graphics::Color;
 use smallvec::SmallVec;
 
-use crate::text::TextAlignment;
+use crate::graphics::Color;
+use crate::ui::text::TextAlignment;
+
 pub use Size::*;
 
 /// Single-dimension size for UI elements.
@@ -70,7 +71,7 @@ pub enum Alignment {
 }
 
 #[derive(Debug, Default)]
-pub(crate) struct Atom {
+pub struct Atom {
     pub width: Size,
     pub height: Size,
     pub inner_padding: Padding,
@@ -83,7 +84,7 @@ pub(crate) struct Atom {
 }
 
 #[derive(Debug, Default)]
-pub(crate) struct LayoutNodeResult {
+pub struct LayoutNodeResult {
     pub x: f32,
     pub y: f32,
     pub width: f32,
@@ -96,13 +97,13 @@ pub(crate) struct UiElementId(pub(crate) u16);
 type NodeIndexArray = SmallVec<[UiElementId; 8]>;
 
 #[derive(Default, Debug)]
-pub(crate) struct LayoutNode {
+pub struct LayoutNode {
     pub atom: Atom,
     pub result: LayoutNodeResult,
 }
 
 #[expect(clippy::large_enum_variant)]
-pub(crate) enum LayoutNodeContent {
+pub enum LayoutNodeContent {
     None,
     Fill {
         color: Color,

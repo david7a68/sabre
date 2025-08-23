@@ -13,13 +13,12 @@ unused_crate_dependencies = "warn"
 
 [workspace.dependencies]
 # Internal dependencies
-graphics = { path = "crates/graphics" }
+plinth = { path = "crates/plinth" }
 
 # External dependencies
 arrayvec = "0.7"
 bytemuck = "1"
 color = "0.3"
-color-backtrace = { version = "0.7" }
 futures = "0.3"
 glamour = "0.18"
 guillotiere = "0.6"
@@ -44,7 +43,6 @@ opt-level = 3
 
 [profile.release]
 lto = "thin"
-codegen-units = 1
 panic = "abort"
 
 [package]
@@ -52,23 +50,16 @@ name = "sabre"
 version.workspace = true
 edition.workspace = true
 
+[lints]
+workspace = true
+
 [features]
 default = []
 profile = ["dep:tracing-tracy", "tracing-tracy/enable"]
 
 [dependencies]
-graphics = { path = "crates/graphics" }
+plinth = { workspace = true }
 
-arrayvec = { workspace = true }
-futures = { workspace = true }
-glamour = { workspace = true }
-rapidhash = { workspace = true }
-slotmap = { workspace = true }
-smallvec = { workspace = true, features = [
-    "const_generics",
-    "const_new",
-    "union",
-] }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true, features = [
     "parking_lot",
@@ -85,8 +76,3 @@ tracing-tracy = { workspace = true, optional = true, features = [
     "sampling",
     "system-tracing",
 ] }
-winit = { workspace = true }
-parley = { workspace = true }
-
-[dev-dependencies]
-color-backtrace = { workspace = true }
