@@ -1,7 +1,10 @@
+use std::sync::Arc;
+
 use smallvec::SmallVec;
 
 use crate::graphics::Color;
 use crate::graphics::text::TextAlignment;
+use crate::graphics::text::TextStyle;
 
 pub use Size::*;
 
@@ -112,6 +115,11 @@ pub enum LayoutNodeContent {
         layout: parley::Layout<Color>,
         alignment: TextAlignment,
     },
+    Label {
+        text_start: usize,
+        text_length: usize,
+        style: Arc<TextStyle>,
+    },
 }
 
 impl From<Option<LayoutNodeContent>> for LayoutNodeContent {
@@ -129,7 +137,7 @@ pub(crate) struct LayoutTree<T> {
     /// These are stored separately under the assumption that they occur much
     /// less frequently than the nodes themselves, and that they are often much
     /// larger in size.
-    content: Vec<(LayoutNodeContent, Option<T>)>,
+    content: Vec<T>,
 }
 
 impl<T> Default for LayoutTree<T> {
@@ -147,34 +155,19 @@ impl<T> LayoutTree<T> {
         }
     }
 
-    pub fn iter_nodes(
-        &self,
-    ) -> impl Iterator<Item = (&LayoutNode, &LayoutNodeContent, Option<&T>)> {
-        self.nodes
-            .iter()
-            .zip(
-                self.content
-                    .iter()
-                    .map(|(content, t)| (content, t.as_ref())),
-            )
-            .map(|(node, (content, reference))| (node, content, reference))
+    pub fn iter_nodes(&self) -> impl Iterator<Item = (&LayoutNode, &T)> {
+        self.nodes.iter().zip(self.content.iter())
     }
 
     pub fn atom_mut(&mut self, node: UiElementId) -> &mut Atom {
         &mut self.nodes[node.0 as usize].atom
     }
 
-    pub fn content_mut(&mut self, node: UiElementId) -> &mut LayoutNodeContent {
-        &mut self.content[node.0 as usize].0
+    pub fn content_mut(&mut self, node: UiElementId) -> &mut T {
+        &mut self.content[node.0 as usize]
     }
 
-    pub fn add(
-        &mut self,
-        parent: Option<UiElementId>,
-        atom: Atom,
-        content: impl Into<LayoutNodeContent>,
-        reference: Option<T>,
-    ) -> UiElementId {
+    pub fn add(&mut self, parent: Option<UiElementId>, atom: Atom, content: T) -> UiElementId {
         let node_id = UiElementId(self.nodes.len() as u16);
 
         let node = LayoutNode {
@@ -183,7 +176,7 @@ impl<T> LayoutTree<T> {
         };
 
         self.nodes.push(node);
-        self.content.push((content.into(), reference));
+        self.content.push(content);
         self.children.push(NodeIndexArray::new());
 
         if let Some(parent_id) = parent {
@@ -198,7 +191,7 @@ impl<T> LayoutTree<T> {
         self.children.clear();
     }
 
-    pub fn compute_layout(&mut self) {
+    pub fn compute_layout(&mut self, measure_text: impl FnMut(&mut T, f32) -> Option<f32>) {
         if self.nodes.is_empty() {
             return;
         }
@@ -215,21 +208,7 @@ impl<T> LayoutTree<T> {
         compute_major_axis_fit_sizes::<HorizontalMode>(nodes, &self.children, node_id);
         compute_major_axis_grow_sizes::<HorizontalMode>(nodes, &self.children, node_id);
 
-        compute_text_heights(
-            &mut |node_id, max_width| {
-                let LayoutNodeContent::Text { layout, alignment } =
-                    &mut self.content[node_id.0 as usize].0
-                else {
-                    return None;
-                };
-
-                layout.break_all_lines(Some(max_width));
-                layout.align(Some(max_width), (*alignment).into(), Default::default());
-
-                Some(layout.height())
-            },
-            nodes,
-        );
+        compute_text_heights(measure_text, nodes.iter_mut().zip(self.content.iter_mut()));
 
         compute_minor_axis_fit_sizes::<HorizontalMode>(nodes, &self.children, node_id);
         compute_minor_axis_grow_sizes::<HorizontalMode>(nodes, &self.children, node_id);
@@ -450,14 +429,12 @@ fn compute_major_axis_offsets<D: LayoutDirectionExt>(
     current_offset + size
 }
 
-fn compute_text_heights(
-    measure_text: &mut impl FnMut(UiElementId, f32) -> Option<f32>,
-    nodes: &mut [LayoutNode],
+fn compute_text_heights<'a, T: 'a>(
+    mut measure_text: impl FnMut(&mut T, f32) -> Option<f32>,
+    nodes: impl Iterator<Item = (&'a mut LayoutNode, &'a mut T)>,
 ) {
-    for (id, node) in nodes.iter_mut().enumerate() {
-        let id = UiElementId(id as u16);
-
-        let Some(text_height) = measure_text(id, node.result.width) else {
+    for (node, content) in nodes {
+        let Some(text_height) = measure_text(content, node.result.width) else {
             continue;
         };
 
