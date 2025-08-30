@@ -9,8 +9,8 @@ use glamour::Unit;
 
 use crate::graphics::Color;
 use crate::graphics::Primitive;
-use crate::ui::text::TextLayoutContext;
-use crate::ui::text::TextStyle;
+use crate::graphics::text::TextLayoutContext;
+use crate::graphics::text::TextStyle;
 
 pub use id::*;
 pub use input::*;
@@ -20,7 +20,6 @@ pub use widget::*;
 mod id;
 mod input;
 mod layout;
-pub mod text;
 mod widget;
 pub mod widgets;
 

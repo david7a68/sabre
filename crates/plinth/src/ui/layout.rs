@@ -1,7 +1,7 @@
 use smallvec::SmallVec;
 
 use crate::graphics::Color;
-use crate::ui::text::TextAlignment;
+use crate::graphics::text::TextAlignment;
 
 pub use Size::*;
 
