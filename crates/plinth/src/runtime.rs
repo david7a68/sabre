@@ -21,11 +21,11 @@ use winit::window::WindowId;
 use crate::graphics::Canvas;
 use crate::graphics::Color;
 use crate::graphics::GraphicsContext;
+use crate::graphics::text::TextLayoutContext;
 use crate::ui::DrawCommand;
 use crate::ui::InputState;
 use crate::ui::UiBuilder;
 use crate::ui::UiContext;
-use crate::ui::text::TextLayoutContext;
 
 #[derive(Default)]
 pub struct AppContextBuilder {}

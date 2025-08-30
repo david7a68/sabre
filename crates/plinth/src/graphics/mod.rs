@@ -12,4 +12,5 @@ mod draw;
 mod glyph_cache;
 mod pipeline;
 mod surface;
+pub mod text;
 mod texture;

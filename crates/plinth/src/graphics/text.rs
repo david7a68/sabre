@@ -35,7 +35,7 @@ pub struct TextStyle {
 }
 
 impl TextStyle {
-    pub fn as_defaults(&self, builder: &mut parley::RangedBuilder<Color>) {
+    pub(crate) fn as_defaults(&self, builder: &mut parley::RangedBuilder<Color>) {
         builder.push_default(parley::StyleProperty::Brush(self.font_color));
         builder.push_default(parley::StyleProperty::FontSize(self.font_size));
         builder.push_default(parley::StyleProperty::FontStyle(self.font_style.into()));

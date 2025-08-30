@@ -1,6 +1,7 @@
 use std::rc::Rc;
 
 use plinth::graphics::Color;
+use plinth::graphics::text::TextStyle;
 use plinth::runtime::AppContext;
 use plinth::runtime::AppContextBuilder;
 use plinth::runtime::AppLifecycleHandler;
@@ -12,7 +13,6 @@ use plinth::ui::Padding;
 use plinth::ui::Size::Flex;
 use plinth::ui::Size::Grow;
 use plinth::ui::UiBuilder;
-use plinth::ui::text::TextStyle;
 use plinth::ui::widgets::UiBuilderWidgetsExt;
 use tracing::Level;
 use tracing::info;

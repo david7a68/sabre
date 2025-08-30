@@ -4,13 +4,13 @@ use std::borrow::Cow;
 use glamour::Contains;
 
 use crate::graphics::Color;
+use crate::graphics::text::TextStyle;
 use crate::ui::Alignment;
 use crate::ui::Padding;
 use crate::ui::Response;
 use crate::ui::Size;
 use crate::ui::UiBuilder;
 use crate::ui::Widget;
-use crate::ui::text::TextStyle;
 
 pub trait UiBuilderWidgetsExt {
     fn plane(
