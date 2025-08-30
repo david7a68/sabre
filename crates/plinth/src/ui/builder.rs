@@ -9,8 +9,8 @@ use super::Alignment;
 use super::Atom;
 use super::Flex;
 use super::InputState;
+use super::LayoutContent;
 use super::LayoutDirection;
-use super::LayoutNodeContent;
 use super::Padding;
 use super::Response;
 use super::Size;
@@ -43,7 +43,7 @@ impl UiBuilder<'_> {
     }
 
     pub fn color(&mut self, color: impl Into<Color>) -> &mut Self {
-        *self.context.ui_tree.content_mut(self.index) = LayoutNodeContent::Fill {
+        self.context.ui_tree.content_mut(self.index).0 = LayoutContent::Fill {
             color: color.into(),
         };
 
@@ -122,10 +122,12 @@ impl UiBuilder<'_> {
                 height: height.into(),
                 ..Default::default()
             },
-            LayoutNodeContent::Fill {
-                color: color.into(),
-            },
-            None,
+            (
+                LayoutContent::Fill {
+                    color: color.into(),
+                },
+                None,
+            ),
         );
 
         self
@@ -154,21 +156,24 @@ impl UiBuilder<'_> {
                 height: height.into(),
                 ..Default::default()
             },
-            LayoutNodeContent::Text {
-                layout,
-                alignment: style.align,
-            },
-            None,
+            (
+                LayoutContent::Text {
+                    layout,
+                    alignment: style.align,
+                },
+                None,
+            ),
         );
 
         self
     }
 
     pub fn container(&mut self) -> UiBuilder<'_> {
-        let container_index =
-            self.context
-                .ui_tree
-                .add(Some(self.index), Atom::default(), None, None);
+        let container_index = self.context.ui_tree.add(
+            Some(self.index),
+            Atom::default(),
+            (LayoutContent::None, None),
+        );
 
         UiBuilder {
             id: self.id,
@@ -180,10 +185,11 @@ impl UiBuilder<'_> {
     }
 
     pub fn child(&mut self) -> UiBuilder<'_> {
-        let child_index = self
-            .context
-            .ui_tree
-            .add(Some(self.index), Atom::default(), None, None);
+        let child_index = self.context.ui_tree.add(
+            Some(self.index),
+            Atom::default(),
+            (LayoutContent::None, None),
+        );
 
         self.num_child_widgets += 1;
         UiBuilder {
@@ -198,10 +204,11 @@ impl UiBuilder<'_> {
     pub fn named_child(&mut self, name: impl Hash) -> UiBuilder<'_> {
         let child_id = self.id.then(name);
 
-        let child_index =
-            self.context
-                .ui_tree
-                .add(Some(self.index), Atom::default(), None, Some(child_id));
+        let child_index = self.context.ui_tree.add(
+            Some(self.index),
+            Atom::default(),
+            (LayoutContent::None, Some(child_id)),
+        );
 
         self.num_child_widgets += 1;
         UiBuilder {

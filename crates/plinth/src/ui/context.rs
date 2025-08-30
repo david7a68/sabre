@@ -7,12 +7,12 @@ use glamour::Size2;
 
 use crate::graphics::Color;
 use crate::graphics::Primitive;
+use crate::graphics::text::TextAlignment;
 use crate::graphics::text::TextLayoutContext;
 
 use super::Atom;
 use super::IdMap;
 use super::InputState;
-use super::LayoutNodeContent;
 use super::LayoutTree;
 use super::UiBuilder;
 use super::WidgetId;
@@ -23,8 +23,10 @@ pub struct UiContext {
     pub(super) input: InputState,
     pub(super) time_delta: Duration,
 
-    pub(super) ui_tree: LayoutTree<WidgetId>,
+    pub(super) ui_tree: LayoutTree<(LayoutContent, Option<WidgetId>)>,
     pub(super) widget_states: IdMap<WidgetContainer>,
+
+    pub(super) string_buffer: String,
 
     pub(super) frame_counter: u64,
 }
@@ -37,6 +39,7 @@ impl UiContext {
         time_delta: Duration,
     ) -> UiBuilder<'a> {
         self.ui_tree.clear();
+        self.string_buffer.clear();
 
         // Set up the root node.
         let id = WidgetId::new("root");
@@ -48,10 +51,12 @@ impl UiContext {
                 height: input.window_size.height.into(),
                 ..Default::default()
             },
-            LayoutNodeContent::Fill {
-                color: Color::WHITE,
-            },
-            Some(id),
+            (
+                LayoutContent::Fill {
+                    color: Color::WHITE,
+                },
+                Some(id),
+            ),
         );
 
         self.input = input;
@@ -69,7 +74,24 @@ impl UiContext {
     // pub fn add_text_style(&mut self, style: TextStyle) -> TextStyleId
 
     pub fn finish(&mut self) -> impl Iterator<Item = DrawCommand<'_>> {
-        self.ui_tree.compute_layout();
+        if self.string_buffer.len() * 2 < self.string_buffer.capacity() {
+            // Don't keep too much unused memory around. Such a dramatic
+            // difference might happen because the UI switches between different
+            // screens with very different text requirements.
+            self.string_buffer.shrink_to_fit();
+        }
+
+        self.ui_tree.compute_layout(|(content, _), max_width| {
+            let (layout, alignment) = match content {
+                LayoutContent::Text { layout, alignment } => (layout, alignment),
+                _ => return None,
+            };
+
+            layout.break_all_lines(Some(max_width));
+            layout.align(Some(max_width), (*alignment).into(), Default::default());
+
+            Some(layout.height())
+        });
 
         self.widget_states
             .retain(|_, container| container.frame_last_used == self.frame_counter);
@@ -82,7 +104,7 @@ impl UiContext {
 
         self.ui_tree
             .iter_nodes()
-            .map(|(node, content, widget_id)| {
+            .map(|(node, (content, widget_id))| {
                 if let Some(widget_id) = widget_id {
                     let container = WidgetContainer {
                         state: WidgetState {
@@ -115,8 +137,8 @@ impl UiContext {
                 let mut vec = ArrayVec::<_, 2>::new();
 
                 match content {
-                    LayoutNodeContent::None => {}
-                    LayoutNodeContent::Fill { color } => {
+                    LayoutContent::None => {}
+                    LayoutContent::Fill { color } => {
                         vec.push(DrawCommand::Primitive(Primitive::new(
                             layout.x,
                             layout.y,
@@ -125,7 +147,7 @@ impl UiContext {
                             *color,
                         )));
                     }
-                    LayoutNodeContent::Text { layout: text, .. } => {
+                    LayoutContent::Text { layout: text, .. } => {
                         vec.push(DrawCommand::TextLayout(text, [layout.x, layout.y]));
                     }
                 }
@@ -139,6 +161,18 @@ impl UiContext {
 pub(super) struct WidgetContainer {
     pub(super) state: WidgetState,
     frame_last_used: u64,
+}
+
+#[expect(clippy::large_enum_variant)]
+pub(super) enum LayoutContent {
+    None,
+    Fill {
+        color: Color,
+    },
+    Text {
+        layout: parley::Layout<Color>,
+        alignment: TextAlignment,
+    },
 }
 
 #[expect(clippy::large_enum_variant)]
