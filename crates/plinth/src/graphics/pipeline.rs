@@ -262,7 +262,7 @@ impl RenderPipelineCache {
                 &sampler_bind_group_layout,
                 &texture_bind_group_layout,
             ],
-            push_constant_ranges: &[],
+            immediate_size: 0,
         });
 
         let diffuse_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
@@ -365,7 +365,7 @@ impl RenderPipelineCache {
                         write_mask: wgpu::ColorWrites::ALL,
                     })],
                 }),
-                multiview: None,
+                multiview_mask: None,
                 cache: None,
             });
 

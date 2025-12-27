@@ -14,12 +14,12 @@ profile = ["dep:tracing-tracy"]
 arrayvec = { workspace = true }
 bytemuck = { workspace = true }
 color = { workspace = true }
-futures = { workspace = true }
 glamour = { workspace = true }
 guillotiere = { workspace = true }
 image = { workspace = true, features = ["jpeg", "png"] }
 memmap2 = { workspace = true }
 parley = { workspace = true }
+pollster = { workspace = true }
 rapidhash = { workspace = true }
 slotmap = { workspace = true }
 smallvec = { workspace = true, features = ["union", "const_generics"] }
@@ -29,4 +29,4 @@ tracing-tracy = { workspace = true, optional = true }
 winit = { workspace = true }
 
 [target.'cfg(windows)'.dependencies]
-wgpu = { workspace = true, features = ["wgsl", "dx12"] }
+wgpu = { workspace = true, features = ["wgsl", "dx12", 'static-dxc'] }

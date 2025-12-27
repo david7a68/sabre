@@ -8,7 +8,6 @@ use parley::GlyphRun;
 use parley::Layout;
 use parley::PositionedLayoutItem;
 use parley::swash::FontRef;
-use parley::swash::GlyphId;
 use parley::swash::scale::Render;
 use parley::swash::scale::ScaleContext;
 use parley::swash::scale::Source;
@@ -167,9 +166,10 @@ fn draw_glyph_run(
         let x_placement = SubpixelAlignment::new(x);
         let y_placement = SubpixelAlignment::new(y);
 
+        let glyph_id = glyph.id as u16;
         let key = GlyphCacheKey {
             font_id: font.data.id(),
-            glyph: glyph.id,
+            glyph_id,
             x_variant: x_placement.step,
             y_variant: y_placement.step,
             size: font_size as u16,
@@ -190,7 +190,7 @@ fn draw_glyph_run(
                 ])
                 .format(Format::Alpha)
                 .offset(offset)
-                .render_into(&mut scaler, glyph.id, temp_glyph);
+                .render_into(&mut scaler, glyph_id, temp_glyph);
 
                 assert!(success);
 
@@ -241,7 +241,7 @@ fn draw_glyph_run(
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 struct GlyphCacheKey {
     font_id: u64,
-    glyph: GlyphId,
+    glyph_id: u16,
     x_variant: u8,
     y_variant: u8,
     // We can't use `f32` here because it is not `Hash`.

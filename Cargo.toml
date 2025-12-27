@@ -19,27 +19,30 @@ plinth = { path = "crates/plinth" }
 arrayvec = "0.7"
 bytemuck = "1"
 color = "0.3"
-futures = "0.3"
 glamour = "0.18"
 guillotiere = "0.6"
 image = { version = "0.25", default-features = false }
 memmap2 = "0.9"
-parley = "0.5"
-rapidhash = "3"
+parley = "0.7"
+pollster = "0.4"
+rapidhash = "4"
 slotmap = "1"
-smallvec = "1.15"
+smallvec = "1"
 swash = "0.2"
 tracing = "0.1"
 tracing-subscriber = "0.3"
 tracing-tracy = { version = "0.11", default-features = false }
-wgpu = { version = "26", default-features = false }
+wgpu = { version = "28", default-features = false, features = [
+    "std",
+    "parking_lot",
+] }
 winit = "0.30"
 
 [profile.dev.build-override]
 opt-level = 2
 
-[profile.dev.package."*"]
-opt-level = 3
+# [profile.dev.package."*"]
+# opt-level = 3
 
 [profile.release]
 lto = "thin"

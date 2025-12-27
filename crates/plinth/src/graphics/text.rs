@@ -123,9 +123,9 @@ impl From<TextAlignment> for parley::Alignment {
     fn from(value: TextAlignment) -> Self {
         match value {
             TextAlignment::Start => Self::Start,
-            TextAlignment::Center => Self::Middle,
+            TextAlignment::Center => Self::Center,
             TextAlignment::End => Self::End,
-            TextAlignment::Justify => Self::Justified,
+            TextAlignment::Justify => Self::Justify,
         }
     }
 }
