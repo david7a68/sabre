@@ -13,7 +13,7 @@ use crate::ui::UiBuilder;
 use crate::ui::Widget;
 
 pub trait UiBuilderWidgetsExt {
-    fn plane(
+    fn panel(
         &mut self,
         width: impl Into<Size>,
         height: impl Into<Size>,
@@ -25,13 +25,13 @@ pub trait UiBuilderWidgetsExt {
 }
 
 impl UiBuilderWidgetsExt for UiBuilder<'_> {
-    fn plane(
+    fn panel(
         &mut self,
         width: impl Into<Size>,
         height: impl Into<Size>,
         color: Option<Color>,
     ) -> Response {
-        Plane {
+        Panel {
             width: width.into(),
             height: height.into(),
             color,
@@ -48,13 +48,13 @@ impl UiBuilderWidgetsExt for UiBuilder<'_> {
     }
 }
 
-pub struct Plane {
+pub struct Panel {
     pub width: Size,
     pub height: Size,
     pub color: Option<Color>,
 }
 
-impl Widget for Plane {
+impl Widget for Panel {
     fn apply(self, context: &mut UiBuilder) -> Response {
         context.rect(self.width, self.height, self.color.unwrap_or_default());
 

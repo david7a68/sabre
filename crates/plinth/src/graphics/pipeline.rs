@@ -3,7 +3,7 @@ use std::sync::Mutex;
 
 use bytemuck::Pod;
 use bytemuck::Zeroable;
-use tracing::info;
+use tracing::debug;
 
 use crate::graphics::Color;
 
@@ -316,11 +316,11 @@ impl RenderPipelineCache {
     pub fn get(&self, format: wgpu::TextureFormat) -> RenderPipeline {
         let mut pipelines = self.pipelines.lock().unwrap();
         if let Some(pipeline) = pipelines.get(&format) {
-            info!("Found a cached pipeline for {:?}", format);
+            debug!("Found a cached pipeline for {:?}", format);
             return pipeline.clone();
         }
 
-        info!("Creating a new pipeline for {:?}", format);
+        debug!("Creating a new pipeline for {:?}", format);
 
         let render_pipeline = self
             .device
