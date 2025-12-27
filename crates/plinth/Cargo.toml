@@ -29,4 +29,4 @@ tracing-tracy = { workspace = true, optional = true }
 winit = { workspace = true }
 
 [target.'cfg(windows)'.dependencies]
-wgpu = { workspace = true, features = ["wgsl", "dx12", 'static-dxc'] }
+wgpu = { workspace = true, features = ["wgsl", "dx12", "static-dxc"] }
