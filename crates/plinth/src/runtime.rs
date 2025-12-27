@@ -6,7 +6,6 @@ use std::time::Duration;
 use slotmap::SlotMap;
 use slotmap::new_key_type;
 use smallvec::SmallVec;
-use tracing::warn;
 use winit::application::ApplicationHandler;
 use winit::event::WindowEvent;
 use winit::event_loop::ActiveEventLoop;
@@ -235,7 +234,6 @@ impl<App> WinitApp<App> {
         }
 
         if self.runtime.viewports.is_empty() {
-            warn!("No open windows, terminating...");
             event_loop.exit();
         }
     }

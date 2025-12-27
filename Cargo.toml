@@ -41,9 +41,6 @@ winit = "0.30"
 [profile.dev.build-override]
 opt-level = 2
 
-# [profile.dev.package."*"]
-# opt-level = 3
-
 [profile.release]
 lto = "thin"
 panic = "abort"

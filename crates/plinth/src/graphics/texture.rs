@@ -16,9 +16,9 @@ use image::ImageReader;
 use slotmap::SlotMap;
 use slotmap::new_key_type;
 use tracing::debug;
+use tracing::debug_span;
 use tracing::field::Empty;
 use tracing::info;
-use tracing::info_span;
 use tracing::instrument;
 use tracing::trace;
 use tracing::warn;
@@ -369,7 +369,7 @@ impl TextureManagerInner {
         let storage_id = usage.storage;
         let texture_id = self.texture_map.borrow_mut().insert(usage);
 
-        info!(
+        trace!(
             x = rectangle.x_range().start,
             y = rectangle.y_range().start,
             width = rectangle.width(),
@@ -455,7 +455,7 @@ impl TextureManagerInner {
 
         // todo: figure out a better way
         std::thread::spawn({
-            let span = info_span!(
+            let span = debug_span!(
                 "Loading texture from file",
                 path = %path.display(),
                 texture_id = debug(texture_id),
@@ -511,7 +511,7 @@ impl TextureManagerInner {
 
                 ready.send(texture_id).unwrap();
 
-                info!(
+                debug!(
                     x = rectangle.x_range().start,
                     y = rectangle.y_range().start,
                     uvwh = ?uvwh,
@@ -688,14 +688,6 @@ impl FormattedTextureManager {
 
             let allocation = storage.atlas.allocate(alloc_size).unwrap();
             let storage_id = self.storage.insert(storage);
-
-            debug!(
-                storage_id = ?storage_id,
-                width = atlas_width,
-                height = atlas_height,
-                format = ?self.format,
-                "Allocated new texture storage"
-            );
 
             (storage_id, texture, texture_view, atlas_size, allocation)
         };

@@ -4,6 +4,7 @@ use std::sync::Arc;
 
 use pollster::block_on;
 use smallvec::SmallVec;
+use tracing::debug;
 use tracing::info;
 use tracing::instrument;
 use tracing::warn;
@@ -39,7 +40,7 @@ pub struct GraphicsContext {
 impl GraphicsContext {
     #[instrument(skip(window))]
     pub fn new(window: Arc<Window>) -> Self {
-        info!("Creating graphics context");
+        debug!("Creating graphics context");
 
         let mut flags = wgpu::InstanceFlags::empty();
 
@@ -76,7 +77,11 @@ impl GraphicsContext {
         })
         .unwrap();
 
-        info!("Adapter: {:?}", adapter.get_info());
+        let adapter_info = adapter.get_info();
+        info!(
+            "Adapter: {} (driver: {} {})",
+            adapter_info.name, adapter_info.backend, adapter_info.driver,
+        );
 
         let (device, queue) = block_on(async {
             adapter
@@ -211,8 +216,6 @@ impl GraphicsContext {
 
 impl Drop for GraphicsContext {
     fn drop(&mut self) {
-        info!("Dropping graphics context");
-
         self.textures.end_frame();
     }
 }
