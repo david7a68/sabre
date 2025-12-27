@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
 
-use futures::executor::block_on;
+use pollster::block_on;
 use smallvec::SmallVec;
 use tracing::info;
 use tracing::instrument;
@@ -55,8 +55,9 @@ impl GraphicsContext {
             memory_budget_thresholds: wgpu::MemoryBudgetThresholds::default(),
             backend_options: wgpu::BackendOptions {
                 dx12: wgpu::Dx12BackendOptions {
-                    // shader_compiler: wgpu::Dx12Compiler::StaticDxc,
                     shader_compiler: wgpu::Dx12Compiler::Fxc,
+                    presentation_system: wgpu::Dx12SwapchainKind::DxgiFromHwnd,
+                    latency_waitable_object: wgpu::Dx12UseFrameLatencyWaitableObject::Wait,
                 },
                 ..Default::default()
             },
@@ -85,6 +86,7 @@ impl GraphicsContext {
                     required_limits: wgpu::Limits::default(),
                     memory_hints: wgpu::MemoryHints::MemoryUsage,
                     trace: wgpu::Trace::Off,
+                    experimental_features: wgpu::ExperimentalFeatures::disabled(),
                 })
                 .await
         })
@@ -264,6 +266,7 @@ fn write_commands(
             depth_stencil_attachment: None,
             occlusion_query_set: None,
             timestamp_writes: None,
+            multiview_mask: None,
         });
 
         render_pass.set_pipeline(&render_pipeline.pipeline);

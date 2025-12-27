@@ -347,7 +347,7 @@ impl TextureManagerInner {
             .expect("Max texture dimension of 65535 exceeded.");
 
         assert!(
-            data.len() % bytes_per_row == 0,
+            data.len().is_multiple_of(bytes_per_row),
             "Data length is not a multiple of width and pixel size: data.len() = {}, width = {}, bytes per pixel = {}",
             data.len(),
             width,
