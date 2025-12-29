@@ -77,4 +77,4 @@ jobs:
 
     # Checks
     - name: Run tests
-      run: cargo test --verbose
+      run: cargo test --verbose --workspace

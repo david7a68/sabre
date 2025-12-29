@@ -38,7 +38,7 @@ impl From<Option<Size>> for Size {
     }
 }
 
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct Padding {
     pub left: f32,
     pub right: f32,
