@@ -88,18 +88,6 @@ impl StyleRegistry {
         Ok(id)
     }
 
-    /// Unregister a style and remove it from parent's children.
-    pub fn unregister(&mut self, style_id: StyleId) {
-        if let Some(def) = self.definitions.remove(style_id)
-            && let Some(parent_id) = def.parent
-            && let Some(siblings) = self.children.get_mut(parent_id)
-        {
-            siblings.retain(|id| *id != style_id);
-        }
-        self.resolved.remove(style_id);
-        self.children.remove(style_id);
-    }
-
     /// Update a style's overrides and regenerate it and all descendants.
     pub fn update(
         &mut self,

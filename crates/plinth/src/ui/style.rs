@@ -224,32 +224,6 @@ mod tests {
     }
 
     #[test]
-    fn test_unregister() {
-        let mut registry = StyleRegistry::new();
-
-        let style = registry
-            .register(
-                None,
-                vec![(
-                    StateFlags::NORMAL,
-                    StyleProperty::BackgroundColor(rgb(100, 100, 100)),
-                )],
-            )
-            .unwrap();
-
-        // Should resolve successfully
-        let color: Color = registry.resolve::<BackgroundColor>(style, StateFlags::NORMAL);
-        assert_eq!(color, rgb(100, 100, 100));
-
-        // Unregister the style
-        registry.unregister(style);
-
-        // Now should return default (since style doesn't exist)
-        let color: Color = registry.resolve::<BackgroundColor>(style, StateFlags::NORMAL);
-        assert_eq!(color, Color::WHITE);
-    }
-
-    #[test]
     fn test_multiple_properties_same_state() {
         let mut registry = StyleRegistry::new();
 
@@ -274,32 +248,6 @@ mod tests {
 
         assert_eq!(bg, rgb(100, 100, 100));
         assert_eq!(text, rgb(255, 255, 255));
-    }
-
-    #[test]
-    fn test_try_resolve_returns_none_for_missing_style() {
-        let mut registry = StyleRegistry::new();
-
-        let style = registry
-            .register(
-                None,
-                vec![(
-                    StateFlags::NORMAL,
-                    StyleProperty::BackgroundColor(rgb(100, 100, 100)),
-                )],
-            )
-            .unwrap();
-
-        // Property exists
-        let bg: Option<Color> = registry.try_resolve::<BackgroundColor>(style, StateFlags::NORMAL);
-        assert_eq!(bg, Some(rgb(100, 100, 100)));
-
-        // Unregister the style
-        registry.unregister(style);
-
-        // try_resolve should return None for non-existent style
-        let bg: Option<Color> = registry.try_resolve::<BackgroundColor>(style, StateFlags::NORMAL);
-        assert_eq!(bg, None);
     }
 
     #[test]
