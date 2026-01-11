@@ -23,16 +23,18 @@ mod tests {
     fn test_basic_type_safe_resolution() {
         let mut registry = StyleRegistry::new();
 
-        let style = registry.register(
-            None,
-            vec![
-                (
-                    StateFlags::NORMAL,
-                    StyleProperty::BackgroundColor(rgb(255, 0, 0)),
-                ),
-                (StateFlags::NORMAL, StyleProperty::TextColor(rgb(0, 0, 255))),
-            ],
-        );
+        let style = registry
+            .register(
+                None,
+                vec![
+                    (
+                        StateFlags::NORMAL,
+                        StyleProperty::BackgroundColor(rgb(255, 0, 0)),
+                    ),
+                    (StateFlags::NORMAL, StyleProperty::TextColor(rgb(0, 0, 255))),
+                ],
+            )
+            .unwrap();
 
         let bg: Color = registry.resolve::<BackgroundColor>(style, StateFlags::NORMAL);
         let text: Color = registry.resolve::<TextColor>(style, StateFlags::NORMAL);
@@ -45,23 +47,25 @@ mod tests {
     fn test_state_specific_resolution() {
         let mut registry = StyleRegistry::new();
 
-        let style = registry.register(
-            None,
-            vec![
-                (
-                    StateFlags::NORMAL,
-                    StyleProperty::BackgroundColor(rgb(100, 100, 100)),
-                ),
-                (
-                    StateFlags::HOVERED,
-                    StyleProperty::BackgroundColor(rgb(150, 150, 150)),
-                ),
-                (
-                    StateFlags::PRESSED,
-                    StyleProperty::BackgroundColor(rgb(200, 200, 200)),
-                ),
-            ],
-        );
+        let style = registry
+            .register(
+                None,
+                vec![
+                    (
+                        StateFlags::NORMAL,
+                        StyleProperty::BackgroundColor(rgb(100, 100, 100)),
+                    ),
+                    (
+                        StateFlags::HOVERED,
+                        StyleProperty::BackgroundColor(rgb(150, 150, 150)),
+                    ),
+                    (
+                        StateFlags::PRESSED,
+                        StyleProperty::BackgroundColor(rgb(200, 200, 200)),
+                    ),
+                ],
+            )
+            .unwrap();
 
         let normal: Color = registry.resolve::<BackgroundColor>(style, StateFlags::NORMAL);
         let hovered: Color = registry.resolve::<BackgroundColor>(style, StateFlags::HOVERED);
@@ -77,7 +81,7 @@ mod tests {
         let mut registry = StyleRegistry::new();
 
         // Register style with no properties
-        let style = registry.register(None, vec![]);
+        let style = registry.register(None, vec![]).unwrap();
 
         // Should return default values
         let bg: Color = registry.resolve::<BackgroundColor>(style, StateFlags::NORMAL);
@@ -92,28 +96,32 @@ mod tests {
         let mut registry = StyleRegistry::new();
 
         // Parent style with background
-        let parent = registry.register(
-            None,
-            vec![
-                (
-                    StateFlags::NORMAL,
-                    StyleProperty::BackgroundColor(rgb(50, 50, 50)),
-                ),
-                (
-                    StateFlags::NORMAL,
-                    StyleProperty::TextColor(rgb(255, 255, 255)),
-                ),
-            ],
-        );
+        let parent = registry
+            .register(
+                None,
+                vec![
+                    (
+                        StateFlags::NORMAL,
+                        StyleProperty::BackgroundColor(rgb(50, 50, 50)),
+                    ),
+                    (
+                        StateFlags::NORMAL,
+                        StyleProperty::TextColor(rgb(255, 255, 255)),
+                    ),
+                ],
+            )
+            .unwrap();
 
         // Child style only overrides background
-        let child = registry.register(
-            Some(parent),
-            vec![(
-                StateFlags::NORMAL,
-                StyleProperty::BackgroundColor(rgb(100, 100, 100)),
-            )],
-        );
+        let child = registry
+            .register(
+                Some(parent),
+                vec![(
+                    StateFlags::NORMAL,
+                    StyleProperty::BackgroundColor(rgb(100, 100, 100)),
+                )],
+            )
+            .unwrap();
 
         let bg: Color = registry.resolve::<BackgroundColor>(child, StateFlags::NORMAL);
         let text: Color = registry.resolve::<TextColor>(child, StateFlags::NORMAL);
@@ -128,19 +136,21 @@ mod tests {
     fn test_exact_match_priority() {
         let mut registry = StyleRegistry::new();
 
-        let style = registry.register(
-            None,
-            vec![
-                (
-                    StateFlags::HOVERED,
-                    StyleProperty::BackgroundColor(rgb(100, 100, 100)),
-                ),
-                (
-                    StateFlags::HOVERED | StateFlags::PRESSED,
-                    StyleProperty::BackgroundColor(rgb(200, 200, 200)),
-                ),
-            ],
-        );
+        let style = registry
+            .register(
+                None,
+                vec![
+                    (
+                        StateFlags::HOVERED,
+                        StyleProperty::BackgroundColor(rgb(100, 100, 100)),
+                    ),
+                    (
+                        StateFlags::HOVERED | StateFlags::PRESSED,
+                        StyleProperty::BackgroundColor(rgb(200, 200, 200)),
+                    ),
+                ],
+            )
+            .unwrap();
 
         // Exact match for HOVERED | PRESSED should return the more specific one
         let color: Color =
@@ -156,19 +166,21 @@ mod tests {
     fn test_best_subset_match() {
         let mut registry = StyleRegistry::new();
 
-        let style = registry.register(
-            None,
-            vec![
-                (
-                    StateFlags::HOVERED,
-                    StyleProperty::BackgroundColor(rgb(100, 100, 100)),
-                ),
-                (
-                    StateFlags::PRESSED,
-                    StyleProperty::BackgroundColor(rgb(150, 150, 150)),
-                ),
-            ],
-        );
+        let style = registry
+            .register(
+                None,
+                vec![
+                    (
+                        StateFlags::HOVERED,
+                        StyleProperty::BackgroundColor(rgb(100, 100, 100)),
+                    ),
+                    (
+                        StateFlags::PRESSED,
+                        StyleProperty::BackgroundColor(rgb(150, 150, 150)),
+                    ),
+                ],
+            )
+            .unwrap();
 
         // Query with HOVERED | PRESSED should match one of them (subset match)
         // Since both have same bit count, it should match the first one found
@@ -183,23 +195,25 @@ mod tests {
     fn test_most_specific_subset_match() {
         let mut registry = StyleRegistry::new();
 
-        let style = registry.register(
-            None,
-            vec![
-                (
-                    StateFlags::NORMAL,
-                    StyleProperty::BackgroundColor(rgb(50, 50, 50)),
-                ),
-                (
-                    StateFlags::HOVERED,
-                    StyleProperty::BackgroundColor(rgb(100, 100, 100)),
-                ),
-                (
-                    StateFlags::HOVERED | StateFlags::PRESSED,
-                    StyleProperty::BackgroundColor(rgb(150, 150, 150)),
-                ),
-            ],
-        );
+        let style = registry
+            .register(
+                None,
+                vec![
+                    (
+                        StateFlags::NORMAL,
+                        StyleProperty::BackgroundColor(rgb(50, 50, 50)),
+                    ),
+                    (
+                        StateFlags::HOVERED,
+                        StyleProperty::BackgroundColor(rgb(100, 100, 100)),
+                    ),
+                    (
+                        StateFlags::HOVERED | StateFlags::PRESSED,
+                        StyleProperty::BackgroundColor(rgb(150, 150, 150)),
+                    ),
+                ],
+            )
+            .unwrap();
 
         // Query with HOVERED | PRESSED should match the most specific (2 bits)
         let color: Color =
@@ -213,13 +227,15 @@ mod tests {
     fn test_unregister() {
         let mut registry = StyleRegistry::new();
 
-        let style = registry.register(
-            None,
-            vec![(
-                StateFlags::NORMAL,
-                StyleProperty::BackgroundColor(rgb(100, 100, 100)),
-            )],
-        );
+        let style = registry
+            .register(
+                None,
+                vec![(
+                    StateFlags::NORMAL,
+                    StyleProperty::BackgroundColor(rgb(100, 100, 100)),
+                )],
+            )
+            .unwrap();
 
         // Should resolve successfully
         let color: Color = registry.resolve::<BackgroundColor>(style, StateFlags::NORMAL);
@@ -237,19 +253,21 @@ mod tests {
     fn test_multiple_properties_same_state() {
         let mut registry = StyleRegistry::new();
 
-        let style = registry.register(
-            None,
-            vec![
-                (
-                    StateFlags::HOVERED,
-                    StyleProperty::BackgroundColor(rgb(100, 100, 100)),
-                ),
-                (
-                    StateFlags::HOVERED,
-                    StyleProperty::TextColor(rgb(255, 255, 255)),
-                ),
-            ],
-        );
+        let style = registry
+            .register(
+                None,
+                vec![
+                    (
+                        StateFlags::HOVERED,
+                        StyleProperty::BackgroundColor(rgb(100, 100, 100)),
+                    ),
+                    (
+                        StateFlags::HOVERED,
+                        StyleProperty::TextColor(rgb(255, 255, 255)),
+                    ),
+                ],
+            )
+            .unwrap();
 
         let bg: Color = registry.resolve::<BackgroundColor>(style, StateFlags::HOVERED);
         let text: Color = registry.resolve::<TextColor>(style, StateFlags::HOVERED);
@@ -262,13 +280,15 @@ mod tests {
     fn test_try_resolve_returns_none_for_missing_style() {
         let mut registry = StyleRegistry::new();
 
-        let style = registry.register(
-            None,
-            vec![(
-                StateFlags::NORMAL,
-                StyleProperty::BackgroundColor(rgb(100, 100, 100)),
-            )],
-        );
+        let style = registry
+            .register(
+                None,
+                vec![(
+                    StateFlags::NORMAL,
+                    StyleProperty::BackgroundColor(rgb(100, 100, 100)),
+                )],
+            )
+            .unwrap();
 
         // Property exists
         let bg: Option<Color> = registry.try_resolve::<BackgroundColor>(style, StateFlags::NORMAL);
@@ -287,13 +307,15 @@ mod tests {
         let mut registry = StyleRegistry::new();
 
         // Only define NORMAL state
-        let style = registry.register(
-            None,
-            vec![(
-                StateFlags::NORMAL,
-                StyleProperty::BackgroundColor(rgb(50, 50, 50)),
-            )],
-        );
+        let style = registry
+            .register(
+                None,
+                vec![(
+                    StateFlags::NORMAL,
+                    StyleProperty::BackgroundColor(rgb(50, 50, 50)),
+                )],
+            )
+            .unwrap();
 
         // NORMAL should match
         let normal: Color = registry.resolve::<BackgroundColor>(style, StateFlags::NORMAL);
@@ -313,13 +335,15 @@ mod tests {
         let mut registry = StyleRegistry::new();
 
         // Only define HOVERED state, not NORMAL
-        let style = registry.register(
-            None,
-            vec![(
-                StateFlags::HOVERED,
-                StyleProperty::BackgroundColor(rgb(100, 100, 100)),
-            )],
-        );
+        let style = registry
+            .register(
+                None,
+                vec![(
+                    StateFlags::HOVERED,
+                    StyleProperty::BackgroundColor(rgb(100, 100, 100)),
+                )],
+            )
+            .unwrap();
 
         // NORMAL query should NOT match HOVERED (HOVERED is not a subset of NORMAL)
         // Should return default
@@ -335,27 +359,29 @@ mod tests {
     fn test_compound_state_selected_and_hovered() {
         let mut registry = StyleRegistry::new();
 
-        let style = registry.register(
-            None,
-            vec![
-                (
-                    StateFlags::NORMAL,
-                    StyleProperty::BackgroundColor(rgb(50, 50, 50)),
-                ),
-                (
-                    StateFlags::SELECTED,
-                    StyleProperty::BackgroundColor(rgb(100, 100, 100)),
-                ),
-                (
-                    StateFlags::HOVERED,
-                    StyleProperty::BackgroundColor(rgb(150, 150, 150)),
-                ),
-                (
-                    StateFlags::SELECTED | StateFlags::HOVERED,
-                    StyleProperty::BackgroundColor(rgb(200, 200, 200)),
-                ),
-            ],
-        );
+        let style = registry
+            .register(
+                None,
+                vec![
+                    (
+                        StateFlags::NORMAL,
+                        StyleProperty::BackgroundColor(rgb(50, 50, 50)),
+                    ),
+                    (
+                        StateFlags::SELECTED,
+                        StyleProperty::BackgroundColor(rgb(100, 100, 100)),
+                    ),
+                    (
+                        StateFlags::HOVERED,
+                        StyleProperty::BackgroundColor(rgb(150, 150, 150)),
+                    ),
+                    (
+                        StateFlags::SELECTED | StateFlags::HOVERED,
+                        StyleProperty::BackgroundColor(rgb(200, 200, 200)),
+                    ),
+                ],
+            )
+            .unwrap();
 
         // Individual states
         let normal: Color = registry.resolve::<BackgroundColor>(style, StateFlags::NORMAL);
@@ -377,13 +403,15 @@ mod tests {
     fn test_style_update_regenerates() {
         let mut registry = StyleRegistry::new();
 
-        let style = registry.register(
-            None,
-            vec![(
-                StateFlags::NORMAL,
-                StyleProperty::BackgroundColor(rgb(100, 100, 100)),
-            )],
-        );
+        let style = registry
+            .register(
+                None,
+                vec![(
+                    StateFlags::NORMAL,
+                    StyleProperty::BackgroundColor(rgb(100, 100, 100)),
+                )],
+            )
+            .unwrap();
 
         // Initial value
         let color: Color = registry.resolve::<BackgroundColor>(style, StateFlags::NORMAL);
@@ -407,21 +435,25 @@ mod tests {
     fn test_parent_update_regenerates_children() {
         let mut registry = StyleRegistry::new();
 
-        let parent = registry.register(
-            None,
-            vec![(
-                StateFlags::NORMAL,
-                StyleProperty::BackgroundColor(rgb(50, 50, 50)),
-            )],
-        );
+        let parent = registry
+            .register(
+                None,
+                vec![(
+                    StateFlags::NORMAL,
+                    StyleProperty::BackgroundColor(rgb(50, 50, 50)),
+                )],
+            )
+            .unwrap();
 
-        let child = registry.register(
-            Some(parent),
-            vec![(
-                StateFlags::NORMAL,
-                StyleProperty::TextColor(rgb(255, 255, 255)),
-            )],
-        );
+        let child = registry
+            .register(
+                Some(parent),
+                vec![(
+                    StateFlags::NORMAL,
+                    StyleProperty::TextColor(rgb(255, 255, 255)),
+                )],
+            )
+            .unwrap();
 
         // Child inherits parent's background
         let bg: Color = registry.resolve::<BackgroundColor>(child, StateFlags::NORMAL);
@@ -449,19 +481,21 @@ mod tests {
     fn test_direct_style_access() {
         let mut registry = StyleRegistry::new();
 
-        let style_id = registry.register(
-            None,
-            vec![
-                (
-                    StateFlags::NORMAL,
-                    StyleProperty::BackgroundColor(rgb(100, 100, 100)),
-                ),
-                (
-                    StateFlags::HOVERED,
-                    StyleProperty::BackgroundColor(rgb(150, 150, 150)),
-                ),
-            ],
-        );
+        let style_id = registry
+            .register(
+                None,
+                vec![
+                    (
+                        StateFlags::NORMAL,
+                        StyleProperty::BackgroundColor(rgb(100, 100, 100)),
+                    ),
+                    (
+                        StateFlags::HOVERED,
+                        StyleProperty::BackgroundColor(rgb(150, 150, 150)),
+                    ),
+                ],
+            )
+            .unwrap();
 
         // Get the resolved style directly
         let style = registry.get(style_id).unwrap();

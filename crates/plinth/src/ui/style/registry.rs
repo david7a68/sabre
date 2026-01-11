@@ -12,8 +12,13 @@ new_key_type! {
     pub struct StyleId;
 }
 
-#[derive(Default)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum StyleError {
+    ParentNotFound,
+}
+
 pub struct StyleRegistry {
+    default_style: StyleId,
     /// Source definitions - kept for regeneration when parent changes
     definitions: SlotMap<StyleId, StyleDef>,
     /// Resolved styles - used at runtime for O(1) property access
@@ -22,9 +27,32 @@ pub struct StyleRegistry {
     children: SecondaryMap<StyleId, SmallVec<[StyleId; 4]>>,
 }
 
+impl Default for StyleRegistry {
+    fn default() -> Self {
+        let mut definitions = SlotMap::with_key();
+        let mut resolved = SecondaryMap::new();
+        let mut children = SecondaryMap::new();
+
+        let default_style = definitions.insert(StyleDef::default());
+        resolved.insert(default_style, Style::default());
+        children.insert(default_style, SmallVec::new());
+
+        Self {
+            default_style,
+            definitions,
+            resolved,
+            children,
+        }
+    }
+}
+
 impl StyleRegistry {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    pub fn default_style_id(&self) -> StyleId {
+        self.default_style
     }
 
     /// Register a new style with optional parent and property overrides.
@@ -33,7 +61,13 @@ impl StyleRegistry {
         &mut self,
         parent: Option<StyleId>,
         properties: impl IntoIterator<Item = (StateFlags, StyleProperty)>,
-    ) -> StyleId {
+    ) -> Result<StyleId, StyleError> {
+        if let Some(parent) = parent
+            && self.definitions.get(parent).is_none()
+        {
+            return Err(StyleError::ParentNotFound);
+        }
+
         let def = StyleDef::new(parent, properties);
 
         // Build resolved style from parent + overrides
@@ -51,7 +85,7 @@ impl StyleRegistry {
             siblings.push(id);
         }
 
-        id
+        Ok(id)
     }
 
     /// Unregister a style and remove it from parent's children.
