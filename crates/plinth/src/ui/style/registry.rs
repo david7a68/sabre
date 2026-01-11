@@ -12,9 +12,12 @@ new_key_type! {
     pub struct StyleId;
 }
 
+const MAX_STYLE_TREE_DEPTH: usize = 32;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum StyleError {
     ParentNotFound,
+    StyleTreeDepthLimitExceeded,
 }
 
 pub struct StyleRegistry {
@@ -66,6 +69,22 @@ impl StyleRegistry {
             && self.definitions.get(parent).is_none()
         {
             return Err(StyleError::ParentNotFound);
+        }
+
+        // Check tree depth by walking up the parent chain
+        if let Some(mut current) = parent {
+            let mut depth = 1;
+            while let Some(def) = self.definitions.get(current) {
+                if let Some(p) = def.parent {
+                    depth += 1;
+                    if depth >= MAX_STYLE_TREE_DEPTH {
+                        return Err(StyleError::StyleTreeDepthLimitExceeded);
+                    }
+                    current = p;
+                } else {
+                    break;
+                }
+            }
         }
 
         let def = StyleDef::new(parent, properties);
