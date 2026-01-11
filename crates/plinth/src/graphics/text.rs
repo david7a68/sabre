@@ -111,7 +111,7 @@ impl Default for TextStyle {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum TextAlignment {
     Start,
     Center,
@@ -130,7 +130,7 @@ impl From<TextAlignment> for parley::Alignment {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum FontStyle {
     Normal,
     Italic,

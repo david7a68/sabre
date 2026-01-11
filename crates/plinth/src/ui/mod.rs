@@ -12,6 +12,7 @@ mod context;
 mod id;
 mod input;
 mod layout;
+pub mod style;
 mod widget;
 pub mod widgets;
 
