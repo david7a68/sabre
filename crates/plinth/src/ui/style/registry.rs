@@ -6,7 +6,6 @@ use smallvec::SmallVec;
 use super::StateFlags;
 use super::Style;
 use super::StyleProperty;
-use super::properties::STATE_COUNT;
 
 new_key_type! {
     pub struct StyleId;
@@ -189,13 +188,12 @@ pub trait PropertyKey: crate::sealed::Sealed {
 }
 
 /// A property value that varies based on widget state.
-/// Uses a lookup cache for O(1) resolution with compound states.
+/// Overrides are sorted by specificity (descending) for early-exit lookup.
 #[derive(Clone, Debug)]
 pub(crate) struct StatefulProperty<T: Copy> {
     default: T,
+    /// Overrides sorted by specificity (most specific first) for O(1) best-case lookup.
     overrides: SmallVec<[(StateFlags, T); 4]>,
-    /// Cache mapping state bits → index into overrides (0xFF = use default)
-    cache: [u8; STATE_COUNT],
 }
 
 impl<T: Copy> StatefulProperty<T> {
@@ -203,55 +201,39 @@ impl<T: Copy> StatefulProperty<T> {
         Self {
             default,
             overrides: SmallVec::new(),
-            cache: [0xFF; STATE_COUNT],
         }
     }
 
     /// Set a value for the given state flags.
+    /// Maintains sort order by specificity (descending).
     pub(crate) fn set(&mut self, flags: StateFlags, value: T) {
         // Check if we already have an override for these exact flags
         if let Some(existing) = self.overrides.iter_mut().find(|(f, _)| *f == flags) {
             existing.1 = value;
-        } else {
-            self.overrides.push((flags, value));
+            return;
         }
-        self.rebuild_cache();
+
+        // Insert in sorted order (most specific first)
+        let specificity = flags.bits().count_ones();
+        let insert_pos = self
+            .overrides
+            .iter()
+            .position(|(f, _)| f.bits().count_ones() < specificity)
+            .unwrap_or(self.overrides.len());
+
+        self.overrides.insert(insert_pos, (flags, value));
     }
 
-    /// Rebuild the lookup cache after modifications.
-    fn rebuild_cache(&mut self) {
-        for state_bits in 0..STATE_COUNT {
-            let state = StateFlags::from_bits_truncate(state_bits as u8);
-            self.cache[state_bits] = self.find_best_match(state);
-        }
-    }
-
-    /// Find the best matching override for a given state.
-    /// Returns index into overrides, or 0xFF if no match (use default).
-    fn find_best_match(&self, state: StateFlags) -> u8 {
-        let mut best_idx: u8 = 0xFF;
-        let mut best_count: i32 = -1; // Start at -1 so NORMAL (0 bits) can win
-
-        for (i, (flags, _)) in self.overrides.iter().enumerate() {
-            // A match occurs when the queried state contains all the flags of this override
-            if state.contains(*flags) {
-                let count = flags.bits().count_ones() as i32;
-                if count > best_count {
-                    best_idx = i as u8;
-                    best_count = count;
-                }
-            }
-        }
-        best_idx
-    }
-
-    /// Get the value for a given state. O(1) lookup.
+    /// Get the value for a given state.
+    /// Scans overrides (sorted by specificity) and returns first match.
     #[inline]
     pub(crate) fn get(&self, state: StateFlags) -> T {
-        match self.cache[state.bits() as usize] {
-            0xFF => self.default,
-            idx => self.overrides[idx as usize].1,
+        for (flags, value) in &self.overrides {
+            if state.contains(*flags) {
+                return *value;
+            }
         }
+        self.default
     }
 }
 

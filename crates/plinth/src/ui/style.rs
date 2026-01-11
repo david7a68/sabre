@@ -47,7 +47,7 @@
 //!             StyleProperty::TextColor(Color::BLACK),
 //!         ),
 //!     ],
-//! );
+//! ).unwrap();
 //!
 //! // Later, resolve strongly typed properties for a particular state:
 //! let bg: Color = registry.resolve::<BackgroundColor>(style_id, StateFlags::NORMAL);

@@ -8,8 +8,6 @@ use crate::ui::layout::Padding;
 use crate::ui::style::registry::PropertyKey;
 use crate::ui::style::registry::StatefulProperty;
 
-pub(crate) const STATE_COUNT: usize = StateFlags::all().bits() as usize + 1;
-
 bitflags::bitflags! {
     #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
     pub struct StateFlags: u8 {
