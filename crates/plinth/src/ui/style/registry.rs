@@ -184,62 +184,6 @@ pub trait PropertyKey: crate::sealed::Sealed {
     fn get(style: &Style, state: StateFlags) -> Self::Value;
 }
 
-/// A property value that varies based on widget state.
-/// Overrides are sorted by specificity (descending) for early-exit lookup.
-#[derive(Clone, Debug)]
-pub(crate) struct StatefulProperty<T: Copy> {
-    default: T,
-    /// Overrides sorted by specificity (most specific first) for O(1) best-case lookup.
-    overrides: SmallVec<[(StateFlags, T); 4]>,
-}
-
-impl<T: Copy> StatefulProperty<T> {
-    pub(crate) fn new(default: T) -> Self {
-        Self {
-            default,
-            overrides: SmallVec::new(),
-        }
-    }
-
-    /// Set a value for the given state flags.
-    /// Maintains sort order by specificity (descending).
-    pub(crate) fn set(&mut self, flags: StateFlags, value: T) {
-        // Check if we already have an override for these exact flags
-        if let Some(existing) = self.overrides.iter_mut().find(|(f, _)| *f == flags) {
-            existing.1 = value;
-            return;
-        }
-
-        // Insert in sorted order (most specific first)
-        let specificity = flags.bits().count_ones();
-        let insert_pos = self
-            .overrides
-            .iter()
-            .position(|(f, _)| f.bits().count_ones() < specificity)
-            .unwrap_or(self.overrides.len());
-
-        self.overrides.insert(insert_pos, (flags, value));
-    }
-
-    /// Get the value for a given state.
-    /// Scans overrides (sorted by specificity) and returns first match.
-    #[inline]
-    pub(crate) fn get(&self, state: StateFlags) -> T {
-        for (flags, value) in &self.overrides {
-            if state.contains(*flags) {
-                return *value;
-            }
-        }
-        self.default
-    }
-}
-
-impl<T: Copy + Default> Default for StatefulProperty<T> {
-    fn default() -> Self {
-        Self::new(T::default())
-    }
-}
-
 /// Source definition for a style - stored for regeneration.
 #[derive(Clone, Debug, Default)]
 struct StyleDef {
@@ -256,5 +200,691 @@ impl StyleDef {
             parent,
             overrides: overrides.into_iter().collect(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::graphics::Color;
+    use crate::ui::style::{BackgroundColor, TextColor};
+
+    use super::*;
+
+    // Helper to create colors from 0-255 RGB values
+    fn rgb(r: u8, g: u8, b: u8) -> Color {
+        Color::srgb(r as f32 / 255.0, g as f32 / 255.0, b as f32 / 255.0, 1.0)
+    }
+
+    // ==================== Registration Tests ====================
+
+    #[test]
+    fn basic_registration_and_resolution() {
+        let mut registry = StyleRegistry::new();
+
+        let style = registry
+            .register(
+                None,
+                vec![
+                    (
+                        StateFlags::NORMAL,
+                        StyleProperty::BackgroundColor(rgb(255, 0, 0)),
+                    ),
+                    (StateFlags::NORMAL, StyleProperty::TextColor(rgb(0, 0, 255))),
+                ],
+            )
+            .unwrap();
+
+        let bg: Color = registry.resolve::<BackgroundColor>(style, StateFlags::NORMAL);
+        let text: Color = registry.resolve::<TextColor>(style, StateFlags::NORMAL);
+
+        assert_eq!(bg, rgb(255, 0, 0));
+        assert_eq!(text, rgb(0, 0, 255));
+    }
+
+    #[test]
+    #[should_panic(expected = "parent that does not exist")]
+    fn invalid_parent_panics() {
+        let mut registry = StyleRegistry::new();
+
+        let mut other_registry = StyleRegistry::new();
+        let fake_parent = other_registry.register(None, vec![]).unwrap();
+
+        let _ = registry.register(Some(fake_parent), vec![]);
+    }
+
+    #[test]
+    fn depth_limit_enforcement() {
+        let mut registry = StyleRegistry::new();
+
+        let mut current = registry.register(None, vec![]).unwrap();
+
+        // MAX_STYLE_TREE_DEPTH is 32; we can have 31 levels of children
+        for _ in 0..31 {
+            current = registry.register(Some(current), vec![]).unwrap();
+        }
+
+        let result = registry.register(Some(current), vec![]);
+        assert_eq!(result, Err(StyleError::StyleTreeDepthLimitExceeded));
+    }
+
+    #[test]
+    fn default_style_is_accessible() {
+        let registry = StyleRegistry::new();
+
+        let default_id = registry.default_style_id();
+
+        let bg: Color = registry.resolve::<BackgroundColor>(default_id, StateFlags::NORMAL);
+        let text: Color = registry.resolve::<TextColor>(default_id, StateFlags::NORMAL);
+
+        assert_eq!(bg, Color::WHITE);
+        assert_eq!(text, Color::BLACK);
+        assert!(registry.get(default_id).is_some());
+    }
+
+    #[test]
+    fn child_can_use_default_as_parent() {
+        let mut registry = StyleRegistry::new();
+
+        let default_id = registry.default_style_id();
+
+        let child = registry
+            .register(
+                Some(default_id),
+                vec![(
+                    StateFlags::NORMAL,
+                    StyleProperty::BackgroundColor(rgb(100, 100, 100)),
+                )],
+            )
+            .unwrap();
+
+        assert_eq!(
+            registry.resolve::<BackgroundColor>(child, StateFlags::NORMAL),
+            rgb(100, 100, 100)
+        );
+        assert_eq!(
+            registry.resolve::<TextColor>(child, StateFlags::NORMAL),
+            Color::BLACK
+        );
+    }
+
+    // ==================== Inheritance Tests ====================
+
+    #[test]
+    fn child_inherits_from_parent() {
+        let mut registry = StyleRegistry::new();
+
+        let parent = registry
+            .register(
+                None,
+                vec![
+                    (
+                        StateFlags::NORMAL,
+                        StyleProperty::BackgroundColor(rgb(50, 50, 50)),
+                    ),
+                    (
+                        StateFlags::NORMAL,
+                        StyleProperty::TextColor(rgb(255, 255, 255)),
+                    ),
+                ],
+            )
+            .unwrap();
+
+        let child = registry
+            .register(
+                Some(parent),
+                vec![(
+                    StateFlags::NORMAL,
+                    StyleProperty::BackgroundColor(rgb(100, 100, 100)),
+                )],
+            )
+            .unwrap();
+
+        // Background from child, text inherited from parent
+        assert_eq!(
+            registry.resolve::<BackgroundColor>(child, StateFlags::NORMAL),
+            rgb(100, 100, 100)
+        );
+        assert_eq!(
+            registry.resolve::<TextColor>(child, StateFlags::NORMAL),
+            rgb(255, 255, 255)
+        );
+    }
+
+    #[test]
+    fn sibling_independence() {
+        let mut registry = StyleRegistry::new();
+
+        let parent = registry
+            .register(
+                None,
+                vec![(
+                    StateFlags::NORMAL,
+                    StyleProperty::BackgroundColor(rgb(50, 50, 50)),
+                )],
+            )
+            .unwrap();
+
+        let sibling1 = registry
+            .register(
+                Some(parent),
+                vec![(
+                    StateFlags::NORMAL,
+                    StyleProperty::BackgroundColor(rgb(100, 100, 100)),
+                )],
+            )
+            .unwrap();
+
+        let sibling2 = registry
+            .register(
+                Some(parent),
+                vec![(
+                    StateFlags::NORMAL,
+                    StyleProperty::BackgroundColor(rgb(200, 200, 200)),
+                )],
+            )
+            .unwrap();
+
+        registry.update(
+            sibling1,
+            vec![(
+                StateFlags::NORMAL,
+                StyleProperty::BackgroundColor(rgb(150, 150, 150)),
+            )],
+        );
+
+        assert_eq!(
+            registry.resolve::<BackgroundColor>(sibling1, StateFlags::NORMAL),
+            rgb(150, 150, 150)
+        );
+        assert_eq!(
+            registry.resolve::<BackgroundColor>(sibling2, StateFlags::NORMAL),
+            rgb(200, 200, 200)
+        );
+    }
+
+    // ==================== State Resolution Tests ====================
+
+    #[test]
+    fn state_specific_resolution() {
+        let mut registry = StyleRegistry::new();
+
+        let style = registry
+            .register(
+                None,
+                vec![
+                    (
+                        StateFlags::NORMAL,
+                        StyleProperty::BackgroundColor(rgb(100, 100, 100)),
+                    ),
+                    (
+                        StateFlags::HOVERED,
+                        StyleProperty::BackgroundColor(rgb(150, 150, 150)),
+                    ),
+                    (
+                        StateFlags::PRESSED,
+                        StyleProperty::BackgroundColor(rgb(200, 200, 200)),
+                    ),
+                ],
+            )
+            .unwrap();
+
+        assert_eq!(
+            registry.resolve::<BackgroundColor>(style, StateFlags::NORMAL),
+            rgb(100, 100, 100)
+        );
+        assert_eq!(
+            registry.resolve::<BackgroundColor>(style, StateFlags::HOVERED),
+            rgb(150, 150, 150)
+        );
+        assert_eq!(
+            registry.resolve::<BackgroundColor>(style, StateFlags::PRESSED),
+            rgb(200, 200, 200)
+        );
+    }
+
+    #[test]
+    fn default_fallback() {
+        let mut registry = StyleRegistry::new();
+        let style = registry.register(None, vec![]).unwrap();
+
+        assert_eq!(
+            registry.resolve::<BackgroundColor>(style, StateFlags::NORMAL),
+            Color::WHITE
+        );
+        assert_eq!(
+            registry.resolve::<TextColor>(style, StateFlags::NORMAL),
+            Color::BLACK
+        );
+    }
+
+    #[test]
+    fn exact_match_priority() {
+        let mut registry = StyleRegistry::new();
+
+        let style = registry
+            .register(
+                None,
+                vec![
+                    (
+                        StateFlags::HOVERED,
+                        StyleProperty::BackgroundColor(rgb(100, 100, 100)),
+                    ),
+                    (
+                        StateFlags::HOVERED | StateFlags::PRESSED,
+                        StyleProperty::BackgroundColor(rgb(200, 200, 200)),
+                    ),
+                ],
+            )
+            .unwrap();
+
+        assert_eq!(
+            registry.resolve::<BackgroundColor>(style, StateFlags::HOVERED | StateFlags::PRESSED),
+            rgb(200, 200, 200)
+        );
+        assert_eq!(
+            registry.resolve::<BackgroundColor>(style, StateFlags::HOVERED),
+            rgb(100, 100, 100)
+        );
+    }
+
+    #[test]
+    fn most_specific_subset_match() {
+        let mut registry = StyleRegistry::new();
+
+        let style = registry
+            .register(
+                None,
+                vec![
+                    (
+                        StateFlags::NORMAL,
+                        StyleProperty::BackgroundColor(rgb(50, 50, 50)),
+                    ),
+                    (
+                        StateFlags::HOVERED,
+                        StyleProperty::BackgroundColor(rgb(100, 100, 100)),
+                    ),
+                    (
+                        StateFlags::HOVERED | StateFlags::PRESSED,
+                        StyleProperty::BackgroundColor(rgb(150, 150, 150)),
+                    ),
+                ],
+            )
+            .unwrap();
+
+        // 2-bit match beats 1-bit match
+        assert_eq!(
+            registry.resolve::<BackgroundColor>(style, StateFlags::HOVERED | StateFlags::PRESSED),
+            rgb(150, 150, 150)
+        );
+    }
+
+    #[test]
+    fn state_fallback_to_normal() {
+        let mut registry = StyleRegistry::new();
+
+        let style = registry
+            .register(
+                None,
+                vec![(
+                    StateFlags::NORMAL,
+                    StyleProperty::BackgroundColor(rgb(50, 50, 50)),
+                )],
+            )
+            .unwrap();
+
+        // NORMAL is empty flags, so it matches any state as a subset
+        assert_eq!(
+            registry.resolve::<BackgroundColor>(style, StateFlags::HOVERED),
+            rgb(50, 50, 50)
+        );
+        assert_eq!(
+            registry.resolve::<BackgroundColor>(style, StateFlags::PRESSED),
+            rgb(50, 50, 50)
+        );
+    }
+
+    #[test]
+    fn hovered_does_not_match_normal_query() {
+        let mut registry = StyleRegistry::new();
+
+        let style = registry
+            .register(
+                None,
+                vec![(
+                    StateFlags::HOVERED,
+                    StyleProperty::BackgroundColor(rgb(100, 100, 100)),
+                )],
+            )
+            .unwrap();
+
+        // HOVERED is not a subset of NORMAL (empty), so falls back to default
+        assert_eq!(
+            registry.resolve::<BackgroundColor>(style, StateFlags::NORMAL),
+            Color::WHITE
+        );
+        assert_eq!(
+            registry.resolve::<BackgroundColor>(style, StateFlags::HOVERED),
+            rgb(100, 100, 100)
+        );
+    }
+
+    #[test]
+    fn empty_state_returns_default() {
+        let mut registry = StyleRegistry::new();
+
+        let style = registry
+            .register(
+                None,
+                vec![
+                    (
+                        StateFlags::HOVERED,
+                        StyleProperty::BackgroundColor(rgb(100, 100, 100)),
+                    ),
+                    (
+                        StateFlags::PRESSED,
+                        StyleProperty::BackgroundColor(rgb(150, 150, 150)),
+                    ),
+                ],
+            )
+            .unwrap();
+
+        assert_eq!(
+            registry.resolve::<BackgroundColor>(style, StateFlags::empty()),
+            Color::WHITE
+        );
+    }
+
+    #[test]
+    fn compound_state_selected_and_hovered() {
+        let mut registry = StyleRegistry::new();
+
+        let style = registry
+            .register(
+                None,
+                vec![
+                    (
+                        StateFlags::NORMAL,
+                        StyleProperty::BackgroundColor(rgb(50, 50, 50)),
+                    ),
+                    (
+                        StateFlags::SELECTED,
+                        StyleProperty::BackgroundColor(rgb(100, 100, 100)),
+                    ),
+                    (
+                        StateFlags::HOVERED,
+                        StyleProperty::BackgroundColor(rgb(150, 150, 150)),
+                    ),
+                    (
+                        StateFlags::SELECTED | StateFlags::HOVERED,
+                        StyleProperty::BackgroundColor(rgb(200, 200, 200)),
+                    ),
+                ],
+            )
+            .unwrap();
+
+        assert_eq!(
+            registry.resolve::<BackgroundColor>(style, StateFlags::NORMAL),
+            rgb(50, 50, 50)
+        );
+        assert_eq!(
+            registry.resolve::<BackgroundColor>(style, StateFlags::SELECTED),
+            rgb(100, 100, 100)
+        );
+        assert_eq!(
+            registry.resolve::<BackgroundColor>(style, StateFlags::HOVERED),
+            rgb(150, 150, 150)
+        );
+        assert_eq!(
+            registry.resolve::<BackgroundColor>(style, StateFlags::SELECTED | StateFlags::HOVERED),
+            rgb(200, 200, 200)
+        );
+    }
+
+    #[test]
+    fn multiple_properties_same_state() {
+        let mut registry = StyleRegistry::new();
+
+        let style = registry
+            .register(
+                None,
+                vec![
+                    (
+                        StateFlags::HOVERED,
+                        StyleProperty::BackgroundColor(rgb(100, 100, 100)),
+                    ),
+                    (
+                        StateFlags::HOVERED,
+                        StyleProperty::TextColor(rgb(255, 255, 255)),
+                    ),
+                ],
+            )
+            .unwrap();
+
+        assert_eq!(
+            registry.resolve::<BackgroundColor>(style, StateFlags::HOVERED),
+            rgb(100, 100, 100)
+        );
+        assert_eq!(
+            registry.resolve::<TextColor>(style, StateFlags::HOVERED),
+            rgb(255, 255, 255)
+        );
+    }
+
+    // ==================== Update & Regeneration Tests ====================
+
+    #[test]
+    fn style_update_regenerates() {
+        let mut registry = StyleRegistry::new();
+
+        let style = registry
+            .register(
+                None,
+                vec![(
+                    StateFlags::NORMAL,
+                    StyleProperty::BackgroundColor(rgb(100, 100, 100)),
+                )],
+            )
+            .unwrap();
+
+        registry.update(
+            style,
+            vec![(
+                StateFlags::NORMAL,
+                StyleProperty::BackgroundColor(rgb(200, 200, 200)),
+            )],
+        );
+
+        assert_eq!(
+            registry.resolve::<BackgroundColor>(style, StateFlags::NORMAL),
+            rgb(200, 200, 200)
+        );
+    }
+
+    #[test]
+    fn parent_update_regenerates_children() {
+        let mut registry = StyleRegistry::new();
+
+        let parent = registry
+            .register(
+                None,
+                vec![(
+                    StateFlags::NORMAL,
+                    StyleProperty::BackgroundColor(rgb(50, 50, 50)),
+                )],
+            )
+            .unwrap();
+
+        let child = registry
+            .register(
+                Some(parent),
+                vec![(
+                    StateFlags::NORMAL,
+                    StyleProperty::TextColor(rgb(255, 255, 255)),
+                )],
+            )
+            .unwrap();
+
+        registry.update(
+            parent,
+            vec![(
+                StateFlags::NORMAL,
+                StyleProperty::BackgroundColor(rgb(100, 100, 100)),
+            )],
+        );
+
+        assert_eq!(
+            registry.resolve::<BackgroundColor>(child, StateFlags::NORMAL),
+            rgb(100, 100, 100)
+        );
+        assert_eq!(
+            registry.resolve::<TextColor>(child, StateFlags::NORMAL),
+            rgb(255, 255, 255)
+        );
+    }
+
+    #[test]
+    fn deep_regeneration() {
+        let mut registry = StyleRegistry::new();
+
+        let root = registry
+            .register(
+                None,
+                vec![(
+                    StateFlags::NORMAL,
+                    StyleProperty::BackgroundColor(rgb(50, 50, 50)),
+                )],
+            )
+            .unwrap();
+
+        let child1 = registry.register(Some(root), vec![]).unwrap();
+        let child2 = registry.register(Some(child1), vec![]).unwrap();
+        let child3 = registry.register(Some(child2), vec![]).unwrap();
+
+        registry.update(
+            root,
+            vec![(
+                StateFlags::NORMAL,
+                StyleProperty::BackgroundColor(rgb(200, 200, 200)),
+            )],
+        );
+
+        assert_eq!(
+            registry.resolve::<BackgroundColor>(child1, StateFlags::NORMAL),
+            rgb(200, 200, 200)
+        );
+        assert_eq!(
+            registry.resolve::<BackgroundColor>(child2, StateFlags::NORMAL),
+            rgb(200, 200, 200)
+        );
+        assert_eq!(
+            registry.resolve::<BackgroundColor>(child3, StateFlags::NORMAL),
+            rgb(200, 200, 200)
+        );
+    }
+
+    #[test]
+    fn update_replaces_all_overrides() {
+        let mut registry = StyleRegistry::new();
+
+        let style = registry
+            .register(
+                None,
+                vec![
+                    (
+                        StateFlags::NORMAL,
+                        StyleProperty::BackgroundColor(rgb(50, 50, 50)),
+                    ),
+                    (
+                        StateFlags::HOVERED,
+                        StyleProperty::BackgroundColor(rgb(100, 100, 100)),
+                    ),
+                    (
+                        StateFlags::NORMAL,
+                        StyleProperty::TextColor(rgb(255, 255, 255)),
+                    ),
+                ],
+            )
+            .unwrap();
+
+        registry.update(
+            style,
+            vec![(
+                StateFlags::NORMAL,
+                StyleProperty::BackgroundColor(rgb(200, 200, 200)),
+            )],
+        );
+
+        assert_eq!(
+            registry.resolve::<BackgroundColor>(style, StateFlags::NORMAL),
+            rgb(200, 200, 200)
+        );
+        // Old hovered override gone
+        assert_eq!(
+            registry.resolve::<BackgroundColor>(style, StateFlags::HOVERED),
+            rgb(200, 200, 200)
+        );
+        // TextColor override removed
+        assert_eq!(
+            registry.resolve::<TextColor>(style, StateFlags::NORMAL),
+            Color::BLACK
+        );
+    }
+
+    // ==================== Accessor Tests ====================
+
+    #[test]
+    fn get_returns_none_for_invalid_id() {
+        let registry = StyleRegistry::new();
+
+        let mut other_registry = StyleRegistry::new();
+        let fake_id = other_registry.register(None, vec![]).unwrap();
+
+        assert!(registry.get(fake_id).is_none());
+    }
+
+    #[test]
+    fn try_resolve_with_invalid_id() {
+        let registry = StyleRegistry::new();
+
+        let mut other_registry = StyleRegistry::new();
+        let fake_id = other_registry.register(None, vec![]).unwrap();
+
+        assert!(
+            registry
+                .try_resolve::<BackgroundColor>(fake_id, StateFlags::NORMAL)
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn direct_style_access() {
+        let mut registry = StyleRegistry::new();
+
+        let style_id = registry
+            .register(
+                None,
+                vec![
+                    (
+                        StateFlags::NORMAL,
+                        StyleProperty::BackgroundColor(rgb(100, 100, 100)),
+                    ),
+                    (
+                        StateFlags::HOVERED,
+                        StyleProperty::BackgroundColor(rgb(150, 150, 150)),
+                    ),
+                ],
+            )
+            .unwrap();
+
+        let style = registry.get(style_id).unwrap();
+
+        assert_eq!(
+            style.background_color.get(StateFlags::NORMAL),
+            rgb(100, 100, 100)
+        );
+        assert_eq!(
+            style.background_color.get(StateFlags::HOVERED),
+            rgb(150, 150, 150)
+        );
     }
 }

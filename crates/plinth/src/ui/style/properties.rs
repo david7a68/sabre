@@ -6,7 +6,7 @@ use crate::ui::LayoutDirection;
 use crate::ui::layout::Padding;
 
 use crate::ui::style::registry::PropertyKey;
-use crate::ui::style::registry::StatefulProperty;
+use crate::ui::style::StatefulProperty;
 
 bitflags::bitflags! {
     #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
