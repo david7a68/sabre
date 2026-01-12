@@ -15,7 +15,6 @@ const MAX_STYLE_TREE_DEPTH: usize = 32;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum StyleError {
-    ParentNotFound,
     StyleTreeDepthLimitExceeded,
 }
 
@@ -67,7 +66,7 @@ impl StyleRegistry {
         if let Some(parent) = parent
             && self.definitions.get(parent).is_none()
         {
-            return Err(StyleError::ParentNotFound);
+            panic!("Attempted to register style with parent that does not exist");
         }
 
         // Check tree depth by walking up the parent chain
@@ -112,9 +111,11 @@ impl StyleRegistry {
         style_id: StyleId,
         properties: impl IntoIterator<Item = (StateFlags, StyleProperty)>,
     ) {
-        if let Some(def) = self.definitions.get_mut(style_id) {
-            def.overrides = properties.into_iter().collect();
-        }
+        let Some(def) = self.definitions.get_mut(style_id) else {
+            panic!("Attempted to update style that does not exist");
+        };
+
+        def.overrides = properties.into_iter().collect();
         self.regenerate(style_id);
     }
 
@@ -127,10 +128,8 @@ impl StyleRegistry {
     /// Type-safe property resolution with default fallback.
     #[inline]
     pub fn resolve<K: PropertyKey>(&self, style_id: StyleId, state: StateFlags) -> K::Value {
-        self.resolved
-            .get(style_id)
-            .map(|style| K::get(style, state))
-            .unwrap_or_else(|| K::get(&Style::default(), state))
+        let style = self.resolved.get(style_id).unwrap();
+        K::get(style, state)
     }
 
     /// Try to get a property value, returning None if style doesn't exist.
@@ -162,15 +161,13 @@ impl StyleRegistry {
 
     /// Regenerate a style and all its descendants.
     fn regenerate(&mut self, style_id: StyleId) {
-        // Regenerate this style
-        if let Some(def) = self.definitions.get(style_id).cloned() {
-            let resolved = self.build_resolved(&def);
+        if let Some(def) = self.definitions.get(style_id) {
+            let resolved = self.build_resolved(def);
             if let Some(slot) = self.resolved.get_mut(style_id) {
                 *slot = resolved;
             }
         }
 
-        // Recursively regenerate children
         if let Some(child_ids) = self.children.get(style_id).cloned() {
             for child_id in child_ids {
                 self.regenerate(child_id);
