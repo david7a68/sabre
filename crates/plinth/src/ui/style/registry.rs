@@ -48,10 +48,6 @@ impl Default for StyleRegistry {
 }
 
 impl StyleRegistry {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
     pub fn default_style_id(&self) -> StyleId {
         self.default_style
     }
@@ -132,18 +128,6 @@ impl StyleRegistry {
         K::get(style, state)
     }
 
-    /// Try to get a property value, returning None if style doesn't exist.
-    #[inline]
-    pub fn try_resolve<K: PropertyKey>(
-        &self,
-        style_id: StyleId,
-        state: StateFlags,
-    ) -> Option<K::Value> {
-        self.resolved
-            .get(style_id)
-            .map(|style| K::get(style, state))
-    }
-
     /// Build a resolved Style from a StyleDef.
     fn build_resolved(&self, def: &StyleDef) -> Style {
         // Start from parent's resolved style or default
@@ -219,7 +203,7 @@ mod tests {
 
     #[test]
     fn basic_registration_and_resolution() {
-        let mut registry = StyleRegistry::new();
+        let mut registry = StyleRegistry::default();
 
         let style = registry
             .register(
@@ -244,9 +228,9 @@ mod tests {
     #[test]
     #[should_panic(expected = "parent that does not exist")]
     fn invalid_parent_panics() {
-        let mut registry = StyleRegistry::new();
+        let mut registry = StyleRegistry::default();
 
-        let mut other_registry = StyleRegistry::new();
+        let mut other_registry = StyleRegistry::default();
         let fake_parent = other_registry.register(None, vec![]).unwrap();
 
         let _ = registry.register(Some(fake_parent), vec![]);
@@ -254,7 +238,7 @@ mod tests {
 
     #[test]
     fn depth_limit_enforcement() {
-        let mut registry = StyleRegistry::new();
+        let mut registry = StyleRegistry::default();
 
         let mut current = registry.register(None, vec![]).unwrap();
 
@@ -269,7 +253,7 @@ mod tests {
 
     #[test]
     fn default_style_is_accessible() {
-        let registry = StyleRegistry::new();
+        let registry = StyleRegistry::default();
 
         let default_id = registry.default_style_id();
 
@@ -283,7 +267,7 @@ mod tests {
 
     #[test]
     fn child_can_use_default_as_parent() {
-        let mut registry = StyleRegistry::new();
+        let mut registry = StyleRegistry::default();
 
         let default_id = registry.default_style_id();
 
@@ -311,7 +295,7 @@ mod tests {
 
     #[test]
     fn child_inherits_from_parent() {
-        let mut registry = StyleRegistry::new();
+        let mut registry = StyleRegistry::default();
 
         let parent = registry
             .register(
@@ -352,7 +336,7 @@ mod tests {
 
     #[test]
     fn sibling_independence() {
-        let mut registry = StyleRegistry::new();
+        let mut registry = StyleRegistry::default();
 
         let parent = registry
             .register(
@@ -406,7 +390,7 @@ mod tests {
 
     #[test]
     fn state_specific_resolution() {
-        let mut registry = StyleRegistry::new();
+        let mut registry = StyleRegistry::default();
 
         let style = registry
             .register(
@@ -444,7 +428,7 @@ mod tests {
 
     #[test]
     fn default_fallback() {
-        let mut registry = StyleRegistry::new();
+        let mut registry = StyleRegistry::default();
         let style = registry.register(None, vec![]).unwrap();
 
         assert_eq!(
@@ -459,7 +443,7 @@ mod tests {
 
     #[test]
     fn exact_match_priority() {
-        let mut registry = StyleRegistry::new();
+        let mut registry = StyleRegistry::default();
 
         let style = registry
             .register(
@@ -489,7 +473,7 @@ mod tests {
 
     #[test]
     fn most_specific_subset_match() {
-        let mut registry = StyleRegistry::new();
+        let mut registry = StyleRegistry::default();
 
         let style = registry
             .register(
@@ -520,7 +504,7 @@ mod tests {
 
     #[test]
     fn state_fallback_to_normal() {
-        let mut registry = StyleRegistry::new();
+        let mut registry = StyleRegistry::default();
 
         let style = registry
             .register(
@@ -545,7 +529,7 @@ mod tests {
 
     #[test]
     fn hovered_does_not_match_normal_query() {
-        let mut registry = StyleRegistry::new();
+        let mut registry = StyleRegistry::default();
 
         let style = registry
             .register(
@@ -570,7 +554,7 @@ mod tests {
 
     #[test]
     fn empty_state_returns_default() {
-        let mut registry = StyleRegistry::new();
+        let mut registry = StyleRegistry::default();
 
         let style = registry
             .register(
@@ -596,7 +580,7 @@ mod tests {
 
     #[test]
     fn compound_state_selected_and_hovered() {
-        let mut registry = StyleRegistry::new();
+        let mut registry = StyleRegistry::default();
 
         let style = registry
             .register(
@@ -642,7 +626,7 @@ mod tests {
 
     #[test]
     fn multiple_properties_same_state() {
-        let mut registry = StyleRegistry::new();
+        let mut registry = StyleRegistry::default();
 
         let style = registry
             .register(
@@ -674,7 +658,7 @@ mod tests {
 
     #[test]
     fn style_update_regenerates() {
-        let mut registry = StyleRegistry::new();
+        let mut registry = StyleRegistry::default();
 
         let style = registry
             .register(
@@ -702,7 +686,7 @@ mod tests {
 
     #[test]
     fn parent_update_regenerates_children() {
-        let mut registry = StyleRegistry::new();
+        let mut registry = StyleRegistry::default();
 
         let parent = registry
             .register(
@@ -744,7 +728,7 @@ mod tests {
 
     #[test]
     fn deep_regeneration() {
-        let mut registry = StyleRegistry::new();
+        let mut registry = StyleRegistry::default();
 
         let root = registry
             .register(
@@ -784,7 +768,7 @@ mod tests {
 
     #[test]
     fn update_replaces_all_overrides() {
-        let mut registry = StyleRegistry::new();
+        let mut registry = StyleRegistry::default();
 
         let style = registry
             .register(
@@ -834,31 +818,39 @@ mod tests {
 
     #[test]
     fn get_returns_none_for_invalid_id() {
-        let registry = StyleRegistry::new();
+        let registry = StyleRegistry::default();
 
-        let mut other_registry = StyleRegistry::new();
+        let mut other_registry = StyleRegistry::default();
         let fake_id = other_registry.register(None, vec![]).unwrap();
 
         assert!(registry.get(fake_id).is_none());
     }
 
     #[test]
-    fn try_resolve_with_invalid_id() {
-        let registry = StyleRegistry::new();
+    #[should_panic]
+    fn resolve_panics_on_invalid_id() {
+        let registry = StyleRegistry::default();
 
-        let mut other_registry = StyleRegistry::new();
+        let mut other_registry = StyleRegistry::default();
         let fake_id = other_registry.register(None, vec![]).unwrap();
 
-        assert!(
-            registry
-                .try_resolve::<BackgroundColor>(fake_id, StateFlags::NORMAL)
-                .is_none()
-        );
+        let _: Color = registry.resolve::<BackgroundColor>(fake_id, StateFlags::NORMAL);
+    }
+
+    #[test]
+    #[should_panic(expected = "update style that does not exist")]
+    fn update_panics_on_invalid_id() {
+        let mut registry = StyleRegistry::default();
+
+        let mut other_registry = StyleRegistry::default();
+        let fake_id = other_registry.register(None, vec![]).unwrap();
+
+        registry.update(fake_id, vec![]);
     }
 
     #[test]
     fn direct_style_access() {
-        let mut registry = StyleRegistry::new();
+        let mut registry = StyleRegistry::default();
 
         let style_id = registry
             .register(

@@ -1,18 +1,20 @@
 use glamour::Unit;
 
 pub use builder::*;
-pub use context::*;
 pub use id::*;
 pub use input::*;
 pub use layout::*;
+pub use theme::StyleClass;
+pub use theme::Theme;
 pub use widget::*;
 
 mod builder;
-mod context;
+pub(super) mod context;
 mod id;
 mod input;
 mod layout;
 pub mod style;
+mod theme;
 mod widget;
 pub mod widgets;
 

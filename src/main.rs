@@ -1,7 +1,4 @@
-use std::rc::Rc;
-
 use plinth::graphics::Color;
-use plinth::graphics::text::TextStyle;
 use plinth::runtime::AppContext;
 use plinth::runtime::AppContextBuilder;
 use plinth::runtime::AppLifecycleHandler;
@@ -10,9 +7,14 @@ use plinth::runtime::ViewportConfig;
 use plinth::ui::Alignment;
 use plinth::ui::LayoutDirection;
 use plinth::ui::Padding;
+use plinth::ui::Size;
 use plinth::ui::Size::Flex;
 use plinth::ui::Size::Grow;
+use plinth::ui::StyleClass;
+use plinth::ui::Theme;
 use plinth::ui::UiBuilder;
+use plinth::ui::style::StateFlags;
+use plinth::ui::style::StyleProperty;
 use plinth::ui::widgets::UiBuilderWidgetsExt;
 use tracing::Level;
 use tracing::info;
@@ -57,15 +59,67 @@ fn main() {
 
     registry.with(def_filter).init();
 
-    AppContextBuilder::default().run(SabreApp {
-        text_style: Rc::new(TextStyle::default()),
-    });
+    let mut theme = Theme::new();
+
+    theme.set_base_style([
+        (
+            StateFlags::NORMAL,
+            StyleProperty::BackgroundColor(Color::srgb(0.1, 0.2, 0.3, 1.0)),
+        ),
+        (StateFlags::NORMAL, StyleProperty::FontSize(32)),
+    ]);
+
+    theme
+        .set_class_properties(
+            StyleClass::Button,
+            None,
+            [
+                (
+                    StateFlags::NORMAL,
+                    StyleProperty::BackgroundColor(Color::DARK_GRAY),
+                ),
+                (
+                    StateFlags::HOVERED,
+                    StyleProperty::BackgroundColor(Color::LIGHT_GRAY),
+                ),
+                (
+                    StateFlags::NORMAL,
+                    StyleProperty::Padding(Padding {
+                        left: 10.0,
+                        right: 10.0,
+                        top: 5.0,
+                        bottom: 5.0,
+                    }),
+                ),
+                (
+                    StateFlags::NORMAL,
+                    StyleProperty::Width(Size::Fit {
+                        min: 20.0,
+                        max: f32::MAX,
+                    }),
+                ),
+                (
+                    StateFlags::NORMAL,
+                    StyleProperty::Height(Size::Fit {
+                        min: 10.0,
+                        max: f32::MAX,
+                    }),
+                ),
+                (
+                    StateFlags::NORMAL,
+                    StyleProperty::ChildMajorAlignment(Alignment::Center),
+                ),
+            ],
+        )
+        .unwrap();
+
+    AppContextBuilder::default()
+        .with_theme(theme)
+        .run(SabreApp {});
 }
 
 #[derive(Default)]
-struct SabreApp {
-    text_style: Rc<TextStyle>,
-}
+struct SabreApp {}
 
 impl AppLifecycleHandler for SabreApp {
     fn resume(&mut self, runtime: &mut AppContext) {
@@ -77,18 +131,16 @@ impl AppLifecycleHandler for SabreApp {
                 width: 800,
                 height: 600,
             },
-            ViewportState::new(self.text_style.clone()).into_handler(),
+            ViewportState::new().into_handler(),
         );
     }
 }
 
-struct ViewportState {
-    text_style: Rc<TextStyle>,
-}
+struct ViewportState {}
 
 impl ViewportState {
-    fn new(text_style: Rc<TextStyle>) -> Self {
-        Self { text_style }
+    fn new() -> Self {
+        Self {}
     }
 
     fn into_handler(mut self) -> impl FnMut(Context, UiBuilder) {
@@ -107,7 +159,7 @@ impl ViewportState {
         })
         .child_direction(LayoutDirection::Vertical);
 
-        if menu.text_button("Menu Button", &self.text_style).is_clicked {
+        if menu.text_button("Menu Button").is_clicked {
             info!("Menu Item 1 clicked");
         };
 
@@ -121,7 +173,7 @@ impl ViewportState {
                     top: 15.0,
                     bottom: 15.0,
                 })
-                .label("Menu Item 1", &self.text_style, None)
+                .label("Menu Item 1", None)
                 .rect(Grow, None, None)
                 .rect(45.0, 45.0, Color::RED);
         });
@@ -136,7 +188,7 @@ impl ViewportState {
                     top: 15.0,
                     bottom: 15.0,
                 })
-                .label("modern morning merman even longer", &self.text_style, None)
+                .label("modern morning merman even longer", None)
                 .rect(Grow, None, None)
                 .rect(45.0, 45.0, Color::RED);
         });
@@ -151,7 +203,7 @@ impl ViewportState {
                     top: 15.0,
                     bottom: 15.0,
                 })
-                .label("VA To ff ti it tt ft", &self.text_style, None)
+                .label("VA To ff ti it tt ft", None)
                 .rect(Grow, None, None)
                 .rect(45.0, 45.0, Color::RED);
         });

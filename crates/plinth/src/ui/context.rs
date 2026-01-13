@@ -7,20 +7,21 @@ use glamour::Size2;
 
 use crate::graphics::Color;
 use crate::graphics::Primitive;
-use crate::graphics::text::TextAlignment;
-use crate::graphics::text::TextLayoutContext;
+use crate::graphics::TextAlignment;
+use crate::graphics::TextLayoutContext;
+use crate::ui::theme::Theme;
 
 use super::Atom;
 use super::IdMap;
-use super::InputState;
+use super::Input;
 use super::LayoutTree;
 use super::UiBuilder;
 use super::WidgetId;
 use super::WidgetState;
 
 #[derive(Default)]
-pub struct UiContext {
-    pub(super) input: InputState,
+pub(crate) struct UiContext {
+    pub(super) input: Input,
     pub(super) time_delta: Duration,
 
     pub(super) ui_tree: LayoutTree<(LayoutContent, Option<WidgetId>)>,
@@ -30,10 +31,11 @@ pub struct UiContext {
 }
 
 impl UiContext {
-    pub fn begin_frame<'a>(
+    pub(crate) fn begin_frame<'a>(
         &'a mut self,
         text_context: &'a mut TextLayoutContext,
-        input: InputState,
+        theme: &'a Theme,
+        input: Input,
         time_delta: Duration,
     ) -> UiBuilder<'a> {
         self.ui_tree.clear();
@@ -62,6 +64,7 @@ impl UiContext {
         UiBuilder {
             id,
             index: root,
+            theme,
             context: self,
             text_context,
             num_child_widgets: 0,
@@ -164,7 +167,7 @@ pub(super) enum LayoutContent {
 }
 
 #[expect(clippy::large_enum_variant)]
-pub enum DrawCommand<'a> {
+pub(crate) enum DrawCommand<'a> {
     Primitive(Primitive),
     TextLayout(&'a parley::Layout<Color>, [f32; 2]),
 }

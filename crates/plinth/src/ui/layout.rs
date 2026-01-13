@@ -1,10 +1,4 @@
-use std::sync::Arc;
-
 use smallvec::SmallVec;
-
-use crate::graphics::Color;
-use crate::graphics::text::TextAlignment;
-use crate::graphics::text::TextStyle;
 
 pub use Size::*;
 
@@ -74,7 +68,7 @@ pub enum Alignment {
 }
 
 #[derive(Debug, Default)]
-pub struct Atom {
+pub(crate) struct Atom {
     pub width: Size,
     pub height: Size,
     pub inner_padding: Padding,
@@ -87,7 +81,7 @@ pub struct Atom {
 }
 
 #[derive(Debug, Default)]
-pub struct LayoutNodeResult {
+pub(crate) struct LayoutNodeResult {
     pub x: f32,
     pub y: f32,
     pub width: f32,
@@ -100,32 +94,9 @@ pub(crate) struct UiElementId(pub(crate) u16);
 type NodeIndexArray = SmallVec<[UiElementId; 8]>;
 
 #[derive(Default, Debug)]
-pub struct LayoutNode {
+pub(crate) struct LayoutNode {
     pub atom: Atom,
     pub result: LayoutNodeResult,
-}
-
-#[expect(clippy::large_enum_variant)]
-pub enum LayoutNodeContent {
-    None,
-    Fill {
-        color: Color,
-    },
-    Text {
-        layout: parley::Layout<Color>,
-        alignment: TextAlignment,
-    },
-    Label {
-        text_start: usize,
-        text_length: usize,
-        style: Arc<TextStyle>,
-    },
-}
-
-impl From<Option<LayoutNodeContent>> for LayoutNodeContent {
-    fn from(content: Option<LayoutNodeContent>) -> Self {
-        content.unwrap_or(LayoutNodeContent::None)
-    }
 }
 
 pub(crate) struct LayoutTree<T> {

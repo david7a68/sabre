@@ -1,114 +1,14 @@
 use std::borrow::Cow;
-use std::sync::Arc;
 
 use parley::FontContext;
 use parley::LayoutContext;
-use smallvec::SmallVec;
 
 use crate::graphics::Color;
 
 #[derive(Default)]
-pub struct TextLayoutContext {
+pub(crate) struct TextLayoutContext {
     pub(crate) fonts: FontContext,
     pub(crate) layouts: LayoutContext<Color>,
-}
-
-impl TextLayoutContext {
-    pub fn new() -> Self {
-        Self::default()
-    }
-}
-
-#[derive(Clone, Debug)]
-pub struct TextStyle {
-    pub align: TextAlignment,
-    pub font_color: Color,
-    pub font_size: f32,
-    pub font_style: FontStyle,
-    pub font_features: Cow<'static, [FontFeature]>,
-    pub font_weight: FontWeight,
-    pub font: Arc<FontStack>,
-    pub strikethrough_color: Option<Color>,
-    pub strikethrough_offset: Option<f32>,
-    pub underline_color: Option<Color>,
-    pub underline_offset: Option<f32>,
-}
-
-impl TextStyle {
-    pub(crate) fn as_defaults(&self, builder: &mut parley::RangedBuilder<Color>) {
-        builder.push_default(parley::StyleProperty::Brush(self.font_color));
-        builder.push_default(parley::StyleProperty::FontSize(self.font_size));
-        builder.push_default(parley::StyleProperty::FontStyle(self.font_style.into()));
-        builder.push_default(parley::StyleProperty::FontWeight(self.font_weight.into()));
-
-        let features = self
-            .font_features
-            .iter()
-            .map(|f| (*f).into())
-            .collect::<SmallVec<[_; 16]>>();
-
-        builder.push_default(parley::StyleProperty::FontFeatures(
-            parley::FontSettings::List(features.as_slice().into()),
-        ));
-
-        match self.font.as_ref() {
-            FontStack::Source(cow) => {
-                builder.push_default(parley::StyleProperty::FontStack(parley::FontStack::Source(
-                    cow.clone(),
-                )));
-            }
-            FontStack::Single(font_family) => {
-                builder.push_default(parley::StyleProperty::FontStack(parley::FontStack::Single(
-                    font_family.clone().into(),
-                )));
-            }
-            FontStack::List(cow) => {
-                let families = cow
-                    .iter()
-                    .cloned()
-                    .map(|f| f.into())
-                    .collect::<SmallVec<[parley::FontFamily; 4]>>();
-                builder.push_default(parley::StyleProperty::FontStack(parley::FontStack::List(
-                    Cow::Borrowed(&families),
-                )));
-            }
-        }
-
-        builder.push_default(parley::StyleProperty::StrikethroughBrush(
-            self.strikethrough_color,
-        ));
-        builder.push_default(parley::StyleProperty::StrikethroughOffset(
-            self.strikethrough_offset,
-        ));
-        builder.push_default(parley::StyleProperty::UnderlineBrush(self.underline_color));
-        builder.push_default(parley::StyleProperty::UnderlineOffset(
-            self.underline_offset,
-        ));
-    }
-}
-
-impl Default for TextStyle {
-    fn default() -> Self {
-        Self {
-            align: TextAlignment::Start,
-            font_color: Color::BLACK,
-            font_size: 32.0,
-            font_style: FontStyle::Normal,
-            font_features: Cow::Borrowed(&[
-                FontFeature::ContextualAlternatives,
-                FontFeature::ContextualLigatures,
-                FontFeature::DiscretionaryLigatures,
-                FontFeature::Kerning,
-                FontFeature::StandardLigatures,
-            ]),
-            font_weight: FontWeight::NORMAL,
-            font: Arc::new(FontStack::Source(Cow::Borrowed("serif"))),
-            strikethrough_color: None,
-            strikethrough_offset: None,
-            underline_color: None,
-            underline_offset: None,
-        }
-    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -145,14 +45,35 @@ impl From<FontStyle> for parley::FontStyle {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct Font {
+    pub family: FontStack,
+    pub features: Cow<'static, [FontFeature]>,
+}
+
+impl Default for Font {
+    fn default() -> Self {
+        Self {
+            family: FontStack::Source(Cow::Borrowed("serif")),
+            features: Cow::Borrowed(&[
+                FontFeature::ContextualAlternatives,
+                FontFeature::ContextualLigatures,
+                FontFeature::DiscretionaryLigatures,
+                FontFeature::Kerning,
+                FontFeature::StandardLigatures,
+            ]),
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum FontStack {
     Source(Cow<'static, str>),
     Single(FontFamily),
     List(Cow<'static, [FontFamily]>),
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum FontFamily {
     Named(Cow<'static, str>),
     Cursive,
@@ -214,7 +135,7 @@ impl From<FontWeight> for parley::FontWeight {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum FontFeature {
     /// The CALT feature tag for contextual alternatives.
     ///

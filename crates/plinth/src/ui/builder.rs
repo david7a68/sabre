@@ -2,27 +2,30 @@ use std::hash::Hash;
 use std::time::Duration;
 
 use crate::graphics::Color;
-use crate::graphics::text::TextLayoutContext;
-use crate::graphics::text::TextStyle;
+use crate::graphics::TextLayoutContext;
 
 use super::Alignment;
 use super::Atom;
 use super::Flex;
-use super::InputState;
-use super::LayoutContent;
+use super::Input;
+use super::Interaction;
 use super::LayoutDirection;
 use super::Padding;
-use super::Response;
 use super::Size;
-use super::UiContext;
 use super::UiElementId;
 use super::Widget;
 use super::WidgetId;
 use super::WidgetState;
+use super::context::LayoutContent;
+use super::context::UiContext;
+use super::style::StateFlags;
+use super::theme::StyleClass;
+use super::theme::Theme;
 
 pub struct UiBuilder<'a> {
     pub(super) id: WidgetId,
     pub(super) index: UiElementId,
+    pub(super) theme: &'a Theme,
     pub(super) context: &'a mut UiContext,
     pub(super) text_context: &'a mut TextLayoutContext,
 
@@ -30,16 +33,20 @@ pub struct UiBuilder<'a> {
 }
 
 impl UiBuilder<'_> {
-    pub fn add(&mut self, widget: impl Widget) -> Response {
+    pub fn add(&mut self, widget: impl Widget) -> Interaction {
         widget.apply(self)
     }
 
-    pub fn input(&self) -> &InputState {
+    pub fn input(&self) -> &Input {
         &self.context.input
     }
 
     pub fn time_delta(&self) -> &Duration {
         &self.context.time_delta
+    }
+
+    pub fn theme(&self) -> &Theme {
+        self.theme
     }
 
     pub fn color(&mut self, color: impl Into<Color>) -> &mut Self {
@@ -133,7 +140,7 @@ impl UiBuilder<'_> {
         self
     }
 
-    pub fn label(&mut self, text: &str, style: &TextStyle, height: impl Into<Size>) -> &mut Self {
+    pub fn label(&mut self, text: &str, height: impl Into<Size>) -> &mut Self {
         let mut layout = parley::Layout::new();
 
         let mut compute =
@@ -141,7 +148,16 @@ impl UiBuilder<'_> {
                 .layouts
                 .ranged_builder(&mut self.text_context.fonts, text, 1.0, true);
 
-        style.as_defaults(&mut compute);
+        let style_id = self.theme.get_id(StyleClass::Label);
+        self.theme
+            .push_parley_defaults(style_id, StateFlags::default(), &mut compute);
+
+        let alignment = self
+            .theme
+            .get(StyleClass::Label)
+            .text_align
+            .get(StateFlags::default());
+
         compute.build_into(&mut layout, text);
 
         let size = layout.calculate_content_widths();
@@ -156,13 +172,7 @@ impl UiBuilder<'_> {
                 height: height.into(),
                 ..Default::default()
             },
-            (
-                LayoutContent::Text {
-                    layout,
-                    alignment: style.align,
-                },
-                None,
-            ),
+            (LayoutContent::Text { layout, alignment }, None),
         );
 
         self
@@ -177,6 +187,7 @@ impl UiBuilder<'_> {
 
         UiBuilder {
             id: self.id,
+            theme: self.theme,
             context: self.context,
             index: container_index,
             text_context: self.text_context,
@@ -194,6 +205,7 @@ impl UiBuilder<'_> {
         self.num_child_widgets += 1;
         UiBuilder {
             id: self.id.then(self.num_child_widgets),
+            theme: self.theme,
             context: self.context,
             index: child_index,
             text_context: self.text_context,
@@ -213,6 +225,7 @@ impl UiBuilder<'_> {
         self.num_child_widgets += 1;
         UiBuilder {
             id: child_id,
+            theme: self.theme,
             context: self.context,
             index: child_index,
             text_context: self.text_context,

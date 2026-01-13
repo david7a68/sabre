@@ -1,12 +1,15 @@
+use std::sync::Arc;
+
 use crate::graphics::Color;
-use crate::graphics::text::FontStyle;
-use crate::graphics::text::TextAlignment;
+use crate::graphics::FontStyle;
+use crate::graphics::TextAlignment;
 use crate::ui::Alignment;
 use crate::ui::LayoutDirection;
+use crate::ui::Size;
 use crate::ui::layout::Padding;
 
-use crate::ui::style::registry::PropertyKey;
 use crate::ui::style::StatefulProperty;
+use crate::ui::style::registry::PropertyKey;
 
 bitflags::bitflags! {
     #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
@@ -34,8 +37,11 @@ macros::declare_style! {
         child_minor_alignment: ChildMinorAlignment(Alignment) = Alignment::Center,
         child_spacing: ChildSpacing(f32) = 4.0,
         child_direction: ChildDirection(LayoutDirection) = LayoutDirection::Horizontal,
+        width: Width(Size) = Size::Fit { min: 20.0, max: f32::MAX },
+        height: Height(Size) = Size::Fit { min: 10.0, max: f32::MAX },
 
         // text styles
+        font: Font(Arc<crate::graphics::Font>) = Arc::new(crate::graphics::Font::default()),
         font_size: FontSize(u16) = 14,
         font_style: FontStyle(use FontStyle) = FontStyle::Normal,
         font_weight: FontWeight(u16) = 400,

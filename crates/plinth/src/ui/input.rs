@@ -16,7 +16,7 @@ pub struct MouseButtonState {
 }
 
 #[derive(Clone, Debug, Default)]
-pub struct InputState {
+pub struct Input {
     pub pointer: Point2<Pixels>,
     pub mouse_state: MouseButtonState,
     pub window_size: WindowSize,
