@@ -1,10 +1,7 @@
-use std::sync::Arc;
-
 use smallvec::SmallVec;
 
 use crate::graphics::Color;
 use crate::graphics::text::TextAlignment;
-use crate::graphics::text::TextStyle;
 
 pub use Size::*;
 
@@ -118,7 +115,6 @@ pub enum LayoutNodeContent {
     Label {
         text_start: usize,
         text_length: usize,
-        style: Arc<TextStyle>,
     },
 }
 

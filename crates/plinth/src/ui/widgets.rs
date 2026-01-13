@@ -1,16 +1,16 @@
-use core::f32;
 use std::borrow::Cow;
 
 use glamour::Contains;
 
 use crate::graphics::Color;
-use crate::graphics::text::TextStyle;
-use crate::ui::Alignment;
 use crate::ui::Padding;
 use crate::ui::Response;
 use crate::ui::Size;
 use crate::ui::UiBuilder;
 use crate::ui::Widget;
+
+use super::style::StateFlags;
+use super::theme::StyleClass;
 
 pub trait UiBuilderWidgetsExt {
     fn panel(
@@ -20,8 +20,7 @@ pub trait UiBuilderWidgetsExt {
         color: Option<Color>,
     ) -> Response;
 
-    fn text_button<'a>(&mut self, label: impl Into<Cow<'a, str>>, style: &'a TextStyle)
-    -> Response;
+    fn text_button<'a>(&mut self, label: impl Into<Cow<'a, str>>) -> Response;
 }
 
 impl UiBuilderWidgetsExt for UiBuilder<'_> {
@@ -39,12 +38,8 @@ impl UiBuilderWidgetsExt for UiBuilder<'_> {
         .apply(self)
     }
 
-    fn text_button<'a>(
-        &mut self,
-        label: impl Into<Cow<'a, str>>,
-        style: &'a TextStyle,
-    ) -> Response {
-        Button::new().label(label, style).apply(self)
+    fn text_button<'a>(&mut self, label: impl Into<Cow<'a, str>>) -> Response {
+        Button::new().label(label).apply(self)
     }
 }
 
@@ -67,10 +62,10 @@ impl Widget for Panel {
 
 #[derive(Debug)]
 pub struct Button<'a> {
-    pub width: Size,
-    pub height: Size,
-    pub padding: Padding,
-    pub label: Option<(Cow<'a, str>, &'a TextStyle)>,
+    pub width: Option<Size>,
+    pub height: Option<Size>,
+    pub padding: Option<Padding>,
+    pub label: Option<Cow<'a, str>>,
 }
 
 impl Default for Button<'_> {
@@ -83,53 +78,42 @@ impl<'a> Button<'a> {
     pub fn new() -> Self {
         Self {
             label: None,
-            padding: Padding {
-                left: 10.0,
-                right: 10.0,
-                top: 5.0,
-                bottom: 5.0,
-            },
-            width: Size::Fit {
-                min: 20.0,
-                max: f32::MAX,
-            },
-            height: Size::Fit {
-                min: 10.0,
-                max: f32::MAX,
-            },
+            padding: None,
+            width: None,
+            height: None,
         }
     }
 
-    pub fn text(mut self, width: impl Into<Size>) -> Self {
-        self.width = width.into();
+    pub fn width(mut self, width: impl Into<Size>) -> Self {
+        self.width = Some(width.into());
         self
     }
 
     pub fn height(mut self, height: impl Into<Size>) -> Self {
-        self.height = height.into();
+        self.height = Some(height.into());
         self
     }
 
     pub fn size(mut self, width: impl Into<Size>, height: impl Into<Size>) -> Self {
-        self.width = width.into();
-        self.height = height.into();
+        self.width = Some(width.into());
+        self.height = Some(height.into());
         self
     }
 
     pub fn padding(mut self, padding: Padding) -> Self {
-        self.padding = padding;
+        self.padding = Some(padding);
         self
     }
 
-    pub fn label(mut self, label: impl Into<Cow<'a, str>>, style: &'a TextStyle) -> Self {
-        self.label = Some((label.into(), style));
+    pub fn label(mut self, label: impl Into<Cow<'a, str>>) -> Self {
+        self.label = Some(label.into());
         self
     }
 }
 
 impl Widget for Button<'_> {
     fn apply(self, context: &mut UiBuilder) -> Response {
-        let mut widget = if let Some((label, _)) = &self.label {
+        let mut widget = if let Some(label) = &self.label {
             context.named_child(label)
         } else {
             context.child()
@@ -143,20 +127,28 @@ impl Widget for Button<'_> {
 
         let is_clicked = is_hovered && widget.input().mouse_state.is_left_down;
 
-        let color = if is_hovered {
-            Color::LIGHT_GRAY
+        let state = if is_hovered {
+            StateFlags::HOVERED
         } else {
-            Color::DARK_GRAY
+            StateFlags::NORMAL
         };
 
+        let style = widget.theme().get(StyleClass::Button);
+        let color = style.background_color.get(state);
+        let width = self.width.unwrap_or_else(|| style.width.get(state));
+        let height = self.height.unwrap_or_else(|| style.height.get(state));
+        let padding = self.padding.unwrap_or_else(|| style.padding.get(state));
+        let major_align = style.child_major_alignment.get(state);
+        let minor_align = style.child_minor_alignment.get(state);
+
         widget
-            .child_alignment(Alignment::Center, Alignment::Center)
-            .size(self.width, self.height)
-            .padding(self.padding)
+            .child_alignment(major_align, minor_align)
+            .size(width, height)
+            .padding(padding)
             .color(color);
 
-        if let Some((label, style)) = self.label {
-            widget.label(&label, style, None);
+        if let Some(label) = self.label {
+            widget.label(&label, None);
         }
 
         Response {

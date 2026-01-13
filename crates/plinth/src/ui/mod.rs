@@ -13,6 +13,7 @@ mod id;
 mod input;
 mod layout;
 pub mod style;
+pub mod theme;
 mod widget;
 pub mod widgets;
 

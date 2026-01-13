@@ -26,13 +26,13 @@ use super::StateFlags;
 /// assert_eq!(prop.get(StateFlags::NORMAL), Color::WHITE);
 /// ```
 #[derive(Clone, Debug)]
-pub struct StatefulProperty<T: Copy> {
+pub struct StatefulProperty<T: Clone> {
     default: T,
     /// Overrides sorted by specificity (most specific first) for O(1) best-case lookup.
     overrides: SmallVec<[(StateFlags, T); 4]>,
 }
 
-impl<T: Copy> StatefulProperty<T> {
+impl<T: Clone> StatefulProperty<T> {
     /// Create a new stateful property with the given default value.
     pub fn new(default: T) -> Self {
         Self {
@@ -73,10 +73,10 @@ impl<T: Copy> StatefulProperty<T> {
     pub fn get(&self, state: StateFlags) -> T {
         for (flags, value) in &self.overrides {
             if state.contains(*flags) {
-                return *value;
+                return value.clone();
             }
         }
-        self.default
+        self.default.clone()
     }
 }
 

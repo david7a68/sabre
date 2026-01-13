@@ -25,11 +25,19 @@ use crate::ui::DrawCommand;
 use crate::ui::InputState;
 use crate::ui::UiBuilder;
 use crate::ui::UiContext;
+use crate::ui::theme::Theme;
 
 #[derive(Default)]
-pub struct AppContextBuilder {}
+pub struct AppContextBuilder {
+    theme: Option<Theme>,
+}
 
 impl AppContextBuilder {
+    pub fn with_theme(mut self, theme: Theme) -> Self {
+        self.theme = Some(theme);
+        self
+    }
+
     pub fn run(self, handler: impl AppLifecycleHandler) {
         let event_loop = EventLoop::with_user_event()
             .with_dpi_aware(true)
@@ -37,10 +45,13 @@ impl AppContextBuilder {
             .unwrap();
         event_loop.set_control_flow(ControlFlow::Wait);
 
+        let theme = self.theme.unwrap_or_default();
+
         let mut runtime = WinitApp {
             runtime: AppContext {
                 viewports: SlotMap::with_key(),
                 deferred_commands: Vec::new(),
+                theme,
                 graphics: None,
                 text_system: TextLayoutContext::default(),
                 event_loop_proxy: event_loop.create_proxy(),
@@ -65,6 +76,8 @@ pub struct AppContext {
     viewports: SlotMap<ViewportId, Viewport>,
 
     deferred_commands: Vec<ViewportCommand>,
+
+    theme: Theme,
 
     graphics: Option<GraphicsContext>,
     text_system: TextLayoutContext,
@@ -94,6 +107,14 @@ impl AppContext {
         }
     }
 
+    pub fn theme(&self) -> &Theme {
+        &self.theme
+    }
+
+    pub fn theme_mut(&mut self) -> &mut Theme {
+        &mut self.theme
+    }
+
     fn repaint<'a>(
         &mut self,
         windows: impl IntoIterator<Item = (&'a mut WinitWindow, InputState)>,
@@ -102,10 +123,12 @@ impl AppContext {
         let mut outputs = SmallVec::with_capacity(windows.size_hint().0);
 
         for (window, input) in windows {
-            let ui_builder =
-                window
-                    .ui_context
-                    .begin_frame(&mut self.text_system, input, Duration::ZERO);
+            let ui_builder = window.ui_context.begin_frame(
+                &mut self.text_system,
+                &self.theme,
+                input,
+                Duration::ZERO,
+            );
 
             let context = Context {
                 viewports: &mut self.viewports,

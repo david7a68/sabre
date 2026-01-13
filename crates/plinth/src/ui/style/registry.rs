@@ -132,18 +132,6 @@ impl StyleRegistry {
         K::get(style, state)
     }
 
-    /// Try to get a property value, returning None if style doesn't exist.
-    #[inline]
-    pub fn try_resolve<K: PropertyKey>(
-        &self,
-        style_id: StyleId,
-        state: StateFlags,
-    ) -> Option<K::Value> {
-        self.resolved
-            .get(style_id)
-            .map(|style| K::get(style, state))
-    }
-
     /// Build a resolved Style from a StyleDef.
     fn build_resolved(&self, def: &StyleDef) -> Style {
         // Start from parent's resolved style or default
@@ -843,17 +831,25 @@ mod tests {
     }
 
     #[test]
-    fn try_resolve_with_invalid_id() {
+    #[should_panic]
+    fn resolve_panics_on_invalid_id() {
         let registry = StyleRegistry::new();
 
         let mut other_registry = StyleRegistry::new();
         let fake_id = other_registry.register(None, vec![]).unwrap();
 
-        assert!(
-            registry
-                .try_resolve::<BackgroundColor>(fake_id, StateFlags::NORMAL)
-                .is_none()
-        );
+        let _: Color = registry.resolve::<BackgroundColor>(fake_id, StateFlags::NORMAL);
+    }
+
+    #[test]
+    #[should_panic(expected = "update style that does not exist")]
+    fn update_panics_on_invalid_id() {
+        let mut registry = StyleRegistry::new();
+
+        let mut other_registry = StyleRegistry::new();
+        let fake_id = other_registry.register(None, vec![]).unwrap();
+
+        registry.update(fake_id, vec![]);
     }
 
     #[test]

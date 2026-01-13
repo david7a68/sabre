@@ -9,6 +9,7 @@ use crate::graphics::Color;
 use crate::graphics::Primitive;
 use crate::graphics::text::TextAlignment;
 use crate::graphics::text::TextLayoutContext;
+use crate::ui::theme::Theme;
 
 use super::Atom;
 use super::IdMap;
@@ -33,6 +34,7 @@ impl UiContext {
     pub fn begin_frame<'a>(
         &'a mut self,
         text_context: &'a mut TextLayoutContext,
+        theme: &'a Theme,
         input: InputState,
         time_delta: Duration,
     ) -> UiBuilder<'a> {
@@ -62,6 +64,7 @@ impl UiContext {
         UiBuilder {
             id,
             index: root,
+            theme,
             context: self,
             text_context,
             num_child_widgets: 0,
