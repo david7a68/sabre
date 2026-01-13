@@ -43,5 +43,8 @@ jobs:
         shared-key: "rust-cache"
 
     # Checks
+    - name: Build tests
+      run: cargo build --locked --tests --workspace
+
     - name: Run tests
       run: cargo test --locked --workspace
