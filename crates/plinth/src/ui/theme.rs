@@ -17,14 +17,17 @@ use super::style::StyleRegistry;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum StyleClass {
     Panel = 0,
-
     Button,
-
     Label,
 }
 
+impl StyleClass {
+    /// Number of style class variants. Update when adding new variants.
+    pub const COUNT: usize = 3;
+}
+
 pub struct Theme {
-    well_known_classes: Vec<StyleId>,
+    well_known_classes: [StyleId; StyleClass::COUNT],
     styles: StyleRegistry,
 }
 
@@ -36,7 +39,7 @@ impl Theme {
 
         Self {
             styles,
-            well_known_classes: vec![default_style; 4],
+            well_known_classes: [default_style; StyleClass::COUNT],
         }
     }
 
