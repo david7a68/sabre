@@ -2,22 +2,22 @@ use std::hash::Hash;
 use std::time::Duration;
 
 use crate::graphics::Color;
-use crate::graphics::text::TextLayoutContext;
+use crate::graphics::TextLayoutContext;
 
 use super::Alignment;
 use super::Atom;
 use super::Flex;
-use super::InputState;
-use super::LayoutContent;
+use super::Input;
+use super::Interaction;
 use super::LayoutDirection;
 use super::Padding;
-use super::Response;
 use super::Size;
-use super::UiContext;
 use super::UiElementId;
 use super::Widget;
 use super::WidgetId;
 use super::WidgetState;
+use super::context::LayoutContent;
+use super::context::UiContext;
 use super::style::StateFlags;
 use super::theme::StyleClass;
 use super::theme::Theme;
@@ -33,11 +33,11 @@ pub struct UiBuilder<'a> {
 }
 
 impl UiBuilder<'_> {
-    pub fn add(&mut self, widget: impl Widget) -> Response {
+    pub fn add(&mut self, widget: impl Widget) -> Interaction {
         widget.apply(self)
     }
 
-    pub fn input(&self) -> &InputState {
+    pub fn input(&self) -> &Input {
         &self.context.input
     }
 

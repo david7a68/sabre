@@ -6,15 +6,9 @@ use parley::LayoutContext;
 use crate::graphics::Color;
 
 #[derive(Default)]
-pub struct TextLayoutContext {
+pub(crate) struct TextLayoutContext {
     pub(crate) fonts: FontContext,
     pub(crate) layouts: LayoutContext<Color>,
-}
-
-impl TextLayoutContext {
-    pub fn new() -> Self {
-        Self::default()
-    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]

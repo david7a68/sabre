@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
 use crate::graphics::Color;
-use crate::graphics::text::FontStyle;
-use crate::graphics::text::TextAlignment;
+use crate::graphics::FontStyle;
+use crate::graphics::TextAlignment;
 use crate::ui::Alignment;
 use crate::ui::LayoutDirection;
 use crate::ui::Size;
@@ -41,7 +41,7 @@ macros::declare_style! {
         height: Height(Size) = Size::Fit { min: 10.0, max: f32::MAX },
 
         // text styles
-        font: Font(Arc<crate::graphics::text::Font>) = Arc::new(crate::graphics::text::Font::default()),
+        font: Font(Arc<crate::graphics::Font>) = Arc::new(crate::graphics::Font::default()),
         font_size: FontSize(u16) = 14,
         font_style: FontStyle(use FontStyle) = FontStyle::Normal,
         font_weight: FontWeight(u16) = 400,

@@ -3,7 +3,7 @@ use std::borrow::Cow;
 use smallvec::SmallVec;
 
 use crate::graphics::Color;
-use crate::graphics::text::FontStack;
+use crate::graphics::FontStack;
 
 use super::style::PropertyKey;
 use super::style::StateFlags;

@@ -3,8 +3,8 @@ use std::borrow::Cow;
 use glamour::Contains;
 
 use crate::graphics::Color;
+use crate::ui::Interaction;
 use crate::ui::Padding;
-use crate::ui::Response;
 use crate::ui::Size;
 use crate::ui::UiBuilder;
 use crate::ui::Widget;
@@ -18,9 +18,9 @@ pub trait UiBuilderWidgetsExt {
         width: impl Into<Size>,
         height: impl Into<Size>,
         color: Option<Color>,
-    ) -> Response;
+    ) -> Interaction;
 
-    fn text_button<'a>(&mut self, label: impl Into<Cow<'a, str>>) -> Response;
+    fn text_button<'a>(&mut self, label: impl Into<Cow<'a, str>>) -> Interaction;
 }
 
 impl UiBuilderWidgetsExt for UiBuilder<'_> {
@@ -29,7 +29,7 @@ impl UiBuilderWidgetsExt for UiBuilder<'_> {
         width: impl Into<Size>,
         height: impl Into<Size>,
         color: Option<Color>,
-    ) -> Response {
+    ) -> Interaction {
         Panel {
             width: width.into(),
             height: height.into(),
@@ -38,7 +38,7 @@ impl UiBuilderWidgetsExt for UiBuilder<'_> {
         .apply(self)
     }
 
-    fn text_button<'a>(&mut self, label: impl Into<Cow<'a, str>>) -> Response {
+    fn text_button<'a>(&mut self, label: impl Into<Cow<'a, str>>) -> Interaction {
         Button::new().label(label).apply(self)
     }
 }
@@ -50,10 +50,10 @@ pub struct Panel {
 }
 
 impl Widget for Panel {
-    fn apply(self, context: &mut UiBuilder) -> Response {
+    fn apply(self, context: &mut UiBuilder) -> Interaction {
         context.rect(self.width, self.height, self.color.unwrap_or_default());
 
-        Response {
+        Interaction {
             is_clicked: false,
             is_hovered: false,
         }
@@ -112,7 +112,7 @@ impl<'a> Button<'a> {
 }
 
 impl Widget for Button<'_> {
-    fn apply(self, context: &mut UiBuilder) -> Response {
+    fn apply(self, context: &mut UiBuilder) -> Interaction {
         let mut widget = if let Some(label) = &self.label {
             context.named_child(label)
         } else {
@@ -151,7 +151,7 @@ impl Widget for Button<'_> {
             widget.label(&label, None);
         }
 
-        Response {
+        Interaction {
             is_hovered,
             is_clicked,
         }

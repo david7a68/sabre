@@ -20,12 +20,12 @@ use winit::window::WindowId;
 use crate::graphics::Canvas;
 use crate::graphics::Color;
 use crate::graphics::GraphicsContext;
-use crate::graphics::text::TextLayoutContext;
-use crate::ui::DrawCommand;
-use crate::ui::InputState;
+use crate::graphics::TextLayoutContext;
+use crate::ui::Input;
+use crate::ui::Theme;
 use crate::ui::UiBuilder;
-use crate::ui::UiContext;
-use crate::ui::theme::Theme;
+use crate::ui::context::DrawCommand;
+use crate::ui::context::UiContext;
 
 #[derive(Default)]
 pub struct AppContextBuilder {
@@ -92,7 +92,7 @@ impl AppContext {
         handler: impl FnMut(Context, UiBuilder) + 'static,
     ) -> ViewportHandle {
         let id = self.viewports.insert(Viewport {
-            input: InputState::default(),
+            input: Input::default(),
             config,
         });
 
@@ -115,10 +115,7 @@ impl AppContext {
         &mut self.theme
     }
 
-    fn repaint<'a>(
-        &mut self,
-        windows: impl IntoIterator<Item = (&'a mut WinitWindow, InputState)>,
-    ) {
+    fn repaint<'a>(&mut self, windows: impl IntoIterator<Item = (&'a mut WinitWindow, Input)>) {
         let windows = windows.into_iter();
         let mut outputs = SmallVec::with_capacity(windows.size_hint().0);
 
@@ -199,7 +196,7 @@ impl Context<'_> {
         handler: impl FnMut(Context, UiBuilder) + 'static,
     ) -> ViewportHandle {
         let id = self.viewports.insert(Viewport {
-            input: InputState::default(),
+            input: Input::default(),
             config,
         });
 
@@ -269,7 +266,7 @@ impl<App: AppLifecycleHandler> ApplicationHandler<WinitEvent> for WinitApp<App> 
 
         self.runtime.repaint(self.windows.values_mut().map(|w| {
             w.window.set_visible(true);
-            (w, InputState::default())
+            (w, Input::default())
         }));
     }
 
@@ -366,7 +363,7 @@ new_key_type! {
 }
 
 struct Viewport {
-    input: InputState,
+    input: Input,
     config: ViewportConfig,
 }
 
