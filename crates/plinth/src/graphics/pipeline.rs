@@ -68,10 +68,18 @@ pub(crate) struct GpuPrimitive {
     pub color_tint: Color,
     pub color_uvwh: [f32; 4],
     pub alpha_uvwh: [f32; 4],
-    pub use_nearest_sampling: u32, // 0 = basic_sampler, 1 = nearest_sampler
+    pub control_flags: PrimitiveRenderFlags, // 0 = basic_sampler, 1 = nearest_sampler
     pub _padding0: u32,
     pub _padding1: u32,
     pub _padding2: u32,
+}
+
+bitflags::bitflags! {
+    #[derive(Clone, Copy, Debug, Default, Pod, Zeroable)]
+    #[repr(transparent)]
+    pub struct PrimitiveRenderFlags: u32 {
+        const USE_NEAREST_SAMPLING = 1;
+    }
 }
 
 pub struct DrawBuffer {

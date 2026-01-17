@@ -9,6 +9,8 @@ use crate::graphics::texture::StorageId;
 use crate::graphics::texture::Texture;
 use crate::graphics::texture::TextureManager;
 
+use super::pipeline::PrimitiveRenderFlags;
+
 const VERTICES_PER_PRIMITIVE: u32 = 6;
 
 #[derive(Debug)]
@@ -186,13 +188,19 @@ impl CanvasStorage {
             return;
         }
 
+        let mut flags = PrimitiveRenderFlags::empty();
+        flags.set(
+            PrimitiveRenderFlags::USE_NEAREST_SAMPLING,
+            use_nearest_sampling,
+        );
+
         self.primitives.push(GpuPrimitive {
             point,
             extent: size,
             color_uvwh,
             color_tint,
             alpha_uvwh,
-            use_nearest_sampling: if use_nearest_sampling { 1 } else { 0 },
+            control_flags: flags,
             _padding0: 0,
             _padding1: 0,
             _padding2: 0,

@@ -8,7 +8,7 @@ struct Rect {
     color_tint: vec4f,
     color_uvwh: vec4f,
     alpha_uvwh: vec4f,
-    use_nearest_sampling: u32,
+    control_flags: Bitflags,
     _padding0: u32,
     _padding1: u32,
     _padding2: u32,
@@ -19,9 +19,10 @@ struct VertexOutput {
     @location(0) color_tint: vec4f,
     @location(1) color_uv: vec2f,
     @location(2) alpha_uv: vec2f,
-    @location(3) use_nearest_sampling: u32,
+    @location(3) rect_index: u32,
 };
 
+// Bind group 0: per-frame info
 @group(0) @binding(0) var<uniform> draw_info: DrawInfo;
 @group(0) @binding(1) var<storage, read> rects: array<Rect>;
 
@@ -48,7 +49,7 @@ fn vs_main(
     out.alpha_uv = alpha_uvwh.xy + alpha_uvwh.zw * UV_LOOKUP[vertex_index];
     out.alpha_uv = vec2f(out.alpha_uv.x, out.alpha_uv.y);
 
-    out.use_nearest_sampling = rects[rect_index].use_nearest_sampling;
+    out.rect_index = rect_index;
 
     return out;
 }
@@ -62,15 +63,15 @@ fn vs_main(
 fn fs_main(
     in: VertexOutput
 ) -> @location(0) vec4f {
+    let rect = rects[in.rect_index];
     var color: vec4f;
-    var alpha: f32;
-    
-    if (in.use_nearest_sampling != 0u) {
+
+    if (is_nearest_sampling(rect.control_flags)) {
         color = in.color_tint * textureSample(color_texture, nearest_sampler, in.color_uv);
-        alpha = textureSample(alpha_texture, nearest_sampler, in.alpha_uv).r;
+        color.a = textureSample(alpha_texture, nearest_sampler, in.alpha_uv).r;
     } else {
         color = in.color_tint * textureSample(color_texture, basic_sampler, in.color_uv);
-        alpha = textureSample(alpha_texture, basic_sampler, in.alpha_uv).r;
+        color.a = textureSample(alpha_texture, basic_sampler, in.alpha_uv).r;
     }
     
     color.a = alpha;
@@ -106,4 +107,22 @@ fn to_clip_coords(position: vec2f) -> vec4f {
     let x = position.x / f32(draw_info.viewport_size.x) * 2.0 - 1.0;
     let y = -(position.y / f32(draw_info.viewport_size.y) * 2.0 - 1.0);
     return vec4f(x, y, 0.0, 1.0);
+}
+
+const USE_NEAREST_SAMPLING: u32 = 1;
+
+struct Bitflags {
+    value: u32
+}
+
+fn set_nearest_sampling(flags: Bitflags, use_nearest: bool) -> Bitflags {
+    if (use_nearest) {
+        return Bitflags(flags.value | USE_NEAREST_SAMPLING);
+    } else {
+        return Bitflags(flags.value & ~USE_NEAREST_SAMPLING);
+    }
+}
+
+fn is_nearest_sampling(flags: Bitflags) -> bool {
+    return (flags.value & USE_NEAREST_SAMPLING) != 0u;
 }
