@@ -17,7 +17,7 @@ pub enum RenderError {
 }
 
 pub(crate) struct Surface {
-    window: Arc<Window>,
+    window: Arc<dyn Window>,
     config: wgpu::SurfaceConfiguration,
     handle: wgpu::Surface<'static>,
 
@@ -29,7 +29,7 @@ pub(crate) struct Surface {
 impl Surface {
     #[instrument(skip_all)]
     pub fn new(
-        window: Arc<Window>,
+        window: Arc<dyn Window>,
         surface: wgpu::Surface<'static>,
         device: &wgpu::Device,
         adapter: &wgpu::Adapter,
@@ -66,8 +66,8 @@ impl Surface {
         let config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             format,
-            width: window.inner_size().width,
-            height: window.inner_size().height,
+            width: window.surface_size().width,
+            height: window.surface_size().height,
             present_mode,
             desired_maximum_frame_latency: 1,
             alpha_mode: caps.alpha_modes[0],
@@ -96,7 +96,7 @@ impl Surface {
 
     #[instrument(skip(self, device))]
     pub fn resize_if_necessary(&mut self, device: &wgpu::Device) {
-        let new_size = self.window.inner_size();
+        let new_size = self.window.surface_size();
 
         if self.config.width == new_size.width && self.config.height == new_size.height {
             return;

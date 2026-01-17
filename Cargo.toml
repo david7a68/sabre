@@ -23,6 +23,7 @@ color = "0.3"
 glamour = "0.18"
 guillotiere = "0.6"
 image = { version = "0.25", default-features = false }
+keyboard-types = "0.8"
 memmap2 = "0.9"
 parley = "0.7"
 pollster = "0.4"
@@ -37,7 +38,7 @@ wgpu = { version = "28", default-features = false, features = [
     "std",
     "parking_lot",
 ] }
-winit = "0.30"
+winit = "0.31.0-beta.2"
 
 [profile.dev.build-override]
 opt-level = 2

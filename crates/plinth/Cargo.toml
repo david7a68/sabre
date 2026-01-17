@@ -18,6 +18,7 @@ color = { workspace = true }
 glamour = { workspace = true }
 guillotiere = { workspace = true }
 image = { workspace = true, features = ["jpeg", "png"] }
+keyboard-types = { workspace = true }
 memmap2 = { workspace = true }
 parley = { workspace = true }
 pollster = { workspace = true }

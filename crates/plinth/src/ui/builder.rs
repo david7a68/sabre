@@ -26,6 +26,7 @@ pub struct UiBuilder<'a> {
     pub(super) id: WidgetId,
     pub(super) index: UiElementId,
     pub(super) theme: &'a Theme,
+    pub(super) input: &'a Input,
     pub(super) context: &'a mut UiContext,
     pub(super) text_context: &'a mut TextLayoutContext,
 
@@ -38,7 +39,7 @@ impl UiBuilder<'_> {
     }
 
     pub fn input(&self) -> &Input {
-        &self.context.input
+        self.input
     }
 
     pub fn time_delta(&self) -> &Duration {
@@ -188,6 +189,7 @@ impl UiBuilder<'_> {
         UiBuilder {
             id: self.id,
             theme: self.theme,
+            input: self.input,
             context: self.context,
             index: container_index,
             text_context: self.text_context,
@@ -206,6 +208,7 @@ impl UiBuilder<'_> {
         UiBuilder {
             id: self.id.then(self.num_child_widgets),
             theme: self.theme,
+            input: self.input,
             context: self.context,
             index: child_index,
             text_context: self.text_context,
@@ -226,6 +229,7 @@ impl UiBuilder<'_> {
         UiBuilder {
             id: child_id,
             theme: self.theme,
+            input: self.input,
             context: self.context,
             index: child_index,
             text_context: self.text_context,

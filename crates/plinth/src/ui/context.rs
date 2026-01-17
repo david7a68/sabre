@@ -21,7 +21,6 @@ use super::WidgetState;
 
 #[derive(Default)]
 pub(crate) struct UiContext {
-    pub(super) input: Input,
     pub(super) time_delta: Duration,
 
     pub(super) ui_tree: LayoutTree<(LayoutContent, Option<WidgetId>)>,
@@ -35,7 +34,7 @@ impl UiContext {
         &'a mut self,
         text_context: &'a mut TextLayoutContext,
         theme: &'a Theme,
-        input: Input,
+        input: &'a Input,
         time_delta: Duration,
     ) -> UiBuilder<'a> {
         self.ui_tree.clear();
@@ -58,13 +57,13 @@ impl UiContext {
             ),
         );
 
-        self.input = input;
         self.time_delta = time_delta;
 
         UiBuilder {
             id,
             index: root,
             theme,
+            input,
             context: self,
             text_context,
             num_child_widgets: 0,

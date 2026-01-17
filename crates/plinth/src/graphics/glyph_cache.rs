@@ -194,7 +194,7 @@ fn draw_glyph_run(
 
                 assert!(success);
 
-                if temp_glyph.placement.height == 0 {
+                if temp_glyph.placement.width == 0 || temp_glyph.placement.height == 0 {
                     continue;
                 }
 
