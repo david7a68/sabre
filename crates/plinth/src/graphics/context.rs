@@ -39,7 +39,7 @@ pub struct GraphicsContext {
 
 impl GraphicsContext {
     #[instrument(skip(window))]
-    pub fn new(window: Arc<Window>) -> Self {
+    pub fn new(window: Arc<dyn Window>) -> Self {
         debug!("Creating graphics context");
 
         let mut flags = wgpu::InstanceFlags::empty();
@@ -125,7 +125,7 @@ impl GraphicsContext {
     }
 
     #[instrument(skip(self))]
-    pub fn init_surface(&mut self, window: Arc<Window>) {
+    pub fn init_surface(&mut self, window: Arc<dyn Window>) {
         let surface = self.instance.create_surface(window.clone()).unwrap();
         self.windows.push(Surface::new(
             window,

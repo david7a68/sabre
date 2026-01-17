@@ -7,14 +7,16 @@ use slotmap::SlotMap;
 use slotmap::new_key_type;
 use smallvec::SmallVec;
 use winit::application::ApplicationHandler;
+use winit::event::ButtonSource;
 use winit::event::WindowEvent;
 use winit::event_loop::ActiveEventLoop;
 use winit::event_loop::ControlFlow;
 use winit::event_loop::EventLoop;
 use winit::event_loop::EventLoopProxy;
 use winit::platform::windows::EventLoopBuilderExtWindows;
-use winit::platform::windows::WindowAttributesExtWindows;
+use winit::platform::windows::WindowAttributesWindows;
 use winit::window::Window;
+use winit::window::WindowAttributes;
 use winit::window::WindowId;
 
 use crate::graphics::Canvas;
@@ -22,6 +24,7 @@ use crate::graphics::Color;
 use crate::graphics::GraphicsContext;
 use crate::graphics::TextLayoutContext;
 use crate::ui::Input;
+use crate::ui::KeyboardEvent;
 use crate::ui::Theme;
 use crate::ui::UiBuilder;
 use crate::ui::context::DrawCommand;
@@ -39,15 +42,12 @@ impl AppContextBuilder {
     }
 
     pub fn run(self, handler: impl AppLifecycleHandler) {
-        let event_loop = EventLoop::with_user_event()
-            .with_dpi_aware(true)
-            .build()
-            .unwrap();
+        let event_loop = EventLoop::builder().with_dpi_aware(true).build().unwrap();
         event_loop.set_control_flow(ControlFlow::Wait);
 
         let theme = self.theme.unwrap_or_default();
 
-        let mut runtime = WinitApp {
+        let runtime = WinitApp {
             runtime: AppContext {
                 viewports: SlotMap::with_key(),
                 deferred_commands: Vec::new(),
@@ -60,11 +60,11 @@ impl AppContextBuilder {
             user_handler: handler,
         };
 
-        event_loop.run_app(&mut runtime).unwrap();
+        event_loop.run_app(runtime).unwrap();
     }
 }
 
-pub trait AppLifecycleHandler {
+pub trait AppLifecycleHandler: 'static {
     fn suspend(&mut self, runtime: &mut AppContext) {
         let _ = runtime;
     }
@@ -82,7 +82,7 @@ pub struct AppContext {
     graphics: Option<GraphicsContext>,
     text_system: TextLayoutContext,
 
-    event_loop_proxy: EventLoopProxy<WinitEvent>,
+    event_loop_proxy: EventLoopProxy,
 }
 
 impl AppContext {
@@ -115,15 +115,22 @@ impl AppContext {
         &mut self.theme
     }
 
-    fn repaint<'a>(&mut self, windows: impl IntoIterator<Item = (&'a mut WinitWindow, Input)>) {
+    fn repaint<'a>(&mut self, windows: impl IntoIterator<Item = &'a mut WinitWindow>) {
         let windows = windows.into_iter();
         let mut outputs = SmallVec::with_capacity(windows.size_hint().0);
 
-        for (window, input) in windows {
+        for window in windows {
+            let Some(viewport) = self.viewports.get_mut(window.viewport) else {
+                continue;
+            };
+
+            // borrow input for this frame
+            let input = std::mem::take(&mut viewport.input);
+
             let ui_builder = window.ui_context.begin_frame(
                 &mut self.text_system,
                 &self.theme,
-                input,
+                &input,
                 Duration::ZERO,
             );
 
@@ -134,6 +141,13 @@ impl AppContext {
             };
 
             (window.handler)(context, ui_builder);
+
+            // Restore input allocs for next frame; use branch to avoid unwrap.
+            // This should never fail.
+            if let Some(viewport) = self.viewports.get_mut(window.viewport) {
+                viewport.input = input;
+                viewport.input.keyboard_events.clear();
+            }
 
             window.canvas.reset(Color::BLACK);
 
@@ -162,17 +176,14 @@ impl AppContext {
 
 #[derive(Clone)]
 pub struct ViewportHandle {
+    #[expect(unused)]
     id: ViewportId,
-    event_loop_proxy: EventLoopProxy<WinitEvent>,
+    event_loop_proxy: EventLoopProxy,
 }
 
 impl ViewportHandle {
     pub fn send_message(&self, _: ()) {
-        self.event_loop_proxy
-            .send_event(WinitEvent {
-                viewport_id: self.id,
-            })
-            .unwrap();
+        self.event_loop_proxy.wake_up();
     }
 }
 
@@ -186,7 +197,7 @@ pub struct ViewportConfig {
 pub struct Context<'a> {
     viewports: &'a mut SlotMap<ViewportId, Viewport>,
     deferred_commands: &'a mut Vec<ViewportCommand>,
-    event_loop_proxy: &'a EventLoopProxy<WinitEvent>,
+    event_loop_proxy: &'a EventLoopProxy,
 }
 
 impl Context<'_> {
@@ -220,16 +231,19 @@ struct WinitApp<App> {
 }
 
 impl<App> WinitApp<App> {
-    fn handle_deferred_commands(&mut self, event_loop: &ActiveEventLoop) {
+    fn handle_deferred_commands(&mut self, event_loop: &dyn ActiveEventLoop) {
         for command in self.runtime.deferred_commands.drain(..) {
             match command {
                 ViewportCommand::Create { id, handler } => {
-                    let window = Arc::new(
+                    let window = Arc::<dyn Window>::from(
                         event_loop
                             .create_window(
-                                Window::default_attributes()
-                                    .with_no_redirection_bitmap(true)
-                                    .with_visible(false),
+                                WindowAttributes::default()
+                                    .with_visible(false)
+                                    .with_platform_attributes(Box::new(
+                                        WindowAttributesWindows::default()
+                                            .with_no_redirection_bitmap(true),
+                                    )),
                             )
                             .unwrap(),
                     );
@@ -259,28 +273,28 @@ impl<App> WinitApp<App> {
     }
 }
 
-impl<App: AppLifecycleHandler> ApplicationHandler<WinitEvent> for WinitApp<App> {
-    fn resumed(&mut self, event_loop: &ActiveEventLoop) {
+impl<App: AppLifecycleHandler> ApplicationHandler for WinitApp<App> {
+    fn can_create_surfaces(&mut self, event_loop: &dyn ActiveEventLoop) {
         self.user_handler.resume(&mut self.runtime);
         self.handle_deferred_commands(event_loop);
 
-        self.runtime.repaint(self.windows.values_mut().map(|w| {
+        self.runtime.repaint(self.windows.values_mut().inspect(|w| {
             w.window.set_visible(true);
-            (w, Input::default())
         }));
     }
 
     #[allow(unused_variables)]
     fn window_event(
         &mut self,
-        event_loop: &ActiveEventLoop,
+        event_loop: &dyn ActiveEventLoop,
         window_id: WindowId,
         event: WindowEvent,
     ) {
         match event {
-            WindowEvent::CursorMoved {
+            WindowEvent::PointerMoved {
                 device_id,
                 position,
+                ..
             } => {
                 let window = self.windows.get_mut(&window_id).unwrap();
                 let viewport = self.runtime.viewports.get_mut(window.viewport).unwrap();
@@ -292,13 +306,18 @@ impl<App: AppLifecycleHandler> ApplicationHandler<WinitEvent> for WinitApp<App> 
 
                 window.window.request_redraw();
             }
-            WindowEvent::MouseInput {
+            WindowEvent::PointerButton {
                 device_id,
                 state,
                 button,
+                ..
             } => {
                 let window = self.windows.get_mut(&window_id).unwrap();
                 let viewport = self.runtime.viewports.get_mut(window.viewport).unwrap();
+
+                let ButtonSource::Mouse(button) = button else {
+                    return;
+                };
 
                 match (button, state) {
                     (winit::event::MouseButton::Left, winit::event::ElementState::Pressed) => {
@@ -326,7 +345,25 @@ impl<App: AppLifecycleHandler> ApplicationHandler<WinitEvent> for WinitApp<App> 
 
                 window.window.request_redraw();
             }
-            WindowEvent::Resized(physical_size) => {
+            WindowEvent::KeyboardInput {
+                device_id,
+                event,
+                is_synthetic,
+            } => {
+                let window = self.windows.get(&window_id).unwrap();
+                let viewport = self.runtime.viewports.get_mut(window.viewport).unwrap();
+
+                viewport.input.keyboard_events.push(KeyboardEvent {
+                    key: event.physical_key,
+                    text: event.text,
+                    location: event.location,
+                    is_repeat: event.repeat,
+                    state: event.state.into(),
+                });
+
+                window.window.request_redraw();
+            }
+            WindowEvent::SurfaceResized(physical_size) => {
                 let window = self.windows.get(&window_id).unwrap();
                 let viewport = self.runtime.viewports.get_mut(window.viewport).unwrap();
 
@@ -346,10 +383,8 @@ impl<App: AppLifecycleHandler> ApplicationHandler<WinitEvent> for WinitApp<App> 
             }
             WindowEvent::RedrawRequested => {
                 let window = self.windows.get_mut(&window_id).unwrap();
-                let viewport = self.runtime.viewports.get_mut(window.viewport).unwrap();
-                let input = viewport.input.clone();
 
-                self.runtime.repaint([(window, input)]);
+                self.runtime.repaint([window]);
             }
             _ => {}
         }
@@ -368,7 +403,7 @@ struct Viewport {
 }
 
 struct WinitWindow {
-    window: Arc<Window>,
+    window: Arc<dyn Window>,
 
     canvas: Canvas,
     viewport: ViewportId,
@@ -381,10 +416,4 @@ enum ViewportCommand {
         id: ViewportId,
         handler: Box<dyn FnMut(Context, UiBuilder)>,
     },
-}
-
-#[derive(Debug)]
-struct WinitEvent {
-    #[expect(unused)]
-    viewport_id: ViewportId,
 }

@@ -160,6 +160,7 @@ impl<T> LayoutTree<T> {
     pub fn clear(&mut self) {
         self.nodes.clear();
         self.children.clear();
+        self.content.clear();
     }
 
     pub fn compute_layout(&mut self, measure_text: impl FnMut(&mut T, f32) -> Option<f32>) {
