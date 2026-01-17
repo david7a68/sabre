@@ -32,7 +32,7 @@ macros::declare_style! {
         background_color: BackgroundColor(Color) = Color::WHITE,
 
         // layout styles
-        padding: Padding(use Padding) = Padding::default(),
+        padding: Padding(use Padding) = Padding { top: 4.0, right: 4.0, bottom: 4.0, left: 4.0 },
         child_major_alignment: ChildMajorAlignment(Alignment) = Alignment::Start,
         child_minor_alignment: ChildMinorAlignment(Alignment) = Alignment::Center,
         child_spacing: ChildSpacing(f32) = 4.0,

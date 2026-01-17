@@ -283,7 +283,6 @@ impl<App: AppLifecycleHandler> ApplicationHandler for WinitApp<App> {
         }));
     }
 
-    #[allow(unused_variables)]
     fn window_event(
         &mut self,
         event_loop: &dyn ActiveEventLoop,
@@ -291,11 +290,7 @@ impl<App: AppLifecycleHandler> ApplicationHandler for WinitApp<App> {
         event: WindowEvent,
     ) {
         match event {
-            WindowEvent::PointerMoved {
-                device_id,
-                position,
-                ..
-            } => {
+            WindowEvent::PointerMoved { position, .. } => {
                 let window = self.windows.get_mut(&window_id).unwrap();
                 let viewport = self.runtime.viewports.get_mut(window.viewport).unwrap();
 
@@ -306,12 +301,7 @@ impl<App: AppLifecycleHandler> ApplicationHandler for WinitApp<App> {
 
                 window.window.request_redraw();
             }
-            WindowEvent::PointerButton {
-                device_id,
-                state,
-                button,
-                ..
-            } => {
+            WindowEvent::PointerButton { state, button, .. } => {
                 let window = self.windows.get_mut(&window_id).unwrap();
                 let viewport = self.runtime.viewports.get_mut(window.viewport).unwrap();
 
@@ -345,11 +335,7 @@ impl<App: AppLifecycleHandler> ApplicationHandler for WinitApp<App> {
 
                 window.window.request_redraw();
             }
-            WindowEvent::KeyboardInput {
-                device_id,
-                event,
-                is_synthetic,
-            } => {
+            WindowEvent::KeyboardInput { event, .. } => {
                 let window = self.windows.get(&window_id).unwrap();
                 let viewport = self.runtime.viewports.get_mut(window.viewport).unwrap();
 
