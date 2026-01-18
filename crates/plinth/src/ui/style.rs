@@ -17,6 +17,7 @@ mod tests {
     //! - `properties::tests` for Style and property definitions (if any)
 
     use crate::graphics::Color;
+    use crate::graphics::Paint;
 
     use super::*;
 
@@ -33,16 +34,16 @@ mod tests {
                 vec![
                     (
                         StateFlags::NORMAL,
-                        StyleProperty::BackgroundColor(Color::srgb(0.2, 0.2, 0.2, 1.0)),
+                        StyleProperty::Background(Paint::solid(Color::srgb(0.2, 0.2, 0.2, 1.0))),
                     ),
                     (StateFlags::NORMAL, StyleProperty::TextColor(Color::WHITE)),
                     (
                         StateFlags::HOVERED,
-                        StyleProperty::BackgroundColor(Color::srgb(0.3, 0.3, 0.3, 1.0)),
+                        StyleProperty::Background(Paint::solid(Color::srgb(0.3, 0.3, 0.3, 1.0))),
                     ),
                     (
                         StateFlags::PRESSED,
-                        StyleProperty::BackgroundColor(Color::srgb(0.1, 0.1, 0.1, 1.0)),
+                        StyleProperty::Background(Paint::solid(Color::srgb(0.1, 0.1, 0.1, 1.0))),
                     ),
                 ],
             )
@@ -55,31 +56,31 @@ mod tests {
                 vec![
                     (
                         StateFlags::NORMAL,
-                        StyleProperty::BackgroundColor(Color::srgb(0.0, 0.4, 0.8, 1.0)),
+                        StyleProperty::Background(Paint::solid(Color::srgb(0.0, 0.4, 0.8, 1.0))),
                     ),
                     (
                         StateFlags::HOVERED,
-                        StyleProperty::BackgroundColor(Color::srgb(0.0, 0.5, 1.0, 1.0)),
+                        StyleProperty::Background(Paint::solid(Color::srgb(0.0, 0.5, 1.0, 1.0))),
                     ),
                 ],
             )
             .unwrap();
 
         // Resolve properties for different states
-        let base_normal: Color =
-            registry.resolve::<BackgroundColor>(button_base, StateFlags::NORMAL);
-        let base_hovered: Color =
-            registry.resolve::<BackgroundColor>(button_base, StateFlags::HOVERED);
-        let primary_normal: Color =
-            registry.resolve::<BackgroundColor>(button_primary, StateFlags::NORMAL);
+        let base_normal: Paint =
+            registry.resolve::<Background>(button_base, StateFlags::NORMAL);
+        let base_hovered: Paint =
+            registry.resolve::<Background>(button_base, StateFlags::HOVERED);
+        let primary_normal: Paint =
+            registry.resolve::<Background>(button_primary, StateFlags::NORMAL);
         let primary_text: Color = registry.resolve::<TextColor>(button_primary, StateFlags::NORMAL);
 
         // Base button colors
-        assert_eq!(base_normal, Color::srgb(0.2, 0.2, 0.2, 1.0));
-        assert_eq!(base_hovered, Color::srgb(0.3, 0.3, 0.3, 1.0));
+        assert_eq!(base_normal, Paint::solid(Color::srgb(0.2, 0.2, 0.2, 1.0)));
+        assert_eq!(base_hovered, Paint::solid(Color::srgb(0.3, 0.3, 0.3, 1.0)));
 
         // Primary inherits text color, overrides background
-        assert_eq!(primary_normal, Color::srgb(0.0, 0.4, 0.8, 1.0));
+        assert_eq!(primary_normal, Paint::solid(Color::srgb(0.0, 0.4, 0.8, 1.0)));
         assert_eq!(primary_text, Color::WHITE); // Inherited from base
     }
 }

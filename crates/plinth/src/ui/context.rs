@@ -6,6 +6,7 @@ use glamour::Rect;
 use glamour::Size2;
 
 use crate::graphics::Color;
+use crate::graphics::Paint;
 use crate::graphics::Primitive;
 use crate::graphics::TextAlignment;
 use crate::graphics::TextLayoutContext;
@@ -51,7 +52,7 @@ impl UiContext {
             },
             (
                 LayoutContent::Fill {
-                    color: Color::WHITE,
+                    paint: Paint::solid(Color::WHITE),
                 },
                 Some(id),
             ),
@@ -128,13 +129,13 @@ impl UiContext {
 
                 match content {
                     LayoutContent::None => {}
-                    LayoutContent::Fill { color } => {
-                        vec.push(DrawCommand::Primitive(Primitive::new(
+                    LayoutContent::Fill { paint } => {
+                        vec.push(DrawCommand::Primitive(Primitive::with_paint(
                             layout.x,
                             layout.y,
                             layout.width,
                             layout.height,
-                            *color,
+                            paint.clone(),
                         )));
                     }
                     LayoutContent::Text { layout: text, .. } => {
@@ -153,11 +154,10 @@ pub(super) struct WidgetContainer {
     frame_last_used: u64,
 }
 
-#[expect(clippy::large_enum_variant)]
 pub(super) enum LayoutContent {
     None,
     Fill {
-        color: Color,
+        paint: Paint,
     },
     Text {
         layout: parley::Layout<Color>,
@@ -165,7 +165,6 @@ pub(super) enum LayoutContent {
     },
 }
 
-#[expect(clippy::large_enum_variant)]
 pub(crate) enum DrawCommand<'a> {
     Primitive(Primitive),
     TextLayout(&'a parley::Layout<Color>, [f32; 2]),

@@ -20,6 +20,7 @@ use swash as _;
 use tracing::instrument; // so that we can enable the "scale" feature
 
 use crate::graphics::Color;
+use crate::graphics::Paint;
 use crate::graphics::Primitive;
 use crate::graphics::Texture;
 use crate::graphics::draw::CanvasStorage;
@@ -225,15 +226,16 @@ fn draw_glyph_run(
 
         canvas.push(
             textures,
-            Primitive::new(
-                glyph_x,
-                glyph_y,
-                entry.width as f32,
-                entry.height as f32,
-                color,
-            )
-            .with_mask(entry.texture.clone())
-            .with_nearest_sampling(),
+            Primitive {
+                point: [glyph_x, glyph_y],
+                size: [entry.width as f32, entry.height as f32],
+                paint: Paint::Sampled {
+                    color_tint: color,
+                    color_texture: None,
+                    alpha_texture: Some(entry.texture.clone()),
+                },
+                use_nearest_sampling: true,
+            },
         );
     }
 }

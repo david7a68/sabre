@@ -2,12 +2,11 @@ struct DrawInfo {
     viewport_size: vec2<u32>
 }
 
+// Rectangle primitive with configurable paint (sampled texture or gradient)
 struct Rect {
     point: vec2f,
     extent: vec2f,
-    color_tint: vec4f,
-    color_uvwh: vec4f,
-    alpha_uvwh: vec4f,
+    background: Paint,
     control_flags: Bitflags,
     _padding0: u32,
     _padding1: u32,
@@ -16,10 +15,8 @@ struct Rect {
 
 struct VertexOutput {
     @builtin(position) clip_position: vec4<f32>,
-    @location(0) color_tint: vec4f,
-    @location(1) color_uv: vec2f,
-    @location(2) alpha_uv: vec2f,
-    @location(3) rect_index: u32,
+    @location(0) uv: vec2f,
+    @location(1) @interpolate(flat) rect_index: u32,
 };
 
 // Bind group 0: per-frame info
@@ -39,16 +36,7 @@ fn vs_main(
     var out: VertexOutput;
 
     out.clip_position = to_clip_coords(vertex_position);
-    out.color_tint = rects[rect_index].color_tint;
-
-    let color_uvwh = rects[rect_index].color_uvwh;
-    out.color_uv = color_uvwh.xy + color_uvwh.zw * UV_LOOKUP[vertex_index];
-    out.color_uv = vec2f(out.color_uv.x, out.color_uv.y);
-
-    let alpha_uvwh = rects[rect_index].alpha_uvwh;
-    out.alpha_uv = alpha_uvwh.xy + alpha_uvwh.zw * UV_LOOKUP[vertex_index];
-    out.alpha_uv = vec2f(out.alpha_uv.x, out.alpha_uv.y);
-
+    out.uv = UV_LOOKUP[vertex_index];
     out.rect_index = rect_index;
 
     return out;
@@ -66,15 +54,44 @@ fn fs_main(
     let rect = rects[in.rect_index];
     var color: vec4f;
 
-    if (is_nearest_sampling(rect.control_flags)) {
-        color = in.color_tint * textureSample(color_texture, nearest_sampler, in.color_uv);
-        color.a = textureSample(alpha_texture, nearest_sampler, in.alpha_uv).r;
+    if (is_gradient_paint(rect.control_flags)) {
+        // Gradient paint mode
+        let gradient = as_gradient_paint(rect.background);
+        
+        // Calculate gradient interpolation factor based on position
+        let p1 = gradient.color_p1;
+        let p2 = gradient.color_p2;
+        let gradient_dir = p2 - p1;
+        let gradient_len_sq = dot(gradient_dir, gradient_dir);
+        
+        // Current position in normalized [0,1] space within the rect
+        let pos = in.uv;
+        
+        // Project position onto gradient line to get interpolation factor
+        var t: f32;
+        if (gradient_len_sq < 0.0001) {
+            t = 0.0;
+        } else {
+            t = clamp(dot(pos - p1, gradient_dir) / gradient_len_sq, 0.0, 1.0);
+        }
+        
+        color = mix(gradient.color_a, gradient.color_b, t);
     } else {
-        color = in.color_tint * textureSample(color_texture, basic_sampler, in.color_uv);
-        color.a = textureSample(alpha_texture, basic_sampler, in.alpha_uv).r;
+        // Sampled texture mode
+        let sampled = as_sampled_paint(rect.background);
+        
+        let color_uv = sampled.color_uvwh.xy + sampled.color_uvwh.zw * in.uv;
+        let alpha_uv = sampled.alpha_uvwh.xy + sampled.alpha_uvwh.zw * in.uv;
+
+        if (is_nearest_sampling(rect.control_flags)) {
+            color = sampled.color_tint * textureSample(color_texture, nearest_sampler, color_uv);
+            color.a *= textureSample(alpha_texture, nearest_sampler, alpha_uv).r;
+        } else {
+            color = sampled.color_tint * textureSample(color_texture, basic_sampler, color_uv);
+            color.a *= textureSample(alpha_texture, basic_sampler, alpha_uv).r;
+        }
     }
     
-    color.a = alpha;
     return color;
 }
 
@@ -110,19 +127,54 @@ fn to_clip_coords(position: vec2f) -> vec4f {
 }
 
 const USE_NEAREST_SAMPLING: u32 = 1;
+const USE_GRADIENT_PAINT: u32 = 2;
 
 struct Bitflags {
     value: u32
 }
 
-fn set_nearest_sampling(flags: Bitflags, use_nearest: bool) -> Bitflags {
-    if (use_nearest) {
-        return Bitflags(flags.value | USE_NEAREST_SAMPLING);
-    } else {
-        return Bitflags(flags.value & ~USE_NEAREST_SAMPLING);
-    }
-}
-
 fn is_nearest_sampling(flags: Bitflags) -> bool {
     return (flags.value & USE_NEAREST_SAMPLING) != 0u;
+}
+
+fn is_gradient_paint(flags: Bitflags) -> bool {
+    return (flags.value & USE_GRADIENT_PAINT) != 0u;
+}
+
+struct Paint {
+    a: vec4f,
+    b: vec4f,
+    c: vec4f,
+}
+
+fn as_sampled_paint(paint: Paint) -> SampledPaint {
+    var result = SampledPaint();
+    result.color_tint = paint.a;
+    result.color_uvwh = paint.b;
+    result.alpha_uvwh = paint.c;
+
+    return result;
+}
+
+fn as_gradient_paint(paint: Paint) -> GradientPaint {
+    var result = GradientPaint();
+    result.color_a = paint.a;
+    result.color_b = paint.b;
+    result.color_p1 = paint.c.xy;
+    result.color_p2 = paint.c.zw;
+
+    return result;
+}
+
+struct SampledPaint {
+    color_tint: vec4f,
+    color_uvwh: vec4f,
+    alpha_uvwh: vec4f,
+}
+
+struct GradientPaint {
+    color_a: vec4f,
+    color_b: vec4f,
+    color_p1: vec2f,
+    color_p2: vec2f,
 }

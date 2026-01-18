@@ -2,6 +2,7 @@ use std::hash::Hash;
 use std::time::Duration;
 
 use crate::graphics::Color;
+use crate::graphics::Paint;
 use crate::graphics::TextLayoutContext;
 
 use super::Alignment;
@@ -52,8 +53,14 @@ impl UiBuilder<'_> {
 
     pub fn color(&mut self, color: impl Into<Color>) -> &mut Self {
         self.context.ui_tree.content_mut(self.index).0 = LayoutContent::Fill {
-            color: color.into(),
+            paint: Paint::solid(color.into()),
         };
+
+        self
+    }
+
+    pub fn paint(&mut self, paint: Paint) -> &mut Self {
+        self.context.ui_tree.content_mut(self.index).0 = LayoutContent::Fill { paint };
 
         self
     }
@@ -132,10 +139,29 @@ impl UiBuilder<'_> {
             },
             (
                 LayoutContent::Fill {
-                    color: color.into(),
+                    paint: Paint::solid(color.into()),
                 },
                 None,
             ),
+        );
+
+        self
+    }
+
+    pub fn rect_with_paint(
+        &mut self,
+        width: impl Into<Size>,
+        height: impl Into<Size>,
+        paint: Paint,
+    ) -> &mut Self {
+        self.context.ui_tree.add(
+            Some(self.index),
+            Atom {
+                width: width.into(),
+                height: height.into(),
+                ..Default::default()
+            },
+            (LayoutContent::Fill { paint }, None),
         );
 
         self

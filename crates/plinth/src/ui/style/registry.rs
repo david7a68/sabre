@@ -190,7 +190,8 @@ impl StyleDef {
 #[cfg(test)]
 mod tests {
     use crate::graphics::Color;
-    use crate::ui::style::{BackgroundColor, TextColor};
+    use crate::graphics::Paint;
+    use crate::ui::style::{Background, TextColor};
 
     use super::*;
 
@@ -211,17 +212,17 @@ mod tests {
                 vec![
                     (
                         StateFlags::NORMAL,
-                        StyleProperty::BackgroundColor(rgb(255, 0, 0)),
+                        StyleProperty::Background(Paint::solid(rgb(255, 0, 0))),
                     ),
                     (StateFlags::NORMAL, StyleProperty::TextColor(rgb(0, 0, 255))),
                 ],
             )
             .unwrap();
 
-        let bg: Color = registry.resolve::<BackgroundColor>(style, StateFlags::NORMAL);
+        let bg: Paint = registry.resolve::<Background>(style, StateFlags::NORMAL);
         let text: Color = registry.resolve::<TextColor>(style, StateFlags::NORMAL);
 
-        assert_eq!(bg, rgb(255, 0, 0));
+        assert_eq!(bg, Paint::solid(rgb(255, 0, 0)));
         assert_eq!(text, rgb(0, 0, 255));
     }
 
@@ -257,10 +258,10 @@ mod tests {
 
         let default_id = registry.default_style_id();
 
-        let bg: Color = registry.resolve::<BackgroundColor>(default_id, StateFlags::NORMAL);
+        let bg: Paint = registry.resolve::<Background>(default_id, StateFlags::NORMAL);
         let text: Color = registry.resolve::<TextColor>(default_id, StateFlags::NORMAL);
 
-        assert_eq!(bg, Color::WHITE);
+        assert_eq!(bg, Paint::solid(Color::WHITE));
         assert_eq!(text, Color::BLACK);
         assert!(registry.get(default_id).is_some());
     }
@@ -276,14 +277,14 @@ mod tests {
                 Some(default_id),
                 vec![(
                     StateFlags::NORMAL,
-                    StyleProperty::BackgroundColor(rgb(100, 100, 100)),
+                    StyleProperty::Background(Paint::solid(rgb(100, 100, 100))),
                 )],
             )
             .unwrap();
 
         assert_eq!(
-            registry.resolve::<BackgroundColor>(child, StateFlags::NORMAL),
-            rgb(100, 100, 100)
+            registry.resolve::<Background>(child, StateFlags::NORMAL),
+            Paint::solid(rgb(100, 100, 100))
         );
         assert_eq!(
             registry.resolve::<TextColor>(child, StateFlags::NORMAL),
@@ -303,7 +304,7 @@ mod tests {
                 vec![
                     (
                         StateFlags::NORMAL,
-                        StyleProperty::BackgroundColor(rgb(50, 50, 50)),
+                        StyleProperty::Background(Paint::solid(rgb(50, 50, 50))),
                     ),
                     (
                         StateFlags::NORMAL,
@@ -318,15 +319,15 @@ mod tests {
                 Some(parent),
                 vec![(
                     StateFlags::NORMAL,
-                    StyleProperty::BackgroundColor(rgb(100, 100, 100)),
+                    StyleProperty::Background(Paint::solid(rgb(100, 100, 100))),
                 )],
             )
             .unwrap();
 
         // Background from child, text inherited from parent
         assert_eq!(
-            registry.resolve::<BackgroundColor>(child, StateFlags::NORMAL),
-            rgb(100, 100, 100)
+            registry.resolve::<Background>(child, StateFlags::NORMAL),
+            Paint::solid(rgb(100, 100, 100))
         );
         assert_eq!(
             registry.resolve::<TextColor>(child, StateFlags::NORMAL),
@@ -343,7 +344,7 @@ mod tests {
                 None,
                 vec![(
                     StateFlags::NORMAL,
-                    StyleProperty::BackgroundColor(rgb(50, 50, 50)),
+                    StyleProperty::Background(Paint::solid(rgb(50, 50, 50))),
                 )],
             )
             .unwrap();
@@ -353,7 +354,7 @@ mod tests {
                 Some(parent),
                 vec![(
                     StateFlags::NORMAL,
-                    StyleProperty::BackgroundColor(rgb(100, 100, 100)),
+                    StyleProperty::Background(Paint::solid(rgb(100, 100, 100))),
                 )],
             )
             .unwrap();
@@ -363,7 +364,7 @@ mod tests {
                 Some(parent),
                 vec![(
                     StateFlags::NORMAL,
-                    StyleProperty::BackgroundColor(rgb(200, 200, 200)),
+                    StyleProperty::Background(Paint::solid(rgb(200, 200, 200))),
                 )],
             )
             .unwrap();
@@ -372,17 +373,17 @@ mod tests {
             sibling1,
             vec![(
                 StateFlags::NORMAL,
-                StyleProperty::BackgroundColor(rgb(150, 150, 150)),
+                StyleProperty::Background(Paint::solid(rgb(150, 150, 150))),
             )],
         );
 
         assert_eq!(
-            registry.resolve::<BackgroundColor>(sibling1, StateFlags::NORMAL),
-            rgb(150, 150, 150)
+            registry.resolve::<Background>(sibling1, StateFlags::NORMAL),
+            Paint::solid(rgb(150, 150, 150))
         );
         assert_eq!(
-            registry.resolve::<BackgroundColor>(sibling2, StateFlags::NORMAL),
-            rgb(200, 200, 200)
+            registry.resolve::<Background>(sibling2, StateFlags::NORMAL),
+            Paint::solid(rgb(200, 200, 200))
         );
     }
 
@@ -398,31 +399,31 @@ mod tests {
                 vec![
                     (
                         StateFlags::NORMAL,
-                        StyleProperty::BackgroundColor(rgb(100, 100, 100)),
+                        StyleProperty::Background(Paint::solid(rgb(100, 100, 100))),
                     ),
                     (
                         StateFlags::HOVERED,
-                        StyleProperty::BackgroundColor(rgb(150, 150, 150)),
+                        StyleProperty::Background(Paint::solid(rgb(150, 150, 150))),
                     ),
                     (
                         StateFlags::PRESSED,
-                        StyleProperty::BackgroundColor(rgb(200, 200, 200)),
+                        StyleProperty::Background(Paint::solid(rgb(200, 200, 200))),
                     ),
                 ],
             )
             .unwrap();
 
         assert_eq!(
-            registry.resolve::<BackgroundColor>(style, StateFlags::NORMAL),
-            rgb(100, 100, 100)
+            registry.resolve::<Background>(style, StateFlags::NORMAL),
+            Paint::solid(rgb(100, 100, 100))
         );
         assert_eq!(
-            registry.resolve::<BackgroundColor>(style, StateFlags::HOVERED),
-            rgb(150, 150, 150)
+            registry.resolve::<Background>(style, StateFlags::HOVERED),
+            Paint::solid(rgb(150, 150, 150))
         );
         assert_eq!(
-            registry.resolve::<BackgroundColor>(style, StateFlags::PRESSED),
-            rgb(200, 200, 200)
+            registry.resolve::<Background>(style, StateFlags::PRESSED),
+            Paint::solid(rgb(200, 200, 200))
         );
     }
 
@@ -432,8 +433,8 @@ mod tests {
         let style = registry.register(None, vec![]).unwrap();
 
         assert_eq!(
-            registry.resolve::<BackgroundColor>(style, StateFlags::NORMAL),
-            Color::WHITE
+            registry.resolve::<Background>(style, StateFlags::NORMAL),
+            Paint::solid(Color::WHITE)
         );
         assert_eq!(
             registry.resolve::<TextColor>(style, StateFlags::NORMAL),
@@ -451,23 +452,23 @@ mod tests {
                 vec![
                     (
                         StateFlags::HOVERED,
-                        StyleProperty::BackgroundColor(rgb(100, 100, 100)),
+                        StyleProperty::Background(Paint::solid(rgb(100, 100, 100))),
                     ),
                     (
                         StateFlags::HOVERED | StateFlags::PRESSED,
-                        StyleProperty::BackgroundColor(rgb(200, 200, 200)),
+                        StyleProperty::Background(Paint::solid(rgb(200, 200, 200))),
                     ),
                 ],
             )
             .unwrap();
 
         assert_eq!(
-            registry.resolve::<BackgroundColor>(style, StateFlags::HOVERED | StateFlags::PRESSED),
-            rgb(200, 200, 200)
+            registry.resolve::<Background>(style, StateFlags::HOVERED | StateFlags::PRESSED),
+            Paint::solid(rgb(200, 200, 200))
         );
         assert_eq!(
-            registry.resolve::<BackgroundColor>(style, StateFlags::HOVERED),
-            rgb(100, 100, 100)
+            registry.resolve::<Background>(style, StateFlags::HOVERED),
+            Paint::solid(rgb(100, 100, 100))
         );
     }
 
@@ -481,15 +482,15 @@ mod tests {
                 vec![
                     (
                         StateFlags::NORMAL,
-                        StyleProperty::BackgroundColor(rgb(50, 50, 50)),
+                        StyleProperty::Background(Paint::solid(rgb(50, 50, 50))),
                     ),
                     (
                         StateFlags::HOVERED,
-                        StyleProperty::BackgroundColor(rgb(100, 100, 100)),
+                        StyleProperty::Background(Paint::solid(rgb(100, 100, 100))),
                     ),
                     (
                         StateFlags::HOVERED | StateFlags::PRESSED,
-                        StyleProperty::BackgroundColor(rgb(150, 150, 150)),
+                        StyleProperty::Background(Paint::solid(rgb(150, 150, 150))),
                     ),
                 ],
             )
@@ -497,8 +498,8 @@ mod tests {
 
         // 2-bit match beats 1-bit match
         assert_eq!(
-            registry.resolve::<BackgroundColor>(style, StateFlags::HOVERED | StateFlags::PRESSED),
-            rgb(150, 150, 150)
+            registry.resolve::<Background>(style, StateFlags::HOVERED | StateFlags::PRESSED),
+            Paint::solid(rgb(150, 150, 150))
         );
     }
 
@@ -511,19 +512,19 @@ mod tests {
                 None,
                 vec![(
                     StateFlags::NORMAL,
-                    StyleProperty::BackgroundColor(rgb(50, 50, 50)),
+                    StyleProperty::Background(Paint::solid(rgb(50, 50, 50))),
                 )],
             )
             .unwrap();
 
         // NORMAL is empty flags, so it matches any state as a subset
         assert_eq!(
-            registry.resolve::<BackgroundColor>(style, StateFlags::HOVERED),
-            rgb(50, 50, 50)
+            registry.resolve::<Background>(style, StateFlags::HOVERED),
+            Paint::solid(rgb(50, 50, 50))
         );
         assert_eq!(
-            registry.resolve::<BackgroundColor>(style, StateFlags::PRESSED),
-            rgb(50, 50, 50)
+            registry.resolve::<Background>(style, StateFlags::PRESSED),
+            Paint::solid(rgb(50, 50, 50))
         );
     }
 
@@ -536,19 +537,19 @@ mod tests {
                 None,
                 vec![(
                     StateFlags::HOVERED,
-                    StyleProperty::BackgroundColor(rgb(100, 100, 100)),
+                    StyleProperty::Background(Paint::solid(rgb(100, 100, 100))),
                 )],
             )
             .unwrap();
 
         // HOVERED is not a subset of NORMAL (empty), so falls back to default
         assert_eq!(
-            registry.resolve::<BackgroundColor>(style, StateFlags::NORMAL),
-            Color::WHITE
+            registry.resolve::<Background>(style, StateFlags::NORMAL),
+            Paint::solid(Color::WHITE)
         );
         assert_eq!(
-            registry.resolve::<BackgroundColor>(style, StateFlags::HOVERED),
-            rgb(100, 100, 100)
+            registry.resolve::<Background>(style, StateFlags::HOVERED),
+            Paint::solid(rgb(100, 100, 100))
         );
     }
 
@@ -562,19 +563,19 @@ mod tests {
                 vec![
                     (
                         StateFlags::HOVERED,
-                        StyleProperty::BackgroundColor(rgb(100, 100, 100)),
+                        StyleProperty::Background(Paint::solid(rgb(100, 100, 100))),
                     ),
                     (
                         StateFlags::PRESSED,
-                        StyleProperty::BackgroundColor(rgb(150, 150, 150)),
+                        StyleProperty::Background(Paint::solid(rgb(150, 150, 150))),
                     ),
                 ],
             )
             .unwrap();
 
         assert_eq!(
-            registry.resolve::<BackgroundColor>(style, StateFlags::empty()),
-            Color::WHITE
+            registry.resolve::<Background>(style, StateFlags::empty()),
+            Paint::solid(Color::WHITE)
         );
     }
 
@@ -588,39 +589,39 @@ mod tests {
                 vec![
                     (
                         StateFlags::NORMAL,
-                        StyleProperty::BackgroundColor(rgb(50, 50, 50)),
+                        StyleProperty::Background(Paint::solid(rgb(50, 50, 50))),
                     ),
                     (
                         StateFlags::SELECTED,
-                        StyleProperty::BackgroundColor(rgb(100, 100, 100)),
+                        StyleProperty::Background(Paint::solid(rgb(100, 100, 100))),
                     ),
                     (
                         StateFlags::HOVERED,
-                        StyleProperty::BackgroundColor(rgb(150, 150, 150)),
+                        StyleProperty::Background(Paint::solid(rgb(150, 150, 150))),
                     ),
                     (
                         StateFlags::SELECTED | StateFlags::HOVERED,
-                        StyleProperty::BackgroundColor(rgb(200, 200, 200)),
+                        StyleProperty::Background(Paint::solid(rgb(200, 200, 200))),
                     ),
                 ],
             )
             .unwrap();
 
         assert_eq!(
-            registry.resolve::<BackgroundColor>(style, StateFlags::NORMAL),
-            rgb(50, 50, 50)
+            registry.resolve::<Background>(style, StateFlags::NORMAL),
+            Paint::solid(rgb(50, 50, 50))
         );
         assert_eq!(
-            registry.resolve::<BackgroundColor>(style, StateFlags::SELECTED),
-            rgb(100, 100, 100)
+            registry.resolve::<Background>(style, StateFlags::SELECTED),
+            Paint::solid(rgb(100, 100, 100))
         );
         assert_eq!(
-            registry.resolve::<BackgroundColor>(style, StateFlags::HOVERED),
-            rgb(150, 150, 150)
+            registry.resolve::<Background>(style, StateFlags::HOVERED),
+            Paint::solid(rgb(150, 150, 150))
         );
         assert_eq!(
-            registry.resolve::<BackgroundColor>(style, StateFlags::SELECTED | StateFlags::HOVERED),
-            rgb(200, 200, 200)
+            registry.resolve::<Background>(style, StateFlags::SELECTED | StateFlags::HOVERED),
+            Paint::solid(rgb(200, 200, 200))
         );
     }
 
@@ -634,7 +635,7 @@ mod tests {
                 vec![
                     (
                         StateFlags::HOVERED,
-                        StyleProperty::BackgroundColor(rgb(100, 100, 100)),
+                        StyleProperty::Background(Paint::solid(rgb(100, 100, 100))),
                     ),
                     (
                         StateFlags::HOVERED,
@@ -645,8 +646,8 @@ mod tests {
             .unwrap();
 
         assert_eq!(
-            registry.resolve::<BackgroundColor>(style, StateFlags::HOVERED),
-            rgb(100, 100, 100)
+            registry.resolve::<Background>(style, StateFlags::HOVERED),
+            Paint::solid(rgb(100, 100, 100))
         );
         assert_eq!(
             registry.resolve::<TextColor>(style, StateFlags::HOVERED),
@@ -665,7 +666,7 @@ mod tests {
                 None,
                 vec![(
                     StateFlags::NORMAL,
-                    StyleProperty::BackgroundColor(rgb(100, 100, 100)),
+                    StyleProperty::Background(Paint::solid(rgb(100, 100, 100))),
                 )],
             )
             .unwrap();
@@ -674,13 +675,13 @@ mod tests {
             style,
             vec![(
                 StateFlags::NORMAL,
-                StyleProperty::BackgroundColor(rgb(200, 200, 200)),
+                StyleProperty::Background(Paint::solid(rgb(200, 200, 200))),
             )],
         );
 
         assert_eq!(
-            registry.resolve::<BackgroundColor>(style, StateFlags::NORMAL),
-            rgb(200, 200, 200)
+            registry.resolve::<Background>(style, StateFlags::NORMAL),
+            Paint::solid(rgb(200, 200, 200))
         );
     }
 
@@ -693,7 +694,7 @@ mod tests {
                 None,
                 vec![(
                     StateFlags::NORMAL,
-                    StyleProperty::BackgroundColor(rgb(50, 50, 50)),
+                    StyleProperty::Background(Paint::solid(rgb(50, 50, 50))),
                 )],
             )
             .unwrap();
@@ -712,13 +713,13 @@ mod tests {
             parent,
             vec![(
                 StateFlags::NORMAL,
-                StyleProperty::BackgroundColor(rgb(100, 100, 100)),
+                StyleProperty::Background(Paint::solid(rgb(100, 100, 100))),
             )],
         );
 
         assert_eq!(
-            registry.resolve::<BackgroundColor>(child, StateFlags::NORMAL),
-            rgb(100, 100, 100)
+            registry.resolve::<Background>(child, StateFlags::NORMAL),
+            Paint::solid(rgb(100, 100, 100))
         );
         assert_eq!(
             registry.resolve::<TextColor>(child, StateFlags::NORMAL),
@@ -735,7 +736,7 @@ mod tests {
                 None,
                 vec![(
                     StateFlags::NORMAL,
-                    StyleProperty::BackgroundColor(rgb(50, 50, 50)),
+                    StyleProperty::Background(Paint::solid(rgb(50, 50, 50))),
                 )],
             )
             .unwrap();
@@ -748,21 +749,21 @@ mod tests {
             root,
             vec![(
                 StateFlags::NORMAL,
-                StyleProperty::BackgroundColor(rgb(200, 200, 200)),
+                StyleProperty::Background(Paint::solid(rgb(200, 200, 200))),
             )],
         );
 
         assert_eq!(
-            registry.resolve::<BackgroundColor>(child1, StateFlags::NORMAL),
-            rgb(200, 200, 200)
+            registry.resolve::<Background>(child1, StateFlags::NORMAL),
+            Paint::solid(rgb(200, 200, 200))
         );
         assert_eq!(
-            registry.resolve::<BackgroundColor>(child2, StateFlags::NORMAL),
-            rgb(200, 200, 200)
+            registry.resolve::<Background>(child2, StateFlags::NORMAL),
+            Paint::solid(rgb(200, 200, 200))
         );
         assert_eq!(
-            registry.resolve::<BackgroundColor>(child3, StateFlags::NORMAL),
-            rgb(200, 200, 200)
+            registry.resolve::<Background>(child3, StateFlags::NORMAL),
+            Paint::solid(rgb(200, 200, 200))
         );
     }
 
@@ -776,11 +777,11 @@ mod tests {
                 vec![
                     (
                         StateFlags::NORMAL,
-                        StyleProperty::BackgroundColor(rgb(50, 50, 50)),
+                        StyleProperty::Background(Paint::solid(rgb(50, 50, 50))),
                     ),
                     (
                         StateFlags::HOVERED,
-                        StyleProperty::BackgroundColor(rgb(100, 100, 100)),
+                        StyleProperty::Background(Paint::solid(rgb(100, 100, 100))),
                     ),
                     (
                         StateFlags::NORMAL,
@@ -794,18 +795,18 @@ mod tests {
             style,
             vec![(
                 StateFlags::NORMAL,
-                StyleProperty::BackgroundColor(rgb(200, 200, 200)),
+                StyleProperty::Background(Paint::solid(rgb(200, 200, 200))),
             )],
         );
 
         assert_eq!(
-            registry.resolve::<BackgroundColor>(style, StateFlags::NORMAL),
-            rgb(200, 200, 200)
+            registry.resolve::<Background>(style, StateFlags::NORMAL),
+            Paint::solid(rgb(200, 200, 200))
         );
         // Old hovered override gone
         assert_eq!(
-            registry.resolve::<BackgroundColor>(style, StateFlags::HOVERED),
-            rgb(200, 200, 200)
+            registry.resolve::<Background>(style, StateFlags::HOVERED),
+            Paint::solid(rgb(200, 200, 200))
         );
         // TextColor override removed
         assert_eq!(
@@ -834,7 +835,7 @@ mod tests {
         let mut other_registry = StyleRegistry::default();
         let fake_id = other_registry.register(None, vec![]).unwrap();
 
-        let _: Color = registry.resolve::<BackgroundColor>(fake_id, StateFlags::NORMAL);
+        let _: Paint = registry.resolve::<Background>(fake_id, StateFlags::NORMAL);
     }
 
     #[test]
@@ -858,11 +859,11 @@ mod tests {
                 vec![
                     (
                         StateFlags::NORMAL,
-                        StyleProperty::BackgroundColor(rgb(100, 100, 100)),
+                        StyleProperty::Background(Paint::solid(rgb(100, 100, 100))),
                     ),
                     (
                         StateFlags::HOVERED,
-                        StyleProperty::BackgroundColor(rgb(150, 150, 150)),
+                        StyleProperty::Background(Paint::solid(rgb(150, 150, 150))),
                     ),
                 ],
             )
@@ -871,12 +872,12 @@ mod tests {
         let style = registry.get(style_id).unwrap();
 
         assert_eq!(
-            style.background_color.get(StateFlags::NORMAL),
-            rgb(100, 100, 100)
+            style.background.get(StateFlags::NORMAL),
+            Paint::solid(rgb(100, 100, 100))
         );
         assert_eq!(
-            style.background_color.get(StateFlags::HOVERED),
-            rgb(150, 150, 150)
+            style.background.get(StateFlags::HOVERED),
+            Paint::solid(rgb(150, 150, 150))
         );
     }
 }

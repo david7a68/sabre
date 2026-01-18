@@ -1,4 +1,5 @@
 use plinth::graphics::Color;
+use plinth::graphics::Paint;
 use plinth::runtime::AppContext;
 use plinth::runtime::AppContextBuilder;
 use plinth::runtime::AppLifecycleHandler;
@@ -64,7 +65,7 @@ fn main() {
     theme.set_base_style([
         (
             StateFlags::NORMAL,
-            StyleProperty::BackgroundColor(Color::srgb(0.1, 0.2, 0.3, 1.0)),
+            StyleProperty::Background(Paint::solid(Color::srgb(0.1, 0.2, 0.3, 1.0))),
         ),
         (StateFlags::NORMAL, StyleProperty::FontSize(32)),
     ]);
@@ -76,11 +77,14 @@ fn main() {
             [
                 (
                     StateFlags::NORMAL,
-                    StyleProperty::BackgroundColor(Color::DARK_GRAY),
+                    StyleProperty::Background(Paint::solid(Color::DARK_GRAY)),
                 ),
                 (
                     StateFlags::HOVERED,
-                    StyleProperty::BackgroundColor(Color::LIGHT_GRAY),
+                    StyleProperty::Background(Paint::vertical_gradient(
+                        Color::LIGHT_GRAY,
+                        Color::DARK_GRAY,
+                    )),
                 ),
                 (
                     StateFlags::NORMAL,
