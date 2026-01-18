@@ -17,7 +17,7 @@ plinth = { path = "crates/plinth" }
 
 # External dependencies
 arrayvec = "0.7"
-bitflags = "2"
+bitflags = { version = "2", features = ["bytemuck"] }
 bytemuck = "1"
 color = "0.3"
 glamour = "0.18"

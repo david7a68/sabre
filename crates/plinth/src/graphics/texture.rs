@@ -73,7 +73,6 @@ pub struct Texture {
     storage_id: StorageId,
     uvwh: [f32; 4],
 
-    view: wgpu::TextureView,
     manager: Rc<TextureManagerInner>,
 }
 
@@ -98,11 +97,6 @@ impl Texture {
     }
 
     #[must_use]
-    pub fn texture_view(&self) -> &wgpu::TextureView {
-        &self.view
-    }
-
-    #[must_use]
     pub fn is_ready(&self) -> bool {
         self.manager
             .inspect(self.id, |usage| usage.is_ready)
@@ -113,6 +107,12 @@ impl Texture {
 impl Clone for Texture {
     fn clone(&self) -> Self {
         self.manager.get(self.id).unwrap()
+    }
+}
+
+impl PartialEq for Texture {
+    fn eq(&self, other: &Self) -> bool {
+        self.id == other.id
     }
 }
 
@@ -130,6 +130,12 @@ impl std::fmt::Debug for Texture {
             .field("uvwh", &self.uvwh)
             .field("format", &self.storage_id.format)
             .finish()
+    }
+}
+
+impl From<&Texture> for TextureId {
+    fn from(texture: &Texture) -> Self {
+        texture.id
     }
 }
 
@@ -161,6 +167,10 @@ impl TextureManager {
 
     pub fn opaque_pixel(&self) -> &Texture {
         &self.opaque_pixel
+    }
+
+    pub(crate) fn view(&self, storage: StorageId) -> Option<wgpu::TextureView> {
+        self.inner.storage_view(storage)
     }
 
     #[instrument(skip(self, data))]
@@ -259,6 +269,22 @@ impl TextureManagerInner {
         self.get(self.opaque_pixel.get()).unwrap()
     }
 
+    #[inline]
+    fn storage_view(self: &Rc<Self>, storage_id: StorageId) -> Option<wgpu::TextureView> {
+        let storage = match storage_id.format {
+            wgpu::TextureFormat::Rgba8Unorm => &self.rgba_textures,
+            wgpu::TextureFormat::Rgba8UnormSrgb => &self.srgba_textures,
+            wgpu::TextureFormat::R8Unorm => &self.alpha_textures,
+            _ => unreachable!(),
+        };
+
+        storage
+            .borrow()
+            .storage
+            .get(storage_id.id)
+            .map(|s| s.texture_view.clone())
+    }
+
     fn get(self: &Rc<Self>, id: TextureId) -> Option<Texture> {
         let mut texture_map = self.texture_map.borrow_mut();
 
@@ -269,7 +295,6 @@ impl TextureManagerInner {
             id,
             storage_id: usage.storage,
             uvwh: usage.uvwh,
-            view: usage.view.clone(),
             manager: self.clone(),
         })
     }
@@ -325,7 +350,7 @@ impl TextureManagerInner {
         }
     }
 
-    pub fn inspect<T>(
+    fn inspect<T>(
         self: &Rc<Self>,
         texture: TextureId,
         callback: impl Fn(&TextureUsage) -> T,
@@ -335,7 +360,7 @@ impl TextureManagerInner {
         Some(callback(usage))
     }
 
-    pub fn from_memory(
+    fn from_memory(
         self: &Rc<Self>,
         data: &[u8],
         width: u16,
@@ -365,7 +390,6 @@ impl TextureManagerInner {
         let (texture, usage, rectangle) = manager.allocate(width, height, &self.device);
 
         let uvwh = usage.uvwh;
-        let view = usage.view.clone();
         let storage_id = usage.storage;
         let texture_id = self.texture_map.borrow_mut().insert(usage);
 
@@ -409,7 +433,6 @@ impl TextureManagerInner {
         Texture {
             id: texture_id,
             storage_id,
-            view,
             uvwh,
             manager: self.clone(),
         }
@@ -449,7 +472,6 @@ impl TextureManagerInner {
         );
 
         let uvwh = usage.uvwh;
-        let view = usage.view.clone();
         let storage_id = usage.storage;
         let texture_id = self.texture_map.borrow_mut().insert(usage);
 
@@ -526,7 +548,6 @@ impl TextureManagerInner {
         Ok(Texture {
             id: texture_id,
             storage_id,
-            view,
             uvwh,
             manager: self.clone(),
         })
@@ -563,7 +584,6 @@ struct TextureUsage {
     atlas_id: AllocId,
     format: wgpu::TextureFormat,
     uvwh: [f32; 4],
-    view: wgpu::TextureView,
 }
 
 #[derive(Clone)]
@@ -635,14 +655,13 @@ impl FormattedTextureManager {
     ) -> (wgpu::Texture, TextureUsage, Box2D<i32>) {
         let alloc_size = size2(width.into(), height.into());
 
-        let (storage_id, texture, view, atlas_rect, Allocation { id, rectangle }) = 'alloc: {
+        let (storage_id, texture, atlas_rect, Allocation { id, rectangle }) = 'alloc: {
             for (storage_id, storage) in &mut self.storage {
                 if let Some(allocation) = storage.atlas.allocate(alloc_size) {
                     storage.refcount += 1;
                     break 'alloc (
                         storage_id,
                         storage.texture.clone(),
-                        storage.texture_view.clone(),
                         storage.atlas.size(),
                         allocation,
                     );
@@ -689,7 +708,7 @@ impl FormattedTextureManager {
             let allocation = storage.atlas.allocate(alloc_size).unwrap();
             let storage_id = self.storage.insert(storage);
 
-            (storage_id, texture, texture_view, atlas_size, allocation)
+            (storage_id, texture, atlas_size, allocation)
         };
 
         // Inset the rectangle by 0.5 pixels to avoid sampling bleed.
@@ -710,7 +729,6 @@ impl FormattedTextureManager {
                 refcount: 1,
                 atlas_id: id,
                 format: self.format,
-                view,
                 uvwh: [u, v, w, h],
             },
             rectangle,

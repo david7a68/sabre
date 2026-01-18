@@ -134,7 +134,7 @@ impl Widget for Button<'_> {
         };
 
         let style = widget.theme().get(StyleClass::Button);
-        let color = style.background_color.get(state);
+        let paint = style.background.get(state);
         let width = self.width.unwrap_or_else(|| style.width.get(state));
         let height = self.height.unwrap_or_else(|| style.height.get(state));
         let padding = self.padding.unwrap_or_else(|| style.padding.get(state));
@@ -145,7 +145,7 @@ impl Widget for Button<'_> {
             .child_alignment(major_align, minor_align)
             .size(width, height)
             .padding(padding)
-            .color(color);
+            .paint(paint);
 
         if let Some(label) = self.label {
             widget.label(&label, None);

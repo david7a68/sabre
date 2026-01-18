@@ -1,6 +1,7 @@
 pub use color::Color;
 pub use context::GraphicsContext;
 pub use draw::Canvas;
+pub use draw::Paint;
 pub use draw::Primitive;
 pub use text::*;
 pub use texture::Texture;

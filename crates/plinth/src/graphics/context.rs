@@ -180,7 +180,7 @@ impl GraphicsContext {
             window.resize_if_necessary(&self.device);
 
             let (target, command_buffer) =
-                write_commands(&self.device, &self.queue, window, canvas)?;
+                write_commands(&self.device, &self.queue, &self.textures, window, canvas)?;
 
             command_buffers.push(command_buffer);
             presents.push((window_id, target));
@@ -231,6 +231,7 @@ impl Drop for GraphicsContext {
 fn write_commands(
     device: &wgpu::Device,
     queue: &wgpu::Queue,
+    textures: &TextureManager,
     surface: &mut Surface,
     canvas: &CanvasStorage,
 ) -> Result<(wgpu::SurfaceTexture, wgpu::CommandBuffer), RenderError> {
@@ -294,14 +295,14 @@ fn write_commands(
                     alpha_storage_id,
                     num_vertices,
                 } => {
-                    let color_texture_view = canvas.texture_view(*color_storage_id).unwrap();
-                    let alpha_texture_view = canvas.texture_view(*alpha_storage_id).unwrap();
+                    let color_texture_view = textures.view(*color_storage_id).unwrap();
+                    let alpha_texture_view = textures.view(*alpha_storage_id).unwrap();
 
                     let bind_group = bind_groups
                         .entry((*color_storage_id, *alpha_storage_id))
                         .or_insert_with(|| {
                             render_pipeline
-                                .create_texure_bind_group(color_texture_view, alpha_texture_view)
+                                .create_texure_bind_group(&color_texture_view, &alpha_texture_view)
                         });
 
                     render_pipeline.bind_texture(&mut render_pass, bind_group);

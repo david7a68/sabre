@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use crate::graphics::Color;
 use crate::graphics::FontStyle;
+use crate::graphics::Paint;
 use crate::graphics::TextAlignment;
 use crate::ui::Alignment;
 use crate::ui::LayoutDirection;
@@ -29,7 +30,7 @@ bitflags::bitflags! {
 
 macros::declare_style! {
     pub struct Style {
-        background_color: BackgroundColor(Color) = Color::WHITE,
+        background: Background(Paint) = Paint::solid(Color::WHITE),
 
         // layout styles
         padding: Padding(use Padding) = Padding { top: 4.0, right: 4.0, bottom: 4.0, left: 4.0 },

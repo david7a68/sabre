@@ -79,3 +79,9 @@ impl From<Option<Color>> for Color {
         color.unwrap_or_default()
     }
 }
+
+impl From<Color> for [f32; 4] {
+    fn from(color: Color) -> Self {
+        [color.r, color.g, color.b, color.a]
+    }
+}
