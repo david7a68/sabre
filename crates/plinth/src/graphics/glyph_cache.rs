@@ -24,6 +24,7 @@ use crate::graphics::Paint;
 use crate::graphics::Primitive;
 use crate::graphics::Texture;
 use crate::graphics::draw::CanvasStorage;
+use crate::graphics::paint::GradientPaint;
 use crate::graphics::texture::TextureManager;
 
 #[derive(Clone)]
@@ -234,6 +235,8 @@ fn draw_glyph_run(
                     color_texture: None,
                     alpha_texture: Some(entry.texture.clone()),
                 },
+                border: GradientPaint::default(),
+                border_width: Default::default(),
                 use_nearest_sampling: true,
             },
         );

@@ -7,6 +7,8 @@ struct Rect {
     point: vec2f,
     extent: vec2f,
     background: Paint,
+    border_color: GradientPaint,
+    border_width: vec4f,
     control_flags: Bitflags,
     _padding0: u32,
     _padding1: u32,
@@ -14,9 +16,13 @@ struct Rect {
 }
 
 struct VertexOutput {
-    @builtin(position) clip_position: vec4<f32>,
-    @location(0) uv: vec2f,
-    @location(1) @interpolate(flat) rect_index: u32,
+    @builtin(position) frag_coord: vec4<f32>,
+    @location(0) @interpolate(flat) rect_index: u32,
+    @location(1) @interpolate(flat) border_left: f32,
+    @location(2) @interpolate(flat) border_top: f32,
+    @location(3) @interpolate(flat) border_right: f32,
+    @location(4) @interpolate(flat) border_bottom: f32,
+    @location(5) uv: vec2f,
 };
 
 // Bind group 0: per-frame info
@@ -33,11 +39,21 @@ fn vs_main(
     let vertex_index = in_vertex_index % 6;
     let vertex_position = rect.point + rect.extent * CORNER_LOOKUP[vertex_index];
 
+    let border_left = rect.point.x + rect.border_width.x;
+    let border_top = rect.point.y + rect.border_width.y;
+    let border_right = rect.point.x + rect.extent.x - rect.border_width.z;
+    let border_bottom = rect.point.y + rect.extent.y - rect.border_width.w;
+
     var out: VertexOutput;
 
-    out.clip_position = to_clip_coords(vertex_position);
-    out.uv = UV_LOOKUP[vertex_index];
     out.rect_index = rect_index;
+    out.frag_coord = to_clip_coords(vertex_position);
+    out.uv = UV_LOOKUP[vertex_index];
+
+    out.border_left = border_left;
+    out.border_top = border_top;
+    out.border_right = border_right;
+    out.border_bottom = border_bottom;
 
     return out;
 }
@@ -54,7 +70,35 @@ fn fs_main(
     let rect = rects[in.rect_index];
     var color: vec4f;
 
-    if (is_gradient_paint(rect.control_flags)) {
+    let is_in_border =
+        in.frag_coord.x < in.border_left ||
+        in.frag_coord.x > in.border_right ||
+        in.frag_coord.y < in.border_top ||
+        in.frag_coord.y > in.border_bottom;
+
+    if (is_in_border) {
+        // Gradient paint mode
+        let gradient = rect.border_color;
+
+        // Calculate gradient interpolation factor based on position
+        let p1 = gradient.color_p1;
+        let p2 = gradient.color_p2;
+        let gradient_dir = p2 - p1;
+        let gradient_len_sq = dot(gradient_dir, gradient_dir);
+        
+        // Current position in normalized [0,1] space within the rect
+        let pos = in.uv;
+        
+        // Project position onto gradient line to get interpolation factor
+        var t: f32;
+        if (gradient_len_sq < 0.0001) {
+            t = 0.0;
+        } else {
+            t = clamp(dot(pos - p1, gradient_dir) / gradient_len_sq, 0.0, 1.0);
+        }
+        
+        color = mix(gradient.color_a, gradient.color_b, t);
+    } else if (is_gradient_paint(rect.control_flags)) {
         // Gradient paint mode
         let gradient = as_gradient_paint(rect.background);
         

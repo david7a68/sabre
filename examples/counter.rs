@@ -1,5 +1,6 @@
 #![allow(unused_crate_dependencies)]
 
+use plinth::graphics::Color;
 use plinth::runtime::AppContext;
 use plinth::runtime::AppContextBuilder;
 use plinth::runtime::AppLifecycleHandler;
@@ -45,16 +46,20 @@ impl AppWindow {
             .child_alignment(Alignment::Center, Alignment::Center)
             .container();
 
-        ui.child_direction(LayoutDirection::Vertical);
-        ui.label(&format!("Counter Value: {}", self.value), None);
+        let mut panel = ui.panel();
 
-        let was_key_pressed = ui
+        panel
+            .color(Color::LIGHT_GRAY)
+            .child_direction(LayoutDirection::Vertical)
+            .label(&format!("Counter Value: {}", self.value), None);
+
+        let was_key_pressed = panel
             .input()
             .keyboard_events
             .iter()
             .any(|event| event.state.is_pressed());
 
-        if ui.text_button("Increment").is_clicked || was_key_pressed {
+        if panel.text_button("Increment").is_clicked || was_key_pressed {
             self.value += 1;
         }
     }

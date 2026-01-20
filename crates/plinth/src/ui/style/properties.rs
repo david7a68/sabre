@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use crate::graphics::Color;
 use crate::graphics::FontStyle;
+use crate::graphics::GradientPaint;
 use crate::graphics::Paint;
 use crate::graphics::TextAlignment;
 use crate::ui::Alignment;
@@ -31,6 +32,8 @@ bitflags::bitflags! {
 macros::declare_style! {
     pub struct Style {
         background: Background(Paint) = Paint::solid(Color::WHITE),
+        border: Border(GradientPaint) = GradientPaint::vertical_gradient(Color::BLACK, Color::BLACK),
+        border_widths: BorderWidths([f32; 4]) = [1.0, 1.0, 1.0, 1.0],
 
         // layout styles
         padding: Padding(use Padding) = Padding { top: 4.0, right: 4.0, bottom: 4.0, left: 4.0 },
