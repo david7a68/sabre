@@ -66,6 +66,8 @@ pub(crate) struct GpuPrimitive {
     pub point: [f32; 2],
     pub extent: [f32; 2],
     pub background: GpuPaint,
+    pub border_color: GpuPaint,
+    pub border_width: [f32; 4],
     pub control_flags: PrimitiveRenderFlags,
     pub _padding0: u32,
     pub _padding1: u32,

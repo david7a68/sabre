@@ -284,6 +284,8 @@ impl CanvasStorage {
             point,
             extent: size,
             background: background_paint,
+            border_color: GpuPaint::gradient(Color::RED, Color::BLUE, [0.0, 0.5], [1.0, 0.5]),
+            border_width: [2.0, 5.0, 2.0, 8.0],
             control_flags: flags,
             _padding0: 0,
             _padding1: 0,
