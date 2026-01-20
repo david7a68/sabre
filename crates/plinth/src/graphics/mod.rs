@@ -1,8 +1,9 @@
 pub use color::Color;
 pub use context::GraphicsContext;
 pub use draw::Canvas;
-pub use draw::Paint;
 pub use draw::Primitive;
+pub use paint::GradientPaint;
+pub use paint::Paint;
 pub use text::*;
 pub use texture::Texture;
 pub use texture::TextureId;
@@ -12,6 +13,7 @@ mod color;
 mod context;
 mod draw;
 mod glyph_cache;
+mod paint;
 mod pipeline;
 mod surface;
 mod text;

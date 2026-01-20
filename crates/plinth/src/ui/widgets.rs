@@ -3,6 +3,7 @@ use std::borrow::Cow;
 use glamour::Contains;
 
 use crate::graphics::Color;
+use crate::graphics::Paint;
 use crate::ui::Interaction;
 use crate::ui::Padding;
 use crate::ui::Size;
@@ -51,7 +52,18 @@ pub struct Panel {
 
 impl Widget for Panel {
     fn apply(self, context: &mut UiBuilder) -> Interaction {
-        context.rect(self.width, self.height, self.color.unwrap_or_default());
+        let style = context.theme().get(StyleClass::Panel);
+        let paint = style.background.get(StateFlags::NORMAL);
+        let border = style.border.get(StateFlags::NORMAL);
+        let border_width = style.border_widths.get(StateFlags::NORMAL);
+
+        context.painted_rect(
+            self.width,
+            self.height,
+            self.color.map(Paint::solid).unwrap_or(paint),
+            border,
+            border_width,
+        );
 
         Interaction {
             is_clicked: false,
@@ -135,6 +147,8 @@ impl Widget for Button<'_> {
 
         let style = widget.theme().get(StyleClass::Button);
         let paint = style.background.get(state);
+        let border = style.border.get(state);
+        let border_width = style.border_widths.get(state);
         let width = self.width.unwrap_or_else(|| style.width.get(state));
         let height = self.height.unwrap_or_else(|| style.height.get(state));
         let padding = self.padding.unwrap_or_else(|| style.padding.get(state));
@@ -145,7 +159,7 @@ impl Widget for Button<'_> {
             .child_alignment(major_align, minor_align)
             .size(width, height)
             .padding(padding)
-            .paint(paint);
+            .paint(paint, border, border_width);
 
         if let Some(label) = self.label {
             widget.label(&label, None);

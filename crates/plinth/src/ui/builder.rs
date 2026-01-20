@@ -2,6 +2,7 @@ use std::hash::Hash;
 use std::time::Duration;
 
 use crate::graphics::Color;
+use crate::graphics::GradientPaint;
 use crate::graphics::Paint;
 use crate::graphics::TextLayoutContext;
 
@@ -54,13 +55,24 @@ impl UiBuilder<'_> {
     pub fn color(&mut self, color: impl Into<Color>) -> &mut Self {
         self.context.ui_tree.content_mut(self.index).0 = LayoutContent::Fill {
             paint: Paint::solid(color.into()),
+            border: GradientPaint::default(),
+            border_width: [0.0; 4],
         };
 
         self
     }
 
-    pub fn paint(&mut self, paint: Paint) -> &mut Self {
-        self.context.ui_tree.content_mut(self.index).0 = LayoutContent::Fill { paint };
+    pub fn paint(
+        &mut self,
+        paint: Paint,
+        border: GradientPaint,
+        border_width: [f32; 4],
+    ) -> &mut Self {
+        self.context.ui_tree.content_mut(self.index).0 = LayoutContent::Fill {
+            paint,
+            border,
+            border_width,
+        };
 
         self
     }
@@ -140,6 +152,8 @@ impl UiBuilder<'_> {
             (
                 LayoutContent::Fill {
                     paint: Paint::solid(color.into()),
+                    border: GradientPaint::default(),
+                    border_width: [0.0; 4],
                 },
                 None,
             ),
@@ -148,11 +162,13 @@ impl UiBuilder<'_> {
         self
     }
 
-    pub fn rect_with_paint(
+    pub fn painted_rect(
         &mut self,
         width: impl Into<Size>,
         height: impl Into<Size>,
         paint: Paint,
+        border: GradientPaint,
+        border_width: [f32; 4],
     ) -> &mut Self {
         self.context.ui_tree.add(
             Some(self.index),
@@ -161,7 +177,14 @@ impl UiBuilder<'_> {
                 height: height.into(),
                 ..Default::default()
             },
-            (LayoutContent::Fill { paint }, None),
+            (
+                LayoutContent::Fill {
+                    paint,
+                    border,
+                    border_width,
+                },
+                None,
+            ),
         );
 
         self

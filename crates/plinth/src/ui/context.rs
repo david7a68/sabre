@@ -6,6 +6,7 @@ use glamour::Rect;
 use glamour::Size2;
 
 use crate::graphics::Color;
+use crate::graphics::GradientPaint;
 use crate::graphics::Paint;
 use crate::graphics::Primitive;
 use crate::graphics::TextAlignment;
@@ -53,6 +54,8 @@ impl UiContext {
             (
                 LayoutContent::Fill {
                     paint: Paint::solid(Color::WHITE),
+                    border: GradientPaint::vertical_gradient(Color::BLACK, Color::BLACK),
+                    border_width: [0.0, 0.0, 0.0, 0.0],
                 },
                 Some(id),
             ),
@@ -129,14 +132,19 @@ impl UiContext {
 
                 match content {
                     LayoutContent::None => {}
-                    LayoutContent::Fill { paint } => {
-                        vec.push(DrawCommand::Primitive(Primitive::with_paint(
-                            layout.x,
-                            layout.y,
-                            layout.width,
-                            layout.height,
-                            paint.clone(),
-                        )));
+                    LayoutContent::Fill {
+                        paint,
+                        border,
+                        border_width,
+                    } => {
+                        vec.push(DrawCommand::Primitive(Primitive {
+                            point: [layout.x, layout.y],
+                            size: [layout.width, layout.height],
+                            paint: paint.clone(),
+                            border: *border,
+                            border_width: *border_width,
+                            use_nearest_sampling: false,
+                        }));
                     }
                     LayoutContent::Text { layout: text, .. } => {
                         vec.push(DrawCommand::TextLayout(text, [layout.x, layout.y]));
@@ -158,6 +166,8 @@ pub(super) enum LayoutContent {
     None,
     Fill {
         paint: Paint,
+        border: GradientPaint,
+        border_width: [f32; 4],
     },
     Text {
         layout: parley::Layout<Color>,
