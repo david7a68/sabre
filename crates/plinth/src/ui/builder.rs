@@ -197,34 +197,6 @@ impl UiBuilder<'_> {
         self
     }
 
-    pub fn painted_rect(
-        &mut self,
-        width: impl Into<Size>,
-        height: impl Into<Size>,
-        paint: Paint,
-        border: GradientPaint,
-        border_width: [f32; 4],
-    ) -> &mut Self {
-        self.context.ui_tree.add(
-            Some(self.index),
-            Atom {
-                width: width.into(),
-                height: height.into(),
-                ..Default::default()
-            },
-            (
-                LayoutContent::Fill {
-                    paint,
-                    border,
-                    border_width,
-                },
-                None,
-            ),
-        );
-
-        self
-    }
-
     pub fn label(&mut self, text: &str, height: impl Into<Size>) -> &mut Self {
         let mut layout = parley::Layout::new();
 

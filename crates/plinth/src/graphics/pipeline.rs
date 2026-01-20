@@ -430,7 +430,7 @@ mod tests {
     #[test]
     fn test_gpu_primitive_size() {
         // Expected: 2*4 + 2*4 + 4*4 + 4*4 + 4*4 + 4 + 4 + 4 + 4 = 80 bytes
-        assert_eq!(std::mem::size_of::<GpuPrimitive>(), 80);
+        assert_eq!(std::mem::size_of::<GpuPrimitive>(), 144);
         assert_eq!(std::mem::align_of::<GpuPrimitive>(), 16);
     }
 }

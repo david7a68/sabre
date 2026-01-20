@@ -77,7 +77,7 @@ fn fs_main(
         in.frag_coord.y > in.border_bottom;
 
     if (is_in_border) {
-         // Gradient paint mode
+        // Gradient paint mode
         let gradient = rect.border_color;
 
         // Calculate gradient interpolation factor based on position

@@ -235,8 +235,8 @@ fn draw_glyph_run(
                     color_texture: None,
                     alpha_texture: Some(entry.texture.clone()),
                 },
-                border: GradientPaint::vertical_gradient(Color::BLACK, Color::BLACK),
-                border_width: [0.0, 0.0, 0.0, 0.0],
+                border: GradientPaint::default(),
+                border_width: Default::default(),
                 use_nearest_sampling: true,
             },
         );
