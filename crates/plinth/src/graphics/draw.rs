@@ -20,6 +20,7 @@ pub struct Primitive {
     pub size: [f32; 2],
     pub paint: Paint,
     pub border: GradientPaint,
+    /// Border widths in the order `[left, top, right, bottom]`.
     pub border_width: [f32; 4],
     pub use_nearest_sampling: bool,
 }

@@ -76,11 +76,13 @@ impl Button<'_> {
 
         self.builder.set_active(is_active);
 
-        let state = if interaction.is_hovered {
-            StateFlags::HOVERED
-        } else {
-            StateFlags::NORMAL
-        };
+        let mut state = StateFlags::NORMAL;
+        if interaction.is_hovered {
+            state |= StateFlags::HOVERED;
+        }
+        if is_active {
+            state |= StateFlags::PRESSED;
+        }
 
         self.builder.apply_style(StyleClass::Button, state);
 
