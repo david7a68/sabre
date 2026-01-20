@@ -10,12 +10,10 @@ use super::Alignment;
 use super::Atom;
 use super::Flex;
 use super::Input;
-use super::Interaction;
 use super::LayoutDirection;
 use super::Padding;
 use super::Size;
 use super::UiElementId;
-use super::Widget;
 use super::WidgetId;
 use super::WidgetState;
 use super::context::LayoutContent;
@@ -36,10 +34,6 @@ pub struct UiBuilder<'a> {
 }
 
 impl UiBuilder<'_> {
-    pub fn add(&mut self, widget: impl Widget) -> Interaction {
-        widget.apply(self)
-    }
-
     pub fn input(&self) -> &Input {
         self.input
     }
@@ -52,12 +46,43 @@ impl UiBuilder<'_> {
         self.theme
     }
 
+    pub fn apply_style(&mut self, class: StyleClass, state: StateFlags) -> &mut Self {
+        let style = self.theme.get(class);
+
+        // Paint
+        let paint = style.background.get(state);
+        let border = style.border.get(state);
+        let border_width = style.border_widths.get(state);
+        self.paint(paint, border, border_width);
+
+        // Layout
+        let major_align = style.child_major_alignment.get(state);
+        let minor_align = style.child_minor_alignment.get(state);
+        let padding = style.padding.get(state);
+        let spacing = style.child_spacing.get(state);
+        let direction = style.child_direction.get(state);
+
+        self.child_alignment(major_align, minor_align)
+            .child_spacing(spacing)
+            .child_direction(direction)
+            .padding(padding)
+    }
+
     pub fn color(&mut self, color: impl Into<Color>) -> &mut Self {
-        self.context.ui_tree.content_mut(self.index).0 = LayoutContent::Fill {
-            paint: Paint::solid(color.into()),
-            border: GradientPaint::default(),
-            border_width: [0.0; 4],
-        };
+        let content = &mut self.context.ui_tree.content_mut(self.index).0;
+
+        match content {
+            LayoutContent::Fill { paint, .. } => {
+                *paint = Paint::solid(color.into());
+            }
+            _ => {
+                *content = LayoutContent::Fill {
+                    paint: Paint::solid(color.into()),
+                    border: GradientPaint::default(),
+                    border_width: [0.0; 4],
+                };
+            }
+        }
 
         self
     }
@@ -134,6 +159,16 @@ impl UiBuilder<'_> {
             .widget_states
             .get(&self.id)
             .map(|container| &container.state)
+    }
+
+    /// Set whether this widget is currently being actively pressed.
+    /// Used for click detection across frames.
+    pub fn set_active(&mut self, active: bool) {
+        if let Some(container) = self.context.widget_states.get_mut(&self.id) {
+            container.state.was_active = active;
+        } else {
+            debug_assert!(false, "set_active called on widget without state");
+        }
     }
 
     pub fn rect(

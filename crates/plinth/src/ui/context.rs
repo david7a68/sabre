@@ -100,6 +100,13 @@ impl UiContext {
             .iter_nodes()
             .map(|(node, (content, widget_id))| {
                 if let Some(widget_id) = widget_id {
+                    // Preserve was_active from previous frame if the widget existed
+                    let was_active = self
+                        .widget_states
+                        .get(widget_id)
+                        .map(|c| c.state.was_active)
+                        .unwrap_or(false);
+
                     let container = WidgetContainer {
                         state: WidgetState {
                             placement: Rect {
@@ -112,6 +119,7 @@ impl UiContext {
                                     height: node.result.height,
                                 },
                             },
+                            was_active,
                         },
                         frame_last_used: self.frame_counter,
                     };
