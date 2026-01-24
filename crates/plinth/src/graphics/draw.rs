@@ -22,6 +22,7 @@ pub struct Primitive {
     pub border: GradientPaint,
     /// Border widths in the order `[left, top, right, bottom]`.
     pub border_width: [f32; 4],
+    pub corner_radii: [f32; 4],
     pub use_nearest_sampling: bool,
 }
 
@@ -34,6 +35,7 @@ impl Primitive {
             paint,
             border: GradientPaint::vertical_gradient(Color::BLACK, Color::BLACK),
             border_width: [0.0, 0.0, 0.0, 0.0],
+            corner_radii: [0.0; 4],
             use_nearest_sampling: false,
         }
     }
@@ -139,6 +141,7 @@ impl CanvasStorage {
             paint,
             border,
             border_width,
+            corner_radii,
             use_nearest_sampling,
         } = primitive;
 
@@ -201,6 +204,7 @@ impl CanvasStorage {
                 border.end,
             ),
             border_width,
+            corner_radii,
             control_flags: flags,
             _padding0: 0,
             _padding1: 0,

@@ -18,6 +18,8 @@ use super::WidgetId;
 use super::WidgetState;
 use super::context::LayoutContent;
 use super::context::UiContext;
+use super::style::BorderWidths;
+use super::style::CornerRadii;
 use super::style::StateFlags;
 use super::theme::StyleClass;
 use super::theme::Theme;
@@ -53,7 +55,8 @@ impl UiBuilder<'_> {
         let paint = style.background.get(state);
         let border = style.border.get(state);
         let border_width = style.border_widths.get(state);
-        self.paint(paint, border, border_width);
+        let corner_radii = style.corner_radii.get(state);
+        self.paint(paint, border, border_width, corner_radii);
 
         // Layout
         let major_align = style.child_major_alignment.get(state);
@@ -79,7 +82,8 @@ impl UiBuilder<'_> {
                 *content = LayoutContent::Fill {
                     paint: Paint::solid(color.into()),
                     border: GradientPaint::default(),
-                    border_width: [0.0; 4],
+                    border_width: Default::default(),
+                    corner_radii: Default::default(),
                 };
             }
         }
@@ -91,12 +95,14 @@ impl UiBuilder<'_> {
         &mut self,
         paint: Paint,
         border: GradientPaint,
-        border_width: [f32; 4],
+        border_width: BorderWidths,
+        corner_radii: CornerRadii,
     ) -> &mut Self {
         self.context.ui_tree.content_mut(self.index).0 = LayoutContent::Fill {
             paint,
             border,
             border_width,
+            corner_radii,
         };
 
         self
@@ -164,10 +170,13 @@ impl UiBuilder<'_> {
     /// Set whether this widget is currently being actively pressed.
     /// Used for click detection across frames.
     pub fn set_active(&mut self, active: bool) {
-        if let Some(container) = self.context.widget_states.get_mut(&self.id) {
-            container.state.was_active = active;
-        } else {
-            debug_assert!(false, "set_active called on widget without state");
+        // container state will get created on the first frame that a widget is
+        // used, but AFTER the widget's layout is computed (and thus after all
+        // opportunities to call this method within the current frame have
+        // elapsed). Therefore it is safe to do nothing if the widget state does
+        // not exist yet.
+        if let Some(widget) = self.context.widget_states.get_mut(&self.id) {
+            widget.state.was_active = active;
         }
     }
 
@@ -188,7 +197,8 @@ impl UiBuilder<'_> {
                 LayoutContent::Fill {
                     paint: Paint::solid(color.into()),
                     border: GradientPaint::default(),
-                    border_width: [0.0; 4],
+                    border_width: Default::default(),
+                    corner_radii: Default::default(),
                 },
                 None,
             ),

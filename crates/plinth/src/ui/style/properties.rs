@@ -29,11 +29,28 @@ bitflags::bitflags! {
     }
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct BorderWidths {
+    pub left: f32,
+    pub right: f32,
+    pub top: f32,
+    pub bottom: f32,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct CornerRadii {
+    pub top_left: f32,
+    pub top_right: f32,
+    pub bottom_right: f32,
+    pub bottom_left: f32,
+}
+
 macros::declare_style! {
     pub struct Style {
         background: Background(Paint) = Paint::solid(Color::WHITE),
         border: Border(GradientPaint) = GradientPaint::vertical_gradient(Color::BLACK, Color::BLACK),
-        border_widths: BorderWidths([f32; 4]) = [1.0, 1.0, 1.0, 1.0],
+        border_widths: BorderWidths(use BorderWidths) = BorderWidths { left: 1.0, right: 1.0, top: 1.0, bottom: 1.0 },
+        corner_radii: CornerRadii(use CornerRadii) = CornerRadii::default(),
 
         // layout styles
         padding: Padding(use Padding) = Padding { top: 4.0, right: 4.0, bottom: 4.0, left: 4.0 },

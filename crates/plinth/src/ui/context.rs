@@ -20,6 +20,8 @@ use super::LayoutTree;
 use super::UiBuilder;
 use super::WidgetId;
 use super::WidgetState;
+use super::style::BorderWidths;
+use super::style::CornerRadii;
 
 #[derive(Default)]
 pub(crate) struct UiContext {
@@ -55,7 +57,8 @@ impl UiContext {
                 LayoutContent::Fill {
                     paint: Paint::solid(Color::WHITE),
                     border: GradientPaint::vertical_gradient(Color::BLACK, Color::BLACK),
-                    border_width: [0.0, 0.0, 0.0, 0.0],
+                    border_width: Default::default(),
+                    corner_radii: Default::default(),
                 },
                 Some(id),
             ),
@@ -144,13 +147,25 @@ impl UiContext {
                         paint,
                         border,
                         border_width,
+                        corner_radii,
                     } => {
                         vec.push(DrawCommand::Primitive(Primitive {
                             point: [layout.x, layout.y],
                             size: [layout.width, layout.height],
                             paint: paint.clone(),
                             border: *border,
-                            border_width: *border_width,
+                            border_width: [
+                                border_width.left,
+                                border_width.top,
+                                border_width.right,
+                                border_width.bottom,
+                            ],
+                            corner_radii: [
+                                corner_radii.top_left,
+                                corner_radii.top_right,
+                                corner_radii.bottom_left,
+                                corner_radii.bottom_right,
+                            ],
                             use_nearest_sampling: false,
                         }));
                     }
@@ -175,7 +190,8 @@ pub(super) enum LayoutContent {
     Fill {
         paint: Paint,
         border: GradientPaint,
-        border_width: [f32; 4],
+        border_width: BorderWidths,
+        corner_radii: CornerRadii,
     },
     Text {
         layout: parley::Layout<Color>,
@@ -183,6 +199,7 @@ pub(super) enum LayoutContent {
     },
 }
 
+#[expect(clippy::large_enum_variant)]
 pub(crate) enum DrawCommand<'a> {
     Primitive(Primitive),
     TextLayout(&'a parley::Layout<Color>, [f32; 2]),
