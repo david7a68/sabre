@@ -34,6 +34,7 @@ macros::declare_style! {
         background: Background(Paint) = Paint::solid(Color::WHITE),
         border: Border(GradientPaint) = GradientPaint::vertical_gradient(Color::BLACK, Color::BLACK),
         border_widths: BorderWidths([f32; 4]) = [1.0, 1.0, 1.0, 1.0],
+        corner_radii: CornerRadii([f32; 4]) = [0.0, 0.0, 0.0, 0.0],
 
         // layout styles
         padding: Padding(use Padding) = Padding { top: 4.0, right: 4.0, bottom: 4.0, left: 4.0 },

@@ -55,7 +55,8 @@ impl UiContext {
                 LayoutContent::Fill {
                     paint: Paint::solid(Color::WHITE),
                     border: GradientPaint::vertical_gradient(Color::BLACK, Color::BLACK),
-                    border_width: [0.0, 0.0, 0.0, 0.0],
+                    border_width: [0.0; 4],
+                    corner_radii: [0.0; 4],
                 },
                 Some(id),
             ),
@@ -144,6 +145,7 @@ impl UiContext {
                         paint,
                         border,
                         border_width,
+                        corner_radii,
                     } => {
                         vec.push(DrawCommand::Primitive(Primitive {
                             point: [layout.x, layout.y],
@@ -151,6 +153,7 @@ impl UiContext {
                             paint: paint.clone(),
                             border: *border,
                             border_width: *border_width,
+                            corner_radii: *corner_radii,
                             use_nearest_sampling: false,
                         }));
                     }
@@ -176,6 +179,7 @@ pub(super) enum LayoutContent {
         paint: Paint,
         border: GradientPaint,
         border_width: [f32; 4],
+        corner_radii: [f32; 4],
     },
     Text {
         layout: parley::Layout<Color>,
@@ -183,6 +187,7 @@ pub(super) enum LayoutContent {
     },
 }
 
+#[expect(clippy::large_enum_variant)]
 pub(crate) enum DrawCommand<'a> {
     Primitive(Primitive),
     TextLayout(&'a parley::Layout<Color>, [f32; 2]),

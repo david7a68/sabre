@@ -68,6 +68,7 @@ pub(crate) struct GpuPrimitive {
     pub background: GpuPaint,
     pub border_color: GpuPaint,
     pub border_width: [f32; 4],
+    pub corner_radii: [f32; 4],
     pub control_flags: PrimitiveRenderFlags,
     pub _padding0: u32,
     pub _padding1: u32,
@@ -430,7 +431,7 @@ mod tests {
     #[test]
     fn test_gpu_primitive_size() {
         // Expected: 2*4 + 2*4 + 4*4 + 4*4 + 4*4 + 4 + 4 + 4 + 4 = 80 bytes
-        assert_eq!(std::mem::size_of::<GpuPrimitive>(), 144);
+        assert_eq!(std::mem::size_of::<GpuPrimitive>(), 160);
         assert_eq!(std::mem::align_of::<GpuPrimitive>(), 16);
     }
 }
