@@ -18,6 +18,8 @@ use super::WidgetId;
 use super::WidgetState;
 use super::context::LayoutContent;
 use super::context::UiContext;
+use super::style::BorderWidths;
+use super::style::CornerRadii;
 use super::style::StateFlags;
 use super::theme::StyleClass;
 use super::theme::Theme;
@@ -80,8 +82,8 @@ impl UiBuilder<'_> {
                 *content = LayoutContent::Fill {
                     paint: Paint::solid(color.into()),
                     border: GradientPaint::default(),
-                    border_width: [0.0; 4],
-                    corner_radii: [0.0; 4],
+                    border_width: Default::default(),
+                    corner_radii: Default::default(),
                 };
             }
         }
@@ -93,8 +95,8 @@ impl UiBuilder<'_> {
         &mut self,
         paint: Paint,
         border: GradientPaint,
-        border_width: [f32; 4],
-        corner_radii: [f32; 4],
+        border_width: BorderWidths,
+        corner_radii: CornerRadii,
     ) -> &mut Self {
         self.context.ui_tree.content_mut(self.index).0 = LayoutContent::Fill {
             paint,
@@ -170,7 +172,7 @@ impl UiBuilder<'_> {
     pub fn set_active(&mut self, active: bool) {
         // container state will get created on the first frame that a widget is
         // used, but AFTER the widget's layout is computed (and thus after all
-        // opportunity to call this method within the current frame have
+        // opportunities to call this method within the current frame have
         // elapsed). Therefore it is safe to do nothing if the widget state does
         // not exist yet.
         if let Some(widget) = self.context.widget_states.get_mut(&self.id) {
@@ -195,8 +197,8 @@ impl UiBuilder<'_> {
                 LayoutContent::Fill {
                     paint: Paint::solid(color.into()),
                     border: GradientPaint::default(),
-                    border_width: [0.0; 4],
-                    corner_radii: [0.0; 4],
+                    border_width: Default::default(),
+                    corner_radii: Default::default(),
                 },
                 None,
             ),

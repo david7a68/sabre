@@ -8,6 +8,7 @@ struct Rect {
     extent: vec2f,
     background: Paint,
     border_color: GradientPaint,
+    // left, top, right, bottom
     border_width: vec4f,
     // top-left, top-right, bottom-left, bottom-right
     corner_radii: vec4f,
