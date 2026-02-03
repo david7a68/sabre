@@ -34,7 +34,7 @@ impl Interaction {
             .unwrap_or(false);
 
         let was_active = prev_state.map(|s| s.was_active).unwrap_or(false);
-        let is_left_down = input.mouse_state.is_left_down;
+        let is_left_down = input.mouse_state.is_left_down();
         let is_active = is_hovered && is_left_down;
 
         let is_clicked = match behavior {

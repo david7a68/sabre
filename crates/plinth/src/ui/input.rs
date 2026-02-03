@@ -14,9 +14,23 @@ pub struct WindowSize {
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct MouseButtonState {
-    pub is_left_down: bool,
-    pub is_right_down: bool,
-    pub is_middle_down: bool,
+    pub left_click_count: u8,
+    pub right_click_count: u8,
+    pub middle_click_count: u8,
+}
+
+impl MouseButtonState {
+    pub fn is_left_down(&self) -> bool {
+        self.left_click_count > 0
+    }
+
+    pub fn is_right_down(&self) -> bool {
+        self.right_click_count > 0
+    }
+
+    pub fn is_middle_down(&self) -> bool {
+        self.middle_click_count > 0
+    }
 }
 
 #[derive(Clone, Debug, Default)]
