@@ -7,6 +7,11 @@ use glamour::Size2;
 
 use crate::ui::Pixels;
 
+// Windows default value, good enough if we can't get the system settings.
+const DEFAULT_MAX_CLICK_INTERVAL: Duration = Duration::from_millis(500);
+const DEFAULT_MAX_CLICK_SLOP: f32 = 4.0;
+const WINDOWS_STANDARD_DPI: f64 = 96.0;
+
 /// Tracks double-click state for mouse buttons.
 ///
 /// Winit doesn't currently provide double-click events, so we have to track
@@ -22,7 +27,7 @@ pub(super) struct DoubleClickTracker {
 }
 
 impl DoubleClickTracker {
-    pub fn load_parameters(dpi: f64) -> Self {
+    pub fn load_parameters(scale_factor: f64) -> Self {
         let max_click_interval;
         let max_click_slop;
 
@@ -33,19 +38,34 @@ impl DoubleClickTracker {
             use windows_sys::Win32::UI::WindowsAndMessaging::SM_CXDOUBLECLK;
             use windows_sys::Win32::UI::WindowsAndMessaging::SM_CYDOUBLECLK;
 
-            let dpi = dpi.round() as u32;
-            let max_click_slop_x = unsafe { GetSystemMetricsForDpi(SM_CXDOUBLECLK, dpi) } as f32;
-            let max_click_slop_y = unsafe { GetSystemMetricsForDpi(SM_CYDOUBLECLK, dpi) } as f32;
+            let dpi = (scale_factor * WINDOWS_STANDARD_DPI).round() as u32;
 
-            max_click_slop = Size2::new(max_click_slop_x, max_click_slop_y);
-            max_click_interval = Duration::from_millis(unsafe { GetDoubleClickTime() as u64 });
+            let get_slop = |metric| {
+                let value = unsafe { GetSystemMetricsForDpi(metric, dpi) };
+                if value == 0 {
+                    DEFAULT_MAX_CLICK_SLOP * scale_factor as f32
+                } else {
+                    value as f32
+                }
+            };
+
+            max_click_slop = Size2::new(get_slop(SM_CXDOUBLECLK), get_slop(SM_CYDOUBLECLK));
+
+            let interval = unsafe { GetDoubleClickTime() };
+            if interval == 0 {
+                max_click_interval = DEFAULT_MAX_CLICK_INTERVAL;
+            } else {
+                max_click_interval = Duration::from_millis(interval as u64);
+            }
         }
 
         #[cfg(not(target_os = "windows"))]
         {
-            // stuff here
-            max_click_interval = Duration::from_millis(500);
-            max_click_slop = Size2::new(4.0 * dpi, 4.0 * dpi);
+            max_click_interval = DEFAULT_MAX_CLICK_INTERVAL;
+            max_click_slop = Size2::new(
+                DEFAULT_MAX_CLICK_SLOP * scale_factor as f32,
+                DEFAULT_MAX_CLICK_SLOP * scale_factor as f32,
+            );
         }
 
         Self {
