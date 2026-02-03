@@ -19,6 +19,7 @@ use winit::window::Window;
 use winit::window::WindowAttributes;
 use winit::window::WindowId;
 
+use crate::double_click_tracker::DoubleClickTracker;
 use crate::graphics::Canvas;
 use crate::graphics::Color;
 use crate::graphics::GraphicsContext;
@@ -260,6 +261,9 @@ impl<App> WinitApp<App> {
                             handler,
                             ui_context: UiContext::default(),
                             viewport: id,
+                            double_click_tracker: DoubleClickTracker::load_parameters(
+                                window.scale_factor(),
+                            ),
                             window,
                         },
                     );
@@ -309,24 +313,29 @@ impl<App: AppLifecycleHandler> ApplicationHandler for WinitApp<App> {
                     return;
                 };
 
+                let click_count =
+                    window
+                        .double_click_tracker
+                        .on_click(button, state, viewport.input.pointer);
+
                 match (button, state) {
                     (winit::event::MouseButton::Left, winit::event::ElementState::Pressed) => {
-                        viewport.input.mouse_state.is_left_down = true;
+                        viewport.input.mouse_state.left_click_count = click_count;
                     }
                     (winit::event::MouseButton::Left, winit::event::ElementState::Released) => {
-                        viewport.input.mouse_state.is_left_down = false;
+                        viewport.input.mouse_state.left_click_count = click_count;
                     }
                     (winit::event::MouseButton::Right, winit::event::ElementState::Pressed) => {
-                        viewport.input.mouse_state.is_right_down = true;
+                        viewport.input.mouse_state.right_click_count = click_count;
                     }
                     (winit::event::MouseButton::Right, winit::event::ElementState::Released) => {
-                        viewport.input.mouse_state.is_right_down = false;
+                        viewport.input.mouse_state.right_click_count = click_count;
                     }
                     (winit::event::MouseButton::Middle, winit::event::ElementState::Pressed) => {
-                        viewport.input.mouse_state.is_middle_down = true;
+                        viewport.input.mouse_state.middle_click_count = click_count;
                     }
                     (winit::event::MouseButton::Middle, winit::event::ElementState::Released) => {
-                        viewport.input.mouse_state.is_middle_down = false;
+                        viewport.input.mouse_state.middle_click_count = click_count;
                     }
                     _ => {
                         return;
@@ -372,6 +381,14 @@ impl<App: AppLifecycleHandler> ApplicationHandler for WinitApp<App> {
 
                 self.runtime.repaint([window]);
             }
+            WindowEvent::Focused(_) => {
+                let window = self.windows.get_mut(&window_id).unwrap();
+                window.double_click_tracker.on_activate();
+            }
+            WindowEvent::ScaleFactorChanged { scale_factor, .. } => {
+                let window = self.windows.get_mut(&window_id).unwrap();
+                window.double_click_tracker.on_dpi_changed(scale_factor);
+            }
             _ => {}
         }
 
@@ -390,6 +407,7 @@ struct Viewport {
 
 struct WinitWindow {
     window: Arc<dyn Window>,
+    double_click_tracker: DoubleClickTracker,
 
     canvas: Canvas,
     viewport: ViewportId,

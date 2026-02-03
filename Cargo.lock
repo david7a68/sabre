@@ -1144,6 +1144,7 @@ dependencies = [
  "tracing",
  "tracing-tracy",
  "wgpu",
+ "windows-sys 0.61.2",
  "winit",
 ]
 

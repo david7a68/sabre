@@ -28,6 +28,11 @@ smallvec = { workspace = true, features = ["union", "const_generics"] }
 swash = { workspace = true, features = ["scale"] }
 tracing = { workspace = true }
 tracing-tracy = { workspace = true, optional = true }
+windows-sys = { workspace = true, features = [
+    "Win32_UI_WindowsAndMessaging",
+    "Win32_UI_HiDpi",
+    "Win32_UI_Input_KeyboardAndMouse",
+] }
 winit = { workspace = true }
 
 [target.'cfg(windows)'.dependencies]
