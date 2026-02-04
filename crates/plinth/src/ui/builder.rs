@@ -1,7 +1,7 @@
-use std::collections::hash_map::DefaultHasher;
 use std::hash::Hash;
-use std::hash::Hasher;
 use std::time::Duration;
+
+use rapidhash::v3::rapidhash_v3;
 
 use crate::graphics::Color;
 use crate::graphics::GradientPaint;
@@ -28,9 +28,7 @@ use super::theme::Theme;
 
 /// Compute a hash of a string for cache invalidation
 fn hash_string(text: &str) -> u64 {
-    let mut hasher = DefaultHasher::new();
-    text.hash(&mut hasher);
-    hasher.finish()
+    rapidhash_v3(text.as_bytes())
 }
 
 pub struct UiBuilder<'a> {
