@@ -55,6 +55,7 @@ impl Interaction {
     }
 }
 
+#[derive(Default)]
 pub struct WidgetState {
     pub placement: Rect<Pixels>,
     /// Whether the widget was being actively pressed last frame

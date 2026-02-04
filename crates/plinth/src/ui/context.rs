@@ -122,52 +122,7 @@ impl UiContext {
                 .break_lines(*layout_id, max_width, *alignment)
         });
 
-        let removed = self
-            .widget_states
-            .extract_if(|_, container| container.frame_last_used < self.frame_counter);
-
-        for (_, element) in removed {
-            if let Some(text_layout_id) = element.state.text_layout {
-                self.text_layouts.remove(text_layout_id);
-            }
-        }
-
-        if self.widget_states.len() * 2 < self.widget_states.capacity() {
-            self.widget_states.shrink_to_fit();
-        }
-
-        self.frame_counter += 1;
-
         for (node, (content, widget_id)) in self.ui_tree.iter_nodes() {
-            if let Some(widget_id) = widget_id {
-                // Preserve state from previous frame if the widget existed
-                let (was_active, text_layout) = self
-                    .widget_states
-                    .get(widget_id)
-                    .map(|c| (c.state.was_active, c.state.text_layout))
-                    .unwrap_or_default();
-
-                let container = WidgetContainer {
-                    state: WidgetState {
-                        placement: Rect {
-                            origin: Point2 {
-                                x: node.result.x,
-                                y: node.result.y,
-                            },
-                            size: Size2 {
-                                width: node.result.width,
-                                height: node.result.height,
-                            },
-                        },
-                        was_active,
-                        text_layout,
-                    },
-                    frame_last_used: self.frame_counter,
-                };
-
-                self.widget_states.insert(*widget_id, container);
-            };
-
             let layout = &node.result;
             if layout.width == 0.0 || layout.height == 0.0 {
                 continue;
@@ -186,34 +141,58 @@ impl UiContext {
                         size: [layout.width, layout.height],
                         paint: paint.clone(),
                         border: *border,
-                        border_width: [
-                            border_width.left,
-                            border_width.top,
-                            border_width.right,
-                            border_width.bottom,
-                        ],
-                        corner_radii: [
-                            corner_radii.top_left,
-                            corner_radii.top_right,
-                            corner_radii.bottom_left,
-                            corner_radii.bottom_right,
-                        ],
+                        border_width: border_width.into_array(),
+                        corner_radii: corner_radii.into_array(),
                         use_nearest_sampling: false,
                     });
                 }
                 LayoutContent::Text {
                     layout: text_layout_id,
-                    ..
+                    alignment: _,
                 } => {
                     if let Some(text_layout) = self.text_layouts.get_layout(*text_layout_id) {
                         canvas.draw_text_layout(text_layout, [layout.x, layout.y]);
                     }
                 }
             }
+
+            if let Some(widget_id) = widget_id {
+                let container = self.widget_states.entry(*widget_id).or_default();
+
+                container.state.placement = Rect {
+                    origin: Point2 {
+                        x: node.result.x,
+                        y: node.result.y,
+                    },
+                    size: Size2 {
+                        width: node.result.width,
+                        height: node.result.height,
+                    },
+                };
+
+                container.frame_last_used = self.frame_counter;
+            };
         }
+
+        let removed = self
+            .widget_states
+            .extract_if(|_, container| container.frame_last_used < self.frame_counter);
+
+        for (_, element) in removed {
+            if let Some(text_layout_id) = element.state.text_layout {
+                self.text_layouts.remove(text_layout_id);
+            }
+        }
+
+        if self.widget_states.len() * 2 < self.widget_states.capacity() {
+            self.widget_states.shrink_to_fit();
+        }
+
+        self.frame_counter += 1;
     }
 }
 
+#[derive(Default)]
 pub(super) struct WidgetContainer {
     pub(super) state: WidgetState,
     pub(super) frame_last_used: u64,

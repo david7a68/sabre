@@ -37,12 +37,31 @@ pub struct BorderWidths {
     pub bottom: f32,
 }
 
+impl BorderWidths {
+    /// Convert to array [left, top, right, bottom]
+    pub fn into_array(self) -> [f32; 4] {
+        [self.left, self.top, self.right, self.bottom]
+    }
+}
+
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct CornerRadii {
     pub top_left: f32,
     pub top_right: f32,
     pub bottom_right: f32,
     pub bottom_left: f32,
+}
+
+impl CornerRadii {
+    /// Convert to array [top_left, top_right, bottom_left, bottom_right]
+    pub fn into_array(self) -> [f32; 4] {
+        [
+            self.top_left,
+            self.top_right,
+            self.bottom_left,
+            self.bottom_right,
+        ]
+    }
 }
 
 macros::declare_style! {

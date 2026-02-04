@@ -221,10 +221,8 @@ impl UiBuilder<'_> {
         let state_flags = StateFlags::default();
         let (text_layout_id, static_text_layout) = self.context.upsert_static_text_layout(self.id);
 
-        // Compute hash of text content for cache invalidation
         let text_hash = hash_string(text);
 
-        // Only rebuild layout if something changed
         let needs_rebuild = static_text_layout.style_id != style_id
             || static_text_layout.state_flags != state_flags
             || static_text_layout.text_hash != text_hash;
