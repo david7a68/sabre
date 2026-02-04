@@ -1,4 +1,6 @@
+use std::collections::hash_map::DefaultHasher;
 use std::hash::Hash;
+use std::hash::Hasher;
 use std::time::Duration;
 
 use crate::graphics::Color;
@@ -23,6 +25,13 @@ use super::style::CornerRadii;
 use super::style::StateFlags;
 use super::theme::StyleClass;
 use super::theme::Theme;
+
+/// Compute a hash of a string for cache invalidation
+fn hash_string(text: &str) -> u64 {
+    let mut hasher = DefaultHasher::new();
+    text.hash(&mut hasher);
+    hasher.finish()
+}
 
 pub struct UiBuilder<'a> {
     pub(super) id: WidgetId,
@@ -208,26 +217,45 @@ impl UiBuilder<'_> {
     }
 
     pub fn label(&mut self, text: &str, height: impl Into<Size>) -> &mut Self {
-        let mut layout = parley::Layout::new();
-
-        let mut compute =
-            self.text_context
-                .layouts
-                .ranged_builder(&mut self.text_context.fonts, text, 1.0, true);
-
         let style_id = self.theme.get_id(StyleClass::Label);
-        self.theme
-            .push_parley_defaults(style_id, StateFlags::default(), &mut compute);
+        let state_flags = StateFlags::default();
+        let (text_layout_id, static_text_layout) = self.context.upsert_static_text_layout(self.id);
+
+        // Compute hash of text content for cache invalidation
+        let text_hash = hash_string(text);
+
+        // Only rebuild layout if something changed
+        let needs_rebuild = static_text_layout.style_id != style_id
+            || static_text_layout.state_flags != state_flags
+            || static_text_layout.text_hash != text_hash;
+
+        if needs_rebuild {
+            let mut compute = self.text_context.layouts.ranged_builder(
+                &mut self.text_context.fonts,
+                text,
+                1.0,
+                true,
+            );
+
+            self.theme
+                .push_parley_defaults(style_id, state_flags, &mut compute);
+
+            compute.build_into(&mut static_text_layout.layout, text);
+
+            // Update cache tracking fields
+            static_text_layout.style_id = style_id;
+            static_text_layout.state_flags = state_flags;
+            static_text_layout.text_hash = text_hash;
+            static_text_layout.needs_line_break = true;
+        }
 
         let alignment = self
             .theme
             .get(StyleClass::Label)
             .text_align
-            .get(StateFlags::default());
+            .get(state_flags);
 
-        compute.build_into(&mut layout, text);
-
-        let size = layout.calculate_content_widths();
+        let size = static_text_layout.layout.calculate_content_widths();
 
         self.context.ui_tree.add(
             Some(self.index),
@@ -239,7 +267,13 @@ impl UiBuilder<'_> {
                 height: height.into(),
                 ..Default::default()
             },
-            (LayoutContent::Text { layout, alignment }, None),
+            (
+                LayoutContent::Text {
+                    layout: text_layout_id,
+                    alignment,
+                },
+                None,
+            ),
         );
 
         self

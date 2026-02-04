@@ -150,7 +150,6 @@ impl AppContext {
             }
 
             window.canvas.reset(Color::BLACK);
-
             window.ui_context.finish(&mut window.canvas);
 
             if window.canvas.has_unready_textures() {

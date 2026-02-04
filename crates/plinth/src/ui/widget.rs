@@ -3,6 +3,7 @@ use glamour::Rect;
 
 use crate::ui::Input;
 use crate::ui::Pixels;
+use crate::ui::text::TextLayoutId;
 
 #[derive(Clone, Debug)]
 pub struct Interaction {
@@ -58,4 +59,6 @@ pub struct WidgetState {
     pub placement: Rect<Pixels>,
     /// Whether the widget was being actively pressed last frame
     pub was_active: bool,
+
+    pub text_layout: Option<TextLayoutId>,
 }
