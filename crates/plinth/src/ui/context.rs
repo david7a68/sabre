@@ -159,6 +159,7 @@ impl UiContext {
             if let Some(widget_id) = widget_id {
                 let container = self.widget_states.entry(*widget_id).or_default();
 
+                container.frame_last_used = self.frame_counter;
                 container.state.placement = Rect {
                     origin: Point2 {
                         x: node.result.x,
@@ -169,8 +170,6 @@ impl UiContext {
                         height: node.result.height,
                     },
                 };
-
-                container.frame_last_used = self.frame_counter;
             };
         }
 

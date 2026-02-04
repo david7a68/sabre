@@ -119,7 +119,7 @@ impl Theme {
         self.styles.update(style_id, properties)
     }
 
-    pub(crate) fn push_parley_defaults(
+    pub(crate) fn push_text_defaults(
         &self,
         style_id: StyleId,
         state: StateFlags,

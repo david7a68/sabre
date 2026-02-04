@@ -52,29 +52,23 @@ impl<'a> Deref for Panel<'a> {
 
 pub struct Button<'a> {
     builder: UiBuilder<'a>,
+    interaction: Interaction,
+    is_active: bool,
+    state: StateFlags,
 }
 
 impl Button<'_> {
     pub fn new<'a>(builder: &'a mut UiBuilder<'_>, label: Option<&str>) -> Button<'a> {
-        let builder = if let Some(label) = label {
-            let mut child = builder.named_child(label);
-            child.label(label, None);
-            child
-        } else {
-            builder.child()
+        let mut builder = match label {
+            Some(label_text) => builder.named_child(label_text),
+            None => builder.child(),
         };
 
-        Button { builder }
-    }
-
-    pub fn finish(mut self) -> Interaction {
-        let prev_state = self.builder.prev_state();
-        let input = self.builder.input();
+        let prev_state = builder.prev_state();
+        let input = builder.input();
 
         let (interaction, is_active) =
             Interaction::compute(prev_state, input, ClickBehavior::OnPress);
-
-        self.builder.set_active(is_active);
 
         let mut state = StateFlags::NORMAL;
         if interaction.is_hovered {
@@ -84,9 +78,23 @@ impl Button<'_> {
             state |= StateFlags::PRESSED;
         }
 
-        self.builder.apply_style(StyleClass::Button, state);
+        if let Some(label_text) = label {
+            builder.label_with_state(label_text, None, state);
+        }
 
-        interaction
+        Button {
+            builder,
+            interaction,
+            is_active,
+            state,
+        }
+    }
+
+    pub fn finish(mut self) -> Interaction {
+        self.builder.set_active(self.is_active);
+        self.builder.apply_style(StyleClass::Button, self.state);
+
+        self.interaction
     }
 }
 

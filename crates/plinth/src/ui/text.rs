@@ -23,6 +23,7 @@ pub struct StaticTextLayout {
     pub state_flags: StateFlags,
     pub text_hash: u64,
     pub prev_width: f32,
+    pub prev_alignment: Option<TextAlignment>,
 
     // Track if line breaking and alignment need to be recomputed
     pub needs_line_break: bool,
@@ -56,6 +57,10 @@ impl TextLayoutStorage {
         }
     }
 
+    /// Gets an existing static text layout or creates a new one if `layout_id`
+    /// is `None`.
+    ///
+    /// If the `layout_id` is `Some`, this method panics if the ID is not found.
     pub fn get_or_create_static(
         &mut self,
         layout_id: Option<StaticTextLayoutId>,
@@ -69,6 +74,7 @@ impl TextLayoutStorage {
                     state_flags: Default::default(),
                     text_hash: 0,
                     prev_width: 0.0,
+                    prev_alignment: None,
                     needs_line_break: true,
                 };
                 let id = self.static_layouts.insert(layout);
@@ -98,13 +104,19 @@ impl TextLayoutStorage {
                 let layout = self.static_layouts.get_mut(id)?;
 
                 let width_changed = layout.prev_width != max_width;
+                let alignment_changed = layout.prev_alignment != Some(alignment);
+
                 if layout.needs_line_break || width_changed {
                     layout.layout.break_all_lines(Some(max_width));
+                }
+
+                if layout.needs_line_break || width_changed || alignment_changed {
                     layout
                         .layout
                         .align(Some(max_width), alignment.into(), Default::default());
                     layout.needs_line_break = false;
                     layout.prev_width = max_width;
+                    layout.prev_alignment = Some(alignment);
                 }
 
                 Some(layout.layout.height())

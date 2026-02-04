@@ -217,42 +217,43 @@ impl UiBuilder<'_> {
     }
 
     pub fn label(&mut self, text: &str, height: impl Into<Size>) -> &mut Self {
+        self.label_with_state(text, height, StateFlags::NORMAL)
+    }
+
+    pub fn label_with_state(
+        &mut self,
+        text: &str,
+        height: impl Into<Size>,
+        state: StateFlags,
+    ) -> &mut Self {
         let style_id = self.theme.get_id(StyleClass::Label);
-        let state_flags = StateFlags::default();
         let (text_layout_id, static_text_layout) = self.context.upsert_static_text_layout(self.id);
 
         let text_hash = hash_string(text);
 
         let needs_rebuild = static_text_layout.style_id != style_id
-            || static_text_layout.state_flags != state_flags
+            || static_text_layout.state_flags != state
             || static_text_layout.text_hash != text_hash;
 
         if needs_rebuild {
-            let mut compute = self.text_context.layouts.ranged_builder(
+            let mut builder = self.text_context.layouts.ranged_builder(
                 &mut self.text_context.fonts,
                 text,
                 1.0,
                 true,
             );
 
-            self.theme
-                .push_parley_defaults(style_id, state_flags, &mut compute);
-
-            compute.build_into(&mut static_text_layout.layout, text);
+            self.theme.push_text_defaults(style_id, state, &mut builder);
+            builder.build_into(&mut static_text_layout.layout, text);
 
             // Update cache tracking fields
             static_text_layout.style_id = style_id;
-            static_text_layout.state_flags = state_flags;
+            static_text_layout.state_flags = state;
             static_text_layout.text_hash = text_hash;
             static_text_layout.needs_line_break = true;
         }
 
-        let alignment = self
-            .theme
-            .get(StyleClass::Label)
-            .text_align
-            .get(state_flags);
-
+        let alignment = self.theme.get(StyleClass::Label).text_align.get(state);
         let size = static_text_layout.layout.calculate_content_widths();
 
         self.context.ui_tree.add(
