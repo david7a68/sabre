@@ -16,7 +16,6 @@ unused_crate_dependencies = "warn"
 plinth = { path = "crates/plinth" }
 
 # External dependencies
-arrayvec = "0.7"
 bitflags = { version = "2", features = ["bytemuck"] }
 bytemuck = "1"
 color = "0.3"

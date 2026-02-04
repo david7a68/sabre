@@ -28,7 +28,6 @@ use crate::ui::Input;
 use crate::ui::KeyboardEvent;
 use crate::ui::Theme;
 use crate::ui::UiBuilder;
-use crate::ui::context::DrawCommand;
 use crate::ui::context::UiContext;
 
 #[derive(Default)]
@@ -151,17 +150,7 @@ impl AppContext {
             }
 
             window.canvas.reset(Color::BLACK);
-
-            for draw_command in window.ui_context.finish() {
-                match draw_command {
-                    DrawCommand::Primitive(primitive) => {
-                        window.canvas.draw(primitive);
-                    }
-                    DrawCommand::TextLayout(layout, coords) => {
-                        window.canvas.draw_text_layout(layout, coords);
-                    }
-                }
-            }
+            window.ui_context.finish(&mut window.canvas);
 
             if window.canvas.has_unready_textures() {
                 window.window.request_redraw();
