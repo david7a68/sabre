@@ -179,6 +179,59 @@ impl Theme {
             }
         }
     }
+
+    pub(crate) fn apply_plain_editor_styles(
+        &self,
+        style_id: StyleId,
+        state: StateFlags,
+        editor: &mut parley::PlainEditor<Color>,
+    ) {
+        use parley::StyleProperty as Prop;
+
+        let style = self.styles.get(style_id).unwrap();
+        let styles = editor.edit_styles();
+
+        styles.insert(Prop::Brush(style.text_color.get(state)));
+        styles.insert(Prop::FontSize(style.font_size.get(state) as f32));
+        styles.insert(Prop::FontStyle(style.font_style.get(state).into()));
+        styles.insert(Prop::FontWeight(parley::FontWeight::new(
+            style.font_weight.get(state) as f32,
+        )));
+        styles.insert(Prop::StrikethroughBrush(Some(
+            style.strikethrough_color.get(state),
+        )));
+        styles.insert(Prop::StrikethroughOffset(Some(
+            style.strikethrough_offset.get(state),
+        )));
+        styles.insert(Prop::UnderlineBrush(Some(style.underline_color.get(state))));
+        styles.insert(Prop::UnderlineOffset(Some(
+            style.underline_offset.get(state),
+        )));
+
+        let font = style.font.get(state);
+
+        let features: Vec<_> = font.features.iter().map(|f| (*f).into()).collect();
+
+        styles.insert(Prop::FontFeatures(parley::FontSettings::List(
+            features.into(),
+        )));
+
+        match &font.family {
+            FontStack::Source(cow) => {
+                styles.insert(Prop::FontStack(parley::FontStack::Source(cow.clone())));
+            }
+            FontStack::Single(font_family) => {
+                styles.insert(Prop::FontStack(parley::FontStack::Single(
+                    font_family.clone().into(),
+                )));
+            }
+            FontStack::List(cow) => {
+                let families: Vec<parley::FontFamily> =
+                    cow.iter().cloned().map(|f| f.into()).collect();
+                styles.insert(Prop::FontStack(parley::FontStack::List(families.into())));
+            }
+        }
+    }
 }
 
 impl Default for Theme {

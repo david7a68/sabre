@@ -9,7 +9,7 @@ use plinth::runtime::ViewportConfig;
 use plinth::ui::Alignment;
 use plinth::ui::LayoutDirection;
 use plinth::ui::UiBuilder;
-use plinth::ui::widgets::UiBuilderWidgetsExt;
+use plinth::ui::widget::UiBuilderWidgetsExt;
 
 fn main() {
     tracing_subscriber::fmt().pretty().init();
@@ -42,16 +42,16 @@ impl AppWindow {
     }
 
     fn update(&mut self, _context: Context, mut ui: UiBuilder) {
-        let mut ui = ui
+        let mut panel = ui
             .child_alignment(Alignment::Center, Alignment::Center)
-            .container();
-
-        let mut panel = ui.panel();
+            .panel();
 
         panel
             .color(Color::LIGHT_GRAY)
-            .child_direction(LayoutDirection::Vertical)
-            .label(&format!("Counter Value: {}", self.value), None);
+            .child_direction(LayoutDirection::Vertical);
+
+        panel.label(&format!("Counter Value: {}", self.value));
+        panel.label("Press the button or any key to increment");
 
         let was_key_pressed = panel
             .input()

@@ -5,10 +5,46 @@ use crate::ui::Input;
 use crate::ui::Pixels;
 use crate::ui::text::TextLayoutId;
 
+use super::Size;
+use super::UiBuilder;
+
+pub mod button;
+pub mod label;
+pub mod panel;
+pub mod text_edit;
+
 #[derive(Clone, Debug)]
 pub struct Interaction {
     pub is_clicked: bool,
     pub is_hovered: bool,
+}
+
+pub trait UiBuilderWidgetsExt {
+    fn panel(&mut self) -> panel::Panel<'_>;
+
+    fn text_button(&mut self, label: &str) -> Interaction;
+
+    fn text_edit(&mut self, initial_text: &str, width: Size) -> text_edit::TextEdit<'_>;
+
+    fn label(&mut self, text: &str);
+}
+
+impl UiBuilderWidgetsExt for UiBuilder<'_> {
+    fn panel(&mut self) -> panel::Panel<'_> {
+        panel::Panel::new(self)
+    }
+
+    fn text_button(&mut self, label: &str) -> Interaction {
+        button::Button::new(self, Some(label)).finish()
+    }
+
+    fn text_edit(&mut self, initial_text: &str, width: Size) -> text_edit::TextEdit<'_> {
+        text_edit::TextEdit::new(self, initial_text, width)
+    }
+
+    fn label(&mut self, text: &str) {
+        label::Label::new(self, text);
+    }
 }
 
 /// Controls when a click is registered.

@@ -32,14 +32,16 @@ pub struct StaticTextLayout {
 #[allow(dead_code)]
 pub struct DynamicTextLayout {
     pub editor: PlainEditor<Color>,
+    pub layout: Layout<Color>,
 
     // Cached style/state to detect when relayout is needed
     pub style_id: StyleId,
     pub state_flags: StateFlags,
     pub prev_width: f32,
+    pub styles_dirty: bool,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TextLayoutId {
     Static(StaticTextLayoutId),
     Dynamic(DynamicTextLayoutId),
@@ -48,12 +50,14 @@ pub enum TextLayoutId {
 
 pub(crate) struct TextLayoutStorage {
     static_layouts: SlotMap<StaticTextLayoutId, StaticTextLayout>,
+    dynamic_layouts: SlotMap<DynamicTextLayoutId, DynamicTextLayout>,
 }
 
 impl TextLayoutStorage {
     pub fn new() -> Self {
         Self {
             static_layouts: SlotMap::with_key(),
+            dynamic_layouts: SlotMap::with_key(),
         }
     }
 
@@ -83,12 +87,39 @@ impl TextLayoutStorage {
         }
     }
 
+    /// Gets an existing dynamic text layout or creates a new one if `layout_id`
+    /// is `None`.
+    ///
+    /// If the `layout_id` is `Some`, this method panics if the ID is not found.
+    pub fn get_or_create_dynamic(
+        &mut self,
+        layout_id: Option<DynamicTextLayoutId>,
+    ) -> (DynamicTextLayoutId, &mut DynamicTextLayout) {
+        match layout_id {
+            Some(id) => (id, self.dynamic_layouts.get_mut(id).unwrap()),
+            None => {
+                let layout = DynamicTextLayout {
+                    editor: PlainEditor::new(14.0),
+                    layout: Layout::new(),
+                    style_id: Default::default(),
+                    state_flags: Default::default(),
+                    prev_width: 0.0,
+                    styles_dirty: true,
+                };
+                let id = self.dynamic_layouts.insert(layout);
+                (id, self.dynamic_layouts.get_mut(id).unwrap())
+            }
+        }
+    }
+
     pub fn remove(&mut self, layout_id: TextLayoutId) {
         match layout_id {
             TextLayoutId::Static(id) => {
                 self.static_layouts.remove(id);
             }
-            TextLayoutId::Dynamic(_) => todo!(),
+            TextLayoutId::Dynamic(id) => {
+                self.dynamic_layouts.remove(id);
+            }
             TextLayoutId::LargeDynamic(_) => todo!(),
         }
     }
@@ -121,7 +152,18 @@ impl TextLayoutStorage {
 
                 Some(layout.layout.height())
             }
-            TextLayoutId::Dynamic(_) => todo!(),
+            TextLayoutId::Dynamic(id) => {
+                let layout = self.dynamic_layouts.get_mut(id)?;
+
+                let _width_changed = layout.prev_width != max_width;
+
+                // PlainEditor needs contexts - this will be handled elsewhere
+                // For now, just return a placeholder
+                layout.prev_width = max_width;
+
+                // TODO: Properly update PlainEditor width and get height
+                Some(100.0)
+            }
             TextLayoutId::LargeDynamic(_) => todo!(),
         }
     }
@@ -129,7 +171,7 @@ impl TextLayoutStorage {
     pub fn get_layout(&self, layout_id: TextLayoutId) -> Option<&parley::Layout<Color>> {
         match layout_id {
             TextLayoutId::Static(id) => self.static_layouts.get(id).map(|l| &l.layout),
-            TextLayoutId::Dynamic(_) => todo!(),
+            TextLayoutId::Dynamic(id) => self.dynamic_layouts.get(id).map(|l| &l.layout),
             TextLayoutId::LargeDynamic(_) => todo!(),
         }
     }

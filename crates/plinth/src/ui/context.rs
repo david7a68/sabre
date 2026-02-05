@@ -3,6 +3,7 @@ use std::time::Duration;
 use glamour::Point2;
 use glamour::Rect;
 use glamour::Size2;
+use smallvec::SmallVec;
 
 use crate::graphics::Canvas;
 use crate::graphics::Color;
@@ -17,14 +18,15 @@ use super::Atom;
 use super::IdMap;
 use super::Input;
 use super::LayoutTree;
+use super::StyleClass;
 use super::UiBuilder;
 use super::WidgetId;
-use super::WidgetState;
 use super::style::BorderWidths;
 use super::style::CornerRadii;
 use super::text::StaticTextLayout;
 use super::text::TextLayoutId;
 use super::text::TextLayoutStorage;
+use super::widget::WidgetState;
 
 #[derive(Default)]
 pub(crate) struct UiContext {
@@ -35,12 +37,14 @@ pub(crate) struct UiContext {
     pub(super) text_layouts: TextLayoutStorage,
 
     pub(super) frame_counter: u64,
+    pub(super) focused_widget: Option<WidgetId>,
 }
 
 impl UiContext {
     pub(crate) fn begin_frame<'a>(
         &'a mut self,
         text_context: &'a mut TextLayoutContext,
+        format_buffer: &'a mut String,
         theme: &'a Theme,
         input: &'a Input,
         time_delta: Duration,
@@ -77,6 +81,9 @@ impl UiContext {
             input,
             context: self,
             text_context,
+            format_buffer,
+            style_id: theme.get_id(StyleClass::Panel),
+            style_state: Default::default(),
             num_child_widgets: 0,
         }
     }
@@ -101,7 +108,7 @@ impl UiContext {
 
         let static_layout_id = match container.state.text_layout {
             Some(TextLayoutId::Static(id)) => Some(id),
-            Some(_) => panic!("Widget has non-static text layout assigned"),
+            Some(other) => panic!("Widget has non-static text layout assigned: {other:?}"),
             None => None,
         };
 
@@ -111,10 +118,42 @@ impl UiContext {
         (TextLayoutId::Static(layout_id), layout)
     }
 
+    pub fn upsert_dynamic_text_layout(
+        &mut self,
+        widget_id: WidgetId,
+    ) -> (TextLayoutId, &mut super::text::DynamicTextLayout) {
+        let container = self
+            .widget_states
+            .entry(widget_id)
+            .or_insert_with(|| WidgetContainer {
+                state: WidgetState {
+                    placement: Default::default(),
+                    was_active: false,
+                    text_layout: None,
+                },
+                frame_last_used: self.frame_counter,
+            });
+
+        container.frame_last_used = self.frame_counter;
+
+        let dynamic_layout_id = match container.state.text_layout {
+            Some(TextLayoutId::Dynamic(id)) => Some(id),
+            Some(other) => panic!("Widget has non-dynamic text layout assigned: {other:?}"),
+            None => None,
+        };
+
+        let (layout_id, layout) = self.text_layouts.get_or_create_dynamic(dynamic_layout_id);
+        container.state.text_layout = Some(TextLayoutId::Dynamic(layout_id));
+
+        (TextLayoutId::Dynamic(layout_id), layout)
+    }
+
     pub fn finish(&mut self, canvas: &mut Canvas) {
         self.ui_tree.compute_layout(|(content, _), max_width| {
             let (layout_id, alignment) = match content {
-                LayoutContent::Text { layout, alignment } => (layout, alignment),
+                LayoutContent::Text {
+                    layout, alignment, ..
+                } => (layout, alignment),
                 _ => return None,
             };
 
@@ -149,8 +188,20 @@ impl UiContext {
                 LayoutContent::Text {
                     layout: text_layout_id,
                     alignment: _,
+                    selection_rects,
+                    cursor_rect,
+                    selection_color,
+                    cursor_color,
                 } => {
                     if let Some(text_layout) = self.text_layouts.get_layout(*text_layout_id) {
+                        if let (Some(rects), Some(color)) = (selection_rects, selection_color) {
+                            Self::draw_text_selection(canvas, rects, *color, layout.x, layout.y);
+                        }
+
+                        if let (Some(rect), Some(color)) = (cursor_rect, cursor_color) {
+                            Self::draw_cursor(canvas, rect, *color, layout.x, layout.y);
+                        }
+
                         canvas.draw_text_layout(text_layout, [layout.x, layout.y]);
                     }
                 }
@@ -189,6 +240,44 @@ impl UiContext {
 
         self.frame_counter += 1;
     }
+
+    fn draw_text_selection(
+        canvas: &mut Canvas,
+        selection_rects: &[parley::BoundingBox],
+        color: Color,
+        x: f32,
+        y: f32,
+    ) {
+        for rect in selection_rects {
+            canvas.draw(Primitive {
+                point: [x + rect.x0 as f32, y + rect.y0 as f32],
+                size: [(rect.x1 - rect.x0) as f32, (rect.y1 - rect.y0) as f32],
+                paint: Paint::solid(color),
+                border: GradientPaint::default(),
+                border_width: [0.0; 4],
+                corner_radii: [0.0; 4],
+                use_nearest_sampling: false,
+            });
+        }
+    }
+
+    fn draw_cursor(
+        canvas: &mut Canvas,
+        cursor_rect: &parley::BoundingBox,
+        color: Color,
+        x: f32,
+        y: f32,
+    ) {
+        canvas.draw(Primitive {
+            point: [x + cursor_rect.x0 as f32, y + cursor_rect.y0 as f32],
+            size: [2.0, (cursor_rect.y1 - cursor_rect.y0) as f32], // 2px wide cursor
+            paint: Paint::solid(color),
+            border: GradientPaint::default(),
+            border_width: [0.0; 4],
+            corner_radii: [0.0; 4],
+            use_nearest_sampling: false,
+        });
+    }
 }
 
 #[derive(Default)]
@@ -208,5 +297,13 @@ pub(super) enum LayoutContent {
     Text {
         layout: TextLayoutId,
         alignment: TextAlignment,
+        /// Optional selection rectangles (BoundingBox for each selection segment)
+        selection_rects: Option<SmallVec<[parley::BoundingBox; 8]>>,
+        /// Optional cursor position and height
+        cursor_rect: Option<parley::BoundingBox>,
+        /// Selection background color
+        selection_color: Option<Color>,
+        /// Cursor color
+        cursor_color: Option<Color>,
     },
 }

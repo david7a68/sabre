@@ -1,0 +1,96 @@
+#![allow(unused_crate_dependencies)]
+
+use plinth::runtime::AppContext;
+use plinth::runtime::AppContextBuilder;
+use plinth::runtime::AppLifecycleHandler;
+use plinth::runtime::Context;
+use plinth::runtime::ViewportConfig;
+use plinth::ui::Alignment;
+use plinth::ui::LayoutDirection;
+use plinth::ui::Padding;
+use plinth::ui::Size::Fit;
+use plinth::ui::UiBuilder;
+use plinth::ui::widget::UiBuilderWidgetsExt;
+
+fn main() {
+    AppContextBuilder::default().run(TextEditDemo {});
+}
+
+struct TextEditDemo {}
+
+impl AppLifecycleHandler for TextEditDemo {
+    fn resume(&mut self, runtime: &mut AppContext) {
+        runtime.create_viewport(
+            ViewportConfig {
+                title: "TextEdit Example".into(),
+                width: 800,
+                height: 600,
+            },
+            AppWindow::default().into_handler(),
+        );
+    }
+}
+
+#[derive(Default)]
+struct AppWindow {
+    text_content: String,
+}
+
+impl AppWindow {
+    fn into_handler(mut self) -> impl FnMut(Context, UiBuilder) {
+        move |context, ui| self.update(context, ui)
+    }
+
+    fn update(&mut self, _context: Context, mut ui: UiBuilder) {
+        ui.child_alignment(Alignment::Center, Alignment::Center);
+
+        let mut panel = ui.panel();
+        panel
+            .width(600.0)
+            .height(400.0)
+            .child_major_alignment(Alignment::Start)
+            .child_minor_alignment(Alignment::Start)
+            .child_direction(LayoutDirection::Vertical)
+            .padding(Padding::equal(20.0));
+
+        panel.label("TextEdit Widget Demo:");
+
+        // Create a text edit field
+        let (text_result, interaction) = panel
+            .text_edit(
+                &self.text_content,
+                Fit {
+                    min: 50.0,
+                    max: 200.0,
+                },
+            )
+            .finish();
+
+        // Update stored text if available (not composing)
+        let is_composing = if let Some(text_str) = text_result {
+            self.text_content = text_str.to_string();
+            false
+        } else {
+            true
+        };
+
+        let mut info_panel = panel.panel();
+        info_panel.child_direction(LayoutDirection::Horizontal);
+
+        // Copy interaction values before using panel again
+        let is_hovered = interaction.is_hovered;
+        let is_clicked = interaction.is_clicked;
+
+        info_panel.label(&format!("Current text: {}", self.text_content));
+        info_panel.label(&format!(
+            "Text length: {} characters",
+            self.text_content.len()
+        ));
+        info_panel.label(&format!("Hovered: {}", is_hovered));
+        info_panel.label(&format!("Clicked: {}", is_clicked));
+
+        if is_composing {
+            info_panel.label("(IME composition in progress)");
+        }
+    }
+}
