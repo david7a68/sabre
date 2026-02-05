@@ -148,16 +148,6 @@ impl Theme {
 
         let font = style.font.get(state);
 
-        let features = font
-            .features
-            .iter()
-            .map(|f| (*f).into())
-            .collect::<SmallVec<[_; 16]>>();
-
-        builder.push_default(Prop::FontFeatures(parley::FontSettings::List(
-            features.as_slice().into(),
-        )));
-
         match &font.family {
             FontStack::Source(cow) => {
                 builder.push_default(Prop::FontStack(parley::FontStack::Source(cow.clone())));
@@ -209,12 +199,6 @@ impl Theme {
         )));
 
         let font = style.font.get(state);
-
-        let features: Vec<_> = font.features.iter().map(|f| (*f).into()).collect();
-
-        styles.insert(Prop::FontFeatures(parley::FontSettings::List(
-            features.into(),
-        )));
 
         match &font.family {
             FontStack::Source(cow) => {

@@ -50,22 +50,17 @@ impl<'a> TextEdit<'a> {
             is_focused_prev
         };
 
-        // Get or create the dynamic text layout for this widget
         let (_, dynamic_layout) = builder.context.upsert_dynamic_text_layout(builder.id);
 
-        // Check if text is empty before creating driver
-        let text_is_empty = dynamic_layout.editor.text().to_string().is_empty();
+        let has_text = dynamic_layout.editor.raw_text().is_empty();
+        if !has_text && !initial_text.is_empty() {
+            dynamic_layout.editor.set_text(initial_text);
+        }
 
-        // Use driver pattern for text operations
         let mut driver = dynamic_layout.editor.driver(
             &mut builder.text_context.fonts,
             &mut builder.text_context.layouts,
         );
-
-        // Initialize text if editor is empty
-        if text_is_empty && !initial_text.is_empty() {
-            driver.insert_or_replace_selection(initial_text);
-        }
 
         // Handle double-click select all
         if is_double_click && is_focused {
@@ -337,19 +332,12 @@ impl<'a> TextEdit<'a> {
             .context
             .upsert_dynamic_text_layout(self.builder.id);
 
-        // Check if we need to update styles
-        let needs_rebuild = dynamic_layout.styles_dirty
-            || dynamic_layout.style_id != style_id
-            || dynamic_layout.state_flags != self.state_flags;
+        // Always apply styles before layout to ensure font features like kerning are applied
+        theme.apply_plain_editor_styles(style_id, state_flags_val, &mut dynamic_layout.editor);
 
-        if needs_rebuild {
-            // Apply styles to PlainEditor using the theme
-            theme.apply_plain_editor_styles(style_id, state_flags_val, &mut dynamic_layout.editor);
-
-            dynamic_layout.style_id = style_id;
-            dynamic_layout.state_flags = self.state_flags;
-            dynamic_layout.styles_dirty = false;
-        }
+        dynamic_layout.style_id = style_id;
+        dynamic_layout.state_flags = self.state_flags;
+        dynamic_layout.styles_dirty = false;
 
         // Set wrapping - width will be set during layout phase
         // For now, None means single-line mode
