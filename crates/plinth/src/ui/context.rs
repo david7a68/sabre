@@ -3,7 +3,6 @@ use std::time::Duration;
 use glamour::Point2;
 use glamour::Rect;
 use glamour::Size2;
-use smallvec::SmallVec;
 
 use crate::graphics::Canvas;
 use crate::graphics::Color;
@@ -25,6 +24,7 @@ use super::style::BorderWidths;
 use super::style::CornerRadii;
 use super::text::StaticTextLayout;
 use super::text::TextLayoutId;
+use super::text::TextLayoutMut;
 use super::text::TextLayoutStorage;
 use super::widget::WidgetState;
 
@@ -148,7 +148,7 @@ impl UiContext {
         (TextLayoutId::Dynamic(layout_id), layout)
     }
 
-    pub fn finish(&mut self, canvas: &mut Canvas) {
+    pub fn finish(&mut self, text_context: &mut TextLayoutContext, canvas: &mut Canvas) {
         self.ui_tree.compute_layout(|(content, _), max_width| {
             let (layout_id, alignment) = match content {
                 LayoutContent::Text {
@@ -158,7 +158,7 @@ impl UiContext {
             };
 
             self.text_layouts
-                .break_lines(*layout_id, max_width, *alignment)
+                .break_lines(text_context, *layout_id, max_width, *alignment)
         });
 
         for (node, (content, widget_id)) in self.ui_tree.iter_nodes() {
@@ -188,21 +188,40 @@ impl UiContext {
                 LayoutContent::Text {
                     layout: text_layout_id,
                     alignment: _,
-                    selection_rects,
-                    cursor_rect,
+                    cursor_size,
                     selection_color,
                     cursor_color,
                 } => {
-                    if let Some(text_layout) = self.text_layouts.get_layout(*text_layout_id) {
-                        if let (Some(rects), Some(color)) = (selection_rects, selection_color) {
-                            Self::draw_text_selection(canvas, rects, *color, layout.x, layout.y);
-                        }
+                    let Some(text_layout) = self.text_layouts.get_mut(*text_layout_id) else {
+                        continue;
+                    };
 
-                        if let (Some(rect), Some(color)) = (cursor_rect, cursor_color) {
-                            Self::draw_cursor(canvas, rect, *color, layout.x, layout.y);
+                    match text_layout {
+                        TextLayoutMut::Static(text_layout) => {
+                            canvas.draw_text_layout(text_layout, [layout.x, layout.y]);
                         }
+                        TextLayoutMut::Dynamic(text_layout) => {
+                            text_layout.editor.selection_geometry_with(|bbox, _| {
+                                Self::draw_selection_rect(
+                                    canvas,
+                                    &bbox,
+                                    *selection_color,
+                                    layout.x,
+                                    layout.y,
+                                );
+                            });
 
-                        canvas.draw_text_layout(text_layout, [layout.x, layout.y]);
+                            if let Some(rect) = text_layout.editor.cursor_geometry(*cursor_size) {
+                                Self::draw_cursor(canvas, &rect, *cursor_color, layout.x, layout.y);
+                            }
+
+                            canvas.draw_text_layout(
+                                text_layout
+                                    .editor
+                                    .layout(&mut text_context.fonts, &mut text_context.layouts),
+                                [layout.x, layout.y],
+                            );
+                        }
                     }
                 }
             }
@@ -221,7 +240,7 @@ impl UiContext {
                         height: node.result.height,
                     },
                 };
-            };
+            }
         }
 
         let removed = self
@@ -241,24 +260,22 @@ impl UiContext {
         self.frame_counter += 1;
     }
 
-    fn draw_text_selection(
+    fn draw_selection_rect(
         canvas: &mut Canvas,
-        selection_rects: &[parley::BoundingBox],
+        rect: &parley::BoundingBox,
         color: Color,
         x: f32,
         y: f32,
     ) {
-        for rect in selection_rects {
-            canvas.draw(Primitive {
-                point: [x + rect.x0 as f32, y + rect.y0 as f32],
-                size: [(rect.x1 - rect.x0) as f32, (rect.y1 - rect.y0) as f32],
-                paint: Paint::solid(color),
-                border: GradientPaint::default(),
-                border_width: [0.0; 4],
-                corner_radii: [0.0; 4],
-                use_nearest_sampling: false,
-            });
-        }
+        canvas.draw(Primitive {
+            point: [x + rect.x0 as f32, y + rect.y0 as f32],
+            size: [(rect.x1 - rect.x0) as f32, (rect.y1 - rect.y0) as f32],
+            paint: Paint::solid(color),
+            border: GradientPaint::default(),
+            border_width: [0.0; 4],
+            corner_radii: [0.0; 4],
+            use_nearest_sampling: false,
+        });
     }
 
     fn draw_cursor(
@@ -297,13 +314,8 @@ pub(super) enum LayoutContent {
     Text {
         layout: TextLayoutId,
         alignment: TextAlignment,
-        /// Optional selection rectangles (BoundingBox for each selection segment)
-        selection_rects: Option<SmallVec<[parley::BoundingBox; 8]>>,
-        /// Optional cursor position and height
-        cursor_rect: Option<parley::BoundingBox>,
-        /// Selection background color
-        selection_color: Option<Color>,
-        /// Cursor color
-        cursor_color: Option<Color>,
+        cursor_size: f32,
+        selection_color: Color,
+        cursor_color: Color,
     },
 }

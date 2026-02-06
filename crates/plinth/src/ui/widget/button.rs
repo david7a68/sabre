@@ -20,22 +20,13 @@ impl Button<'_> {
             None => builder.child(),
         };
 
-        let prev_state = builder.prev_state();
-        let input = builder.input();
+        let (interaction, state) =
+            Interaction::compute(&builder, ClickBehavior::OnPress, StateFlags::PRESSED);
 
-        let (interaction, is_active) =
-            Interaction::compute(prev_state, input, ClickBehavior::OnPress);
-
-        let mut state = StateFlags::NORMAL;
-        if interaction.is_hovered {
-            state |= StateFlags::HOVERED;
-        }
-        if is_active {
-            state |= StateFlags::PRESSED;
-        }
-
-        builder.set_active(is_active);
         builder.apply_style(StyleClass::Button, state);
+        if state.contains(StateFlags::PRESSED) {
+            builder.set_active(true);
+        }
 
         if let Some(label_text) = label {
             builder.set_text(label_text, None);

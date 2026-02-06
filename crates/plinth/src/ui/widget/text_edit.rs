@@ -1,5 +1,4 @@
 use parley::Cursor;
-use smallvec::SmallVec;
 use winit::keyboard::KeyCode;
 use winit::keyboard::PhysicalKey;
 
@@ -15,74 +14,25 @@ use crate::ui::widget::Interaction;
 pub struct TextEdit<'a> {
     builder: UiBuilder<'a>,
     interaction: Interaction,
-    is_active: bool,
-    is_focused: bool,
     state_flags: StateFlags,
     wrap_text: bool,
 }
 
 impl<'a> TextEdit<'a> {
-    pub fn new(builder: &'a mut UiBuilder<'_>, initial_text: &str, width: Size) -> Self {
+    pub fn new(builder: &'a mut UiBuilder<'_>, width: Size) -> Self {
         let mut builder = builder.child();
         builder.width(width);
+        builder.height(Size::Fixed(120.0));
 
-        let prev_state = builder.prev_state();
-        let input = builder.input();
-        let is_focused_prev = builder.is_focused();
-
-        let (interaction, is_active) =
-            Interaction::compute(prev_state, input, ClickBehavior::OnPress);
-
-        let is_double_click = interaction.is_hovered && input.mouse_state.left_click_count == 2;
-
-        // Focus management: gain focus on click, keep focus if already focused
-        let is_focused = if interaction.is_clicked {
-            builder.request_focus();
-            true
-        } else if is_focused_prev && interaction.is_hovered && is_active {
-            // Clicking in bounds while focused - stay focused
-            true
-        } else if is_focused_prev && !interaction.is_hovered && input.mouse_state.is_left_down() {
-            // Clicking outside while focused - lose focus
-            builder.release_focus();
-            false
-        } else {
-            is_focused_prev
-        };
-
-        let (_, dynamic_layout) = builder.context.upsert_dynamic_text_layout(builder.id);
-
-        let has_text = dynamic_layout.editor.raw_text().is_empty();
-        if !has_text && !initial_text.is_empty() {
-            dynamic_layout.editor.set_text(initial_text);
-        }
-
-        let mut driver = dynamic_layout.editor.driver(
-            &mut builder.text_context.fonts,
-            &mut builder.text_context.layouts,
+        let (interaction, state_flags) = Interaction::compute(
+            &builder,
+            ClickBehavior::OnPress,
+            StateFlags::HOVERED | StateFlags::PRESSED | StateFlags::FOCUSED,
         );
-
-        // Handle double-click select all
-        if is_double_click && is_focused {
-            driver.select_all();
-        }
-
-        let mut state_flags = StateFlags::NORMAL;
-        if interaction.is_hovered {
-            state_flags |= StateFlags::HOVERED;
-        }
-        if is_active {
-            state_flags |= StateFlags::PRESSED;
-        }
-        if is_focused {
-            state_flags |= StateFlags::FOCUSED;
-        }
 
         Self {
             builder,
             interaction,
-            is_active,
-            is_focused,
             state_flags,
             wrap_text: false,
         }
@@ -93,54 +43,146 @@ impl<'a> TextEdit<'a> {
         self
     }
 
-    pub fn finish(mut self) -> (Option<&'a str>, Interaction) {
-        // Process keyboard events if focused
-        if self.is_focused {
-            self.handle_keyboard_events();
-        }
-
-        // Handle mouse events for cursor positioning and selection
-        if self.interaction.is_clicked || (self.is_active && self.is_focused) {
-            self.handle_mouse_events();
-        }
-
-        // Apply styling and render
-        self.render();
-
-        // Get text from editor
+    pub fn default_text(self, text: &str) -> Self {
         let (_, dynamic_layout) = self
             .builder
             .context
             .upsert_dynamic_text_layout(self.builder.id);
 
-        // Check if IME composition is in progress
-        let text = if dynamic_layout.editor.is_composing() {
-            None
-        } else {
-            // Store text in context's buffer and return reference
-            // let text_string = dynamic_layout.editor.raw_text().to_string();
-            // self.builder.context.text_buffers.push(text_string);
-            // Some(self.builder.context.text_buffers.last().unwrap().as_str())
-            Some(dynamic_layout.editor.raw_text())
-        };
+        if dynamic_layout.editor.raw_text().is_empty() {
+            dynamic_layout.editor.set_text(text);
+        }
 
-        (text, self.interaction)
+        self
     }
 
-    fn handle_keyboard_events(&mut self) {
-        let keyboard_events = self.builder.input().keyboard_events.clone();
-        let modifiers = self.builder.input().modifiers;
+    pub fn text(self, text: &str) -> Self {
         let (_, dynamic_layout) = self
             .builder
             .context
             .upsert_dynamic_text_layout(self.builder.id);
 
-        let mut driver = dynamic_layout.editor.driver(
+        dynamic_layout.editor.set_text(text);
+
+        self
+    }
+
+    pub fn finish(mut self) -> (Option<&'a str>, Interaction) {
+        let is_focused = self.state_flags.contains(StateFlags::FOCUSED);
+
+        if is_focused {
+            self.builder.request_focus();
+        } else {
+            self.builder.release_focus();
+        }
+
+        let style_id = self.builder.theme().get_id(StyleClass::Label);
+        let alignment = self
+            .builder
+            .theme()
+            .get(StyleClass::Label)
+            .text_align
+            .get(self.state_flags);
+        let theme = self.builder.theme;
+
+        let input = self.builder.input().clone();
+        let (placement, has_text_layout) = self
+            .builder
+            .prev_state()
+            .map(|s| (s.placement, s.text_layout.is_some()))
+            .unwrap_or_default();
+
+        let (text_layout_id, dynamic_layout) = self
+            .builder
+            .context
+            .upsert_dynamic_text_layout(self.builder.id);
+
+        if is_focused {
+            Self::handle_keyboard_events(&input, dynamic_layout, self.builder.text_context);
+        }
+
+        Self::handle_mouse_events(
+            &input,
+            placement,
+            has_text_layout,
+            self.interaction,
+            self.state_flags,
+            dynamic_layout,
+            self.builder.text_context,
+        );
+
+        theme.apply_plain_editor_styles(style_id, self.state_flags, &mut dynamic_layout.editor);
+
+        let layout = dynamic_layout.editor.layout(
             &mut self.builder.text_context.fonts,
             &mut self.builder.text_context.layouts,
         );
 
-        for event in keyboard_events.iter() {
+        let size = layout.calculate_content_widths();
+
+        let (cursor_size, selection_color, cursor_color) = if is_focused {
+            let style = theme.get(StyleClass::Label);
+            let sel_color = style.selection_color.get(self.state_flags);
+            let cur_color = style.cursor_color.get(self.state_flags);
+            let cursor_sz = style.font_size.get(self.state_flags) as f32;
+
+            (cursor_sz, sel_color, cur_color)
+        } else {
+            Default::default()
+        };
+
+        self.builder.context.ui_tree.add(
+            Some(self.builder.index),
+            Atom {
+                width: Size::Flex {
+                    min: size.min,
+                    max: size.max,
+                },
+                height: Size::Fit {
+                    min: 0.0,
+                    max: f32::MAX,
+                },
+                ..Default::default()
+            },
+            (
+                LayoutContent::Text {
+                    layout: text_layout_id,
+                    alignment,
+                    cursor_size,
+                    selection_color,
+                    cursor_color,
+                },
+                None,
+            ),
+        );
+
+        self.builder
+            .set_active(self.state_flags.contains(StateFlags::PRESSED));
+        self.builder
+            .apply_style(StyleClass::Label, self.state_flags);
+
+        let (_, dynamic_layout) = self
+            .builder
+            .context
+            .upsert_dynamic_text_layout(self.builder.id);
+
+        let is_composing = dynamic_layout.editor.is_composing();
+        let text = (!is_composing).then_some(dynamic_layout.editor.raw_text());
+
+        (text, self.interaction)
+    }
+
+    fn handle_keyboard_events(
+        input: &crate::ui::Input,
+        dynamic_layout: &mut crate::ui::text::DynamicTextLayout,
+        text_context: &mut crate::graphics::TextLayoutContext,
+    ) {
+        let mut driver = dynamic_layout
+            .editor
+            .driver(&mut text_context.fonts, &mut text_context.layouts);
+
+        let modifiers = input.modifiers;
+        for event in input.keyboard_events.iter() {
             if !event.state.is_pressed() {
                 continue;
             }
@@ -165,32 +207,21 @@ impl<'a> TextEdit<'a> {
             let shift_held = modifiers.shift_key();
 
             match event.key {
-                PhysicalKey::Code(KeyCode::ArrowLeft) => {
-                    if ctrl_held {
-                        if shift_held {
-                            driver.select_word_left();
-                        } else {
-                            driver.move_word_left();
-                        }
-                    } else if shift_held {
-                        driver.select_left();
-                    } else {
-                        driver.move_left();
-                    }
+                PhysicalKey::Code(KeyCode::KeyA) if ctrl_held => {
+                    driver.select_all();
                 }
-                PhysicalKey::Code(KeyCode::ArrowRight) => {
-                    if ctrl_held {
-                        if shift_held {
-                            driver.select_word_right();
-                        } else {
-                            driver.move_word_right();
-                        }
-                    } else if shift_held {
-                        driver.select_right();
-                    } else {
-                        driver.move_right();
-                    }
-                }
+                PhysicalKey::Code(KeyCode::ArrowLeft) => match (ctrl_held, shift_held) {
+                    (true, true) => driver.select_word_left(),
+                    (true, false) => driver.move_word_left(),
+                    (false, true) => driver.select_left(),
+                    (false, false) => driver.move_left(),
+                },
+                PhysicalKey::Code(KeyCode::ArrowRight) => match (ctrl_held, shift_held) {
+                    (true, true) => driver.select_word_right(),
+                    (true, false) => driver.move_word_right(),
+                    (false, true) => driver.select_right(),
+                    (false, false) => driver.move_right(),
+                },
                 PhysicalKey::Code(KeyCode::ArrowUp) => {
                     if shift_held {
                         driver.select_up();
@@ -199,6 +230,20 @@ impl<'a> TextEdit<'a> {
                     }
                 }
                 PhysicalKey::Code(KeyCode::ArrowDown) => {
+                    if shift_held {
+                        driver.select_down();
+                    } else {
+                        driver.move_down();
+                    }
+                }
+                PhysicalKey::Code(KeyCode::PageUp) => {
+                    if shift_held {
+                        driver.select_up();
+                    } else {
+                        driver.move_up();
+                    }
+                }
+                PhysicalKey::Code(KeyCode::PageDown) => {
                     if shift_held {
                         driver.select_down();
                     } else {
@@ -219,189 +264,103 @@ impl<'a> TextEdit<'a> {
                         driver.delete();
                     }
                 }
-                PhysicalKey::Code(KeyCode::Home) => {
-                    if ctrl_held {
-                        if shift_held {
-                            driver.select_to_text_start();
-                        } else {
-                            driver.move_to_text_start();
-                        }
-                    } else if shift_held {
-                        driver.select_to_line_start();
-                    } else {
-                        driver.move_to_line_start();
-                    }
-                }
-                PhysicalKey::Code(KeyCode::End) => {
-                    if ctrl_held {
-                        if shift_held {
-                            driver.select_to_text_end();
-                        } else {
-                            driver.move_to_text_end();
-                        }
-                    } else if shift_held {
-                        driver.select_to_line_end();
-                    } else {
-                        driver.move_to_line_end();
-                    }
-                }
+                PhysicalKey::Code(KeyCode::Home) => match (ctrl_held, shift_held) {
+                    (true, true) => driver.select_to_text_start(),
+                    (true, false) => driver.move_to_text_start(),
+                    (false, true) => driver.select_to_line_start(),
+                    (false, false) => driver.move_to_line_start(),
+                },
+                PhysicalKey::Code(KeyCode::End) => match (ctrl_held, shift_held) {
+                    (true, true) => driver.select_to_text_end(),
+                    (true, false) => driver.move_to_text_end(),
+                    (false, true) => driver.select_to_line_end(),
+                    (false, false) => driver.move_to_line_end(),
+                },
                 _ => {
-                    // Handle character input
                     if let Some(text) = &event.text {
-                        // Filter out control characters
-                        if !text.chars().any(|c| c.is_control()) {
-                            driver.insert_or_replace_selection(text.as_str());
-                        }
+                        driver.insert_or_replace_selection(text.as_str());
                     }
                 }
             }
         }
     }
 
-    fn handle_mouse_events(&mut self) {
-        use glamour::Contains;
-
-        // Get needed values before any mutable borrows
-        let pointer = self.builder.input().pointer;
-        let is_left_down = self.builder.input().mouse_state.is_left_down();
-        let placement = self
-            .builder
-            .prev_state()
-            .map(|s| s.placement)
-            .unwrap_or_default();
-        let has_text_layout = self
-            .builder
-            .prev_state()
-            .and_then(|s| s.text_layout)
-            .is_some();
-        let is_clicked = self.interaction.is_clicked;
-        let is_active = self.is_active;
-
-        // Check if we're in a click or drag state
-        let mouse_in_bounds = placement.contains(&pointer);
-
-        if !mouse_in_bounds || !is_left_down {
+    fn handle_mouse_events(
+        input: &crate::ui::Input,
+        placement: glamour::Rect<crate::ui::Pixels>,
+        has_text_layout: bool,
+        interaction: Interaction,
+        state_flags: StateFlags,
+        dynamic_layout: &mut crate::ui::text::DynamicTextLayout,
+        text_context: &mut crate::graphics::TextLayoutContext,
+    ) {
+        let left_click_count = input.mouse_state.left_click_count;
+        if left_click_count == 0 {
             return;
         }
 
-        // Convert mouse position to widget-relative coordinates
-        let local_x = pointer.x - placement.origin.x;
-        let local_y = pointer.y - placement.origin.y;
+        let is_hovered = interaction.is_hovered;
+        let is_focused = state_flags.contains(StateFlags::FOCUSED);
+        if !is_hovered && !is_focused {
+            return;
+        }
 
-        // Get the editor and use hit testing to find cursor position
-        let (_, dynamic_layout) = self
-            .builder
-            .context
-            .upsert_dynamic_text_layout(self.builder.id);
-        let mut driver = dynamic_layout.editor.driver(
-            &mut self.builder.text_context.fonts,
-            &mut self.builder.text_context.layouts,
-        );
+        if !has_text_layout {
+            return;
+        }
 
-        // Use parley's Cursor::from_point to hit test
+        let pointer = input.pointer;
+        let max_x = placement.origin.x + placement.size.width;
+        let max_y = placement.origin.y + placement.size.height;
+        let clamped_x = pointer.x.clamp(placement.origin.x, max_x);
+        let clamped_y = pointer.y.clamp(placement.origin.y, max_y);
+
+        let local_x = clamped_x - placement.origin.x;
+        let local_y = clamped_y - placement.origin.y;
+        let shift_held = input.modifiers.shift_key();
+        let is_left_down = input.mouse_state.is_left_down();
+
+        let mut driver = dynamic_layout
+            .editor
+            .driver(&mut text_context.fonts, &mut text_context.layouts);
+
         let layout = driver.layout();
         let cursor = Cursor::from_point(layout, local_x, local_y);
         let byte_index = cursor.index();
 
-        if is_active && has_text_layout {
-            // If we're actively dragging (was already active), extend selection
-            driver.extend_selection_to_byte(byte_index);
-        } else if is_clicked {
-            // Fresh click - move cursor to position
-            driver.move_to_byte(byte_index);
+        if interaction.is_clicked && is_hovered {
+            if left_click_count >= 4 {
+                driver.select_all();
+                return;
+            }
+
+            if left_click_count == 3 {
+                driver.select_line_at_point(local_x, local_y);
+                return;
+            }
+
+            if left_click_count == 2 {
+                driver.select_word_at_point(local_x, local_y);
+                return;
+            }
+
+            if shift_held {
+                driver.extend_selection_to_byte(byte_index);
+            } else {
+                driver.move_to_byte(byte_index);
+            }
+
+            return;
         }
-    }
 
-    fn render(&mut self) {
-        let style_id = self.builder.theme().get_id(StyleClass::Label);
-        let state_flags_val = self.state_flags;
-
-        // Get alignment before mutable borrows
-        let alignment = self
-            .builder
-            .theme()
-            .get(StyleClass::Label)
-            .text_align
-            .get(state_flags_val);
-
-        // Get theme reference before mutable borrow of context
-        let theme = self.builder.theme;
-
-        let (text_layout_id, dynamic_layout) = self
-            .builder
-            .context
-            .upsert_dynamic_text_layout(self.builder.id);
-
-        // Always apply styles before layout to ensure font features like kerning are applied
-        theme.apply_plain_editor_styles(style_id, state_flags_val, &mut dynamic_layout.editor);
-
-        dynamic_layout.style_id = style_id;
-        dynamic_layout.state_flags = self.state_flags;
-        dynamic_layout.styles_dirty = false;
-
-        // Set wrapping - width will be set during layout phase
-        // For now, None means single-line mode
-        dynamic_layout.editor.set_width(None);
-
-        // Get layout and size
-        let layout = dynamic_layout.editor.layout(
-            &mut self.builder.text_context.fonts,
-            &mut self.builder.text_context.layouts,
-        );
-        let size = layout.calculate_content_widths();
-
-        dynamic_layout.layout = layout.clone();
-
-        let (selection_rects, cursor_rect, selection_color, cursor_color) = if self.is_focused {
-            let style = theme.get(StyleClass::Label);
-            let sel_color = style.selection_color.get(state_flags_val);
-            let cur_color = style.cursor_color.get(state_flags_val);
-            let cursor_size = style.font_size.get(state_flags_val) as f32;
-
-            let mut sel_rects: SmallVec<[parley::BoundingBox; 8]> = SmallVec::new();
-            dynamic_layout
-                .editor
-                .selection_geometry_with(|bbox, _| sel_rects.push(bbox));
-
-            let sel_rects = match dynamic_layout.editor.selected_text() {
-                Some(selected) if !selected.is_empty() && !sel_rects.is_empty() => Some(sel_rects),
-                _ => None,
-            };
-
-            let cur_rect = dynamic_layout.editor.cursor_geometry(cursor_size);
-
-            (sel_rects, cur_rect, Some(sel_color), Some(cur_color))
-        } else {
-            (None, None, None, None)
-        };
-
-        self.builder.context.ui_tree.add(
-            Some(self.builder.index),
-            Atom {
-                width: Size::Flex {
-                    min: size.min,
-                    max: size.max,
-                },
-                height: Size::Fit {
-                    min: 20.0,
-                    max: f32::MAX,
-                },
-                ..Default::default()
-            },
-            (
-                LayoutContent::Text {
-                    layout: text_layout_id,
-                    alignment,
-                    selection_rects,
-                    cursor_rect,
-                    selection_color,
-                    cursor_color,
-                },
-                None,
-            ),
-        );
-
-        self.builder.set_active(self.is_active);
-        self.builder.apply_style(StyleClass::Label, state_flags_val);
+        if is_left_down && is_focused {
+            if left_click_count == 3 {
+                driver.select_line_at_point(local_x, local_y);
+            } else if left_click_count == 2 {
+                driver.select_word_at_point(local_x, local_y);
+            } else {
+                driver.extend_selection_to_byte(byte_index);
+            }
+        }
     }
 }

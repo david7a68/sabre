@@ -1,19 +1,19 @@
 use glamour::Contains;
 use glamour::Rect;
 
-use crate::ui::Input;
 use crate::ui::Pixels;
 use crate::ui::text::TextLayoutId;
 
 use super::Size;
 use super::UiBuilder;
+use super::style::StateFlags;
 
 pub mod button;
 pub mod label;
 pub mod panel;
 pub mod text_edit;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, Debug)]
 pub struct Interaction {
     pub is_clicked: bool,
     pub is_hovered: bool,
@@ -38,8 +38,8 @@ impl UiBuilderWidgetsExt for UiBuilder<'_> {
         button::Button::new(self, Some(label)).finish()
     }
 
-    fn text_edit(&mut self, initial_text: &str, width: Size) -> text_edit::TextEdit<'_> {
-        text_edit::TextEdit::new(self, initial_text, width)
+    fn text_edit(&mut self, default_text: &str, width: Size) -> text_edit::TextEdit<'_> {
+        text_edit::TextEdit::new(self, width).default_text(default_text)
     }
 
     fn label(&mut self, text: &str) {
@@ -62,31 +62,42 @@ impl Interaction {
     ///
     /// Returns the interaction result and whether the widget is currently active (being pressed).
     pub fn compute(
-        prev_state: Option<&WidgetState>,
-        input: &Input,
+        builder: &UiBuilder<'_>,
         behavior: ClickBehavior,
-    ) -> (Self, bool) {
-        let is_hovered = prev_state
-            .map(|s| s.placement.contains(&input.pointer))
-            .unwrap_or(false);
+        interest: StateFlags,
+    ) -> (Self, StateFlags) {
+        let was_focused = builder.is_focused();
+        let (was_active, is_hovered) = builder
+            .prev_state()
+            .map(|s| (s.was_active, s.placement.contains(&builder.input.pointer)))
+            .unwrap_or_default();
 
-        let was_active = prev_state.map(|s| s.was_active).unwrap_or(false);
-        let is_left_down = input.mouse_state.is_left_down();
-        let is_active = is_hovered && is_left_down;
+        let is_left_down = builder.input.mouse_state.is_left_down();
+        let just_pressed = is_left_down && !was_active;
+        let just_released = !is_left_down && was_active;
 
         let is_clicked = match behavior {
-            // Click on press: hovered, mouse just went down (wasn't active before)
-            ClickBehavior::OnPress => is_hovered && is_left_down && !was_active,
-            // Click on release: was active, mouse just released while still hovered
-            ClickBehavior::OnRelease => is_hovered && was_active && !is_left_down,
+            ClickBehavior::OnPress => is_hovered && just_pressed,
+            ClickBehavior::OnRelease => is_hovered && just_released,
         };
+
+        let mut state = StateFlags::NORMAL;
+        if is_hovered {
+            state |= StateFlags::HOVERED & interest;
+        }
+        if is_hovered && is_left_down {
+            state |= StateFlags::PRESSED & interest;
+        }
+        if is_clicked || ((is_hovered || !just_pressed) && was_focused) {
+            state |= StateFlags::FOCUSED & interest;
+        }
 
         (
             Self {
                 is_clicked,
                 is_hovered,
             },
-            is_active,
+            state,
         )
     }
 }

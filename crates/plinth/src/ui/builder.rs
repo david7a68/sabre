@@ -268,11 +268,10 @@ impl UiBuilder<'_> {
             (
                 LayoutContent::Text {
                     layout: text_layout_id,
+                    cursor_size: 0.0,
                     alignment,
-                    selection_rects: None,
-                    cursor_rect: None,
-                    selection_color: None,
-                    cursor_color: None,
+                    selection_color: Color::TRANSPARENT,
+                    cursor_color: Color::TRANSPARENT,
                 },
                 None,
             ),

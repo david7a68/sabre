@@ -153,7 +153,9 @@ impl AppContext {
             }
 
             window.canvas.reset(Color::BLACK);
-            window.ui_context.finish(&mut window.canvas);
+            window
+                .ui_context
+                .finish(&mut self.text_system, &mut window.canvas);
 
             if window.canvas.has_unready_textures() {
                 window.window.request_redraw();
