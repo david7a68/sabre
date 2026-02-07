@@ -229,8 +229,9 @@ impl Default for Theme {
 fn default_font_features() -> parley::FontSettings<'static, parley::FontFeature> {
     DEFAULT_FONT_FEATURES
         .get_or_init(|| {
-            let list =
-                Vec::leak(parley::FontFeature::parse_list("kern, dlig, liga, calt").collect());
+            let list = Vec::leak(
+                parley::FontFeature::parse_list("kern, rlig, dlig, liga, clig, calt").collect(),
+            );
 
             parley::FontSettings::List(Cow::Borrowed(list))
         })
