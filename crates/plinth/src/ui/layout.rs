@@ -177,12 +177,12 @@ impl<T> LayoutTree<T> {
             "The root node must have a horizontal layout direction"
         );
 
-        compute_major_axis_fit_sizes::<HorizontalMode>(nodes, &self.children, node_id);
+        compute_major_axis_fit_sizes::<HorizontalMode>(nodes, &self.children, node_id, None);
         compute_major_axis_grow_sizes::<HorizontalMode>(nodes, &self.children, node_id);
 
         compute_text_heights(measure_text, nodes.iter_mut().zip(self.content.iter_mut()));
 
-        compute_minor_axis_fit_sizes::<HorizontalMode>(nodes, &self.children, node_id);
+        compute_minor_axis_fit_sizes::<HorizontalMode>(nodes, &self.children, node_id, None);
         compute_minor_axis_grow_sizes::<HorizontalMode>(nodes, &self.children, node_id);
 
         compute_major_axis_offsets::<HorizontalMode>(nodes, &self.children, node_id, 0.0);
@@ -194,27 +194,33 @@ fn compute_major_axis_fit_sizes<D: LayoutDirectionExt>(
     nodes: &mut [LayoutNode],
     children: &[NodeIndexArray],
     node_id: UiElementId,
+    parent_limit: Option<f32>,
 ) -> f32 {
     let node = &nodes[node_id.0 as usize];
     let node_children = &children[node_id.0 as usize];
 
     if !(node.atom.direction == D::DIRECTION) {
-        return compute_minor_axis_fit_sizes::<D::Other>(nodes, children, node_id);
+        return compute_minor_axis_fit_sizes::<D::Other>(nodes, children, node_id, parent_limit);
     }
 
     let size_spec = D::major_size_spec(node);
+    let padding_start = D::major_axis_padding_start(node);
+    let padding_end = D::major_axis_padding_end(node);
+    let child_parent_limit =
+        parent_limit.map(|limit| (limit - padding_start - padding_end).max(0.0));
 
     let child_sizes = {
         let mut total_size = get_major_axis_empty_size::<D>(node, node_children);
 
         for child_id in node_children {
-            total_size += compute_major_axis_fit_sizes::<D>(nodes, children, *child_id);
+            total_size +=
+                compute_major_axis_fit_sizes::<D>(nodes, children, *child_id, child_parent_limit);
         }
 
         total_size
     };
 
-    let size = match size_spec {
+    let mut size = match size_spec {
         Size::Fixed(size) => size,
         Size::Fit { min, max } => child_sizes.clamp(min, max),
         Size::Flex { max, .. } => max,
@@ -223,6 +229,10 @@ fn compute_major_axis_fit_sizes<D: LayoutDirectionExt>(
             0.0
         }
     };
+
+    if let Some(limit) = parent_limit {
+        size = size.min(limit);
+    }
 
     D::set_major_size(&mut nodes[node_id.0 as usize], size);
 
@@ -426,33 +436,40 @@ fn compute_minor_axis_fit_sizes<D: LayoutDirectionExt>(
     nodes: &mut [LayoutNode],
     children: &[NodeIndexArray],
     node_id: UiElementId,
+    parent_limit: Option<f32>,
 ) -> f32 {
     let node = &nodes[node_id.0 as usize];
 
     if node.atom.direction != D::DIRECTION {
-        return compute_major_axis_fit_sizes::<D::Other>(nodes, children, node_id);
+        return compute_major_axis_fit_sizes::<D::Other>(nodes, children, node_id, parent_limit);
     }
 
     let size_spec = D::minor_size_spec(node);
     let size_padding = D::minor_axis_padding_start(node) + D::minor_axis_padding_end(node);
+    let child_parent_limit = parent_limit.map(|limit| (limit - size_padding).max(0.0));
 
     let child_sizes = {
         let mut total_size = 0.0f32;
 
         for child in &children[node_id.0 as usize] {
-            let child_size = compute_minor_axis_fit_sizes::<D>(nodes, children, *child);
+            let child_size =
+                compute_minor_axis_fit_sizes::<D>(nodes, children, *child, child_parent_limit);
             total_size = total_size.max(child_size);
         }
 
         total_size
     };
 
-    let size = match size_spec {
+    let mut size = match size_spec {
         Fixed(size) => size,
         Fit { min, max } => (child_sizes + size_padding).clamp(min, max),
         Flex { max, .. } => max,
         Grow => 0.0, // Grow is handled later
     };
+
+    if let Some(limit) = parent_limit {
+        size = size.min(limit);
+    }
 
     D::set_minor_size(&mut nodes[node_id.0 as usize], size);
     size
