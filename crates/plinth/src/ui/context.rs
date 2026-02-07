@@ -267,9 +267,12 @@ impl UiContext {
         x: f32,
         y: f32,
     ) {
+        let y0 = (y + rect.y0 as f32).round();
+        let y1 = (y + rect.y1 as f32).round();
+
         canvas.draw(Primitive {
-            point: [x + rect.x0 as f32, y + rect.y0 as f32],
-            size: [(rect.x1 - rect.x0) as f32, (rect.y1 - rect.y0) as f32],
+            point: [x + rect.x0 as f32, y0],
+            size: [(rect.x1 - rect.x0) as f32, y1 - y0],
             paint: Paint::solid(color),
             border: GradientPaint::default(),
             border_width: [0.0; 4],
@@ -285,9 +288,12 @@ impl UiContext {
         x: f32,
         y: f32,
     ) {
+        let y0 = (y + cursor_rect.y0 as f32).round();
+        let y1 = (y + cursor_rect.y1 as f32).round();
+
         canvas.draw(Primitive {
-            point: [x + cursor_rect.x0 as f32, y + cursor_rect.y0 as f32],
-            size: [2.0, (cursor_rect.y1 - cursor_rect.y0) as f32], // 2px wide cursor
+            point: [x + cursor_rect.x0 as f32, y0],
+            size: [2.0, y1 - y0], // 2px wide cursor
             paint: Paint::solid(color),
             border: GradientPaint::default(),
             border_width: [0.0; 4],

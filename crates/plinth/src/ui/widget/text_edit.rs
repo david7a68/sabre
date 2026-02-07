@@ -22,7 +22,6 @@ impl<'a> TextEdit<'a> {
     pub fn new(builder: &'a mut UiBuilder<'_>, width: Size) -> Self {
         let mut builder = builder.child();
         builder.width(width);
-        builder.height(Size::Fixed(120.0));
 
         let (interaction, state_flags) = Interaction::compute(
             &builder,
@@ -67,6 +66,11 @@ impl<'a> TextEdit<'a> {
         self
     }
 
+    pub fn height(mut self, height: Size) -> Self {
+        self.builder.height(height);
+        self
+    }
+
     pub fn finish(mut self) -> (Option<&'a str>, Interaction) {
         let is_focused = self.state_flags.contains(StateFlags::FOCUSED);
 
@@ -97,6 +101,8 @@ impl<'a> TextEdit<'a> {
             .context
             .upsert_dynamic_text_layout(self.builder.id);
 
+        theme.apply_plain_editor_styles(style_id, self.state_flags, &mut dynamic_layout.editor);
+
         if is_focused {
             Self::handle_keyboard_events(&input, dynamic_layout, self.builder.text_context);
         }
@@ -111,37 +117,28 @@ impl<'a> TextEdit<'a> {
             self.builder.text_context,
         );
 
-        theme.apply_plain_editor_styles(style_id, self.state_flags, &mut dynamic_layout.editor);
+        let style = theme.get(StyleClass::Label);
+        let cursor_size = style.font_size.get(self.state_flags) as f32;
+        let padding = style.padding.get(self.state_flags);
 
-        let layout = dynamic_layout.editor.layout(
-            &mut self.builder.text_context.fonts,
-            &mut self.builder.text_context.layouts,
-        );
-
-        let size = layout.calculate_content_widths();
-
-        let (cursor_size, selection_color, cursor_color) = if is_focused {
-            let style = theme.get(StyleClass::Label);
+        let (selection_color, cursor_color) = if is_focused {
             let sel_color = style.selection_color.get(self.state_flags);
             let cur_color = style.cursor_color.get(self.state_flags);
-            let cursor_sz = style.font_size.get(self.state_flags) as f32;
-
-            (cursor_sz, sel_color, cur_color)
+            (sel_color, cur_color)
         } else {
             Default::default()
         };
 
+        let node = self.builder.context.ui_tree.atom_mut(self.builder.index);
+        if node.height == Size::default() {
+            node.height = Size::Fixed(cursor_size + padding.top + padding.bottom);
+        }
+
         self.builder.context.ui_tree.add(
             Some(self.builder.index),
             Atom {
-                width: Size::Flex {
-                    min: size.min,
-                    max: size.max,
-                },
-                height: Size::Fit {
-                    min: 0.0,
-                    max: f32::MAX,
-                },
+                width: Size::Grow,
+                height: Size::Grow,
                 ..Default::default()
             },
             (
@@ -197,12 +194,10 @@ impl<'a> TextEdit<'a> {
                 PhysicalKey::Code(KeyCode::ShiftLeft | KeyCode::ShiftRight)
             );
 
-            // Skip modifier keys themselves
             if is_ctrl || is_shift {
                 continue;
             }
 
-            // Use current modifier state for ctrl/shift
             let ctrl_held = modifiers.control_key();
             let shift_held = modifiers.shift_key();
 

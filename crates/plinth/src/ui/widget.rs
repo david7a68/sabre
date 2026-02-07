@@ -24,7 +24,7 @@ pub trait UiBuilderWidgetsExt {
 
     fn text_button(&mut self, label: &str) -> Interaction;
 
-    fn text_edit(&mut self, initial_text: &str, width: Size) -> text_edit::TextEdit<'_>;
+    fn text_edit(&mut self, initial_text: &str, width: f32) -> text_edit::TextEdit<'_>;
 
     fn label(&mut self, text: &str);
 }
@@ -38,8 +38,8 @@ impl UiBuilderWidgetsExt for UiBuilder<'_> {
         button::Button::new(self, Some(label)).finish()
     }
 
-    fn text_edit(&mut self, default_text: &str, width: Size) -> text_edit::TextEdit<'_> {
-        text_edit::TextEdit::new(self, width).default_text(default_text)
+    fn text_edit(&mut self, default_text: &str, width: f32) -> text_edit::TextEdit<'_> {
+        text_edit::TextEdit::new(self, Size::Fixed(width)).default_text(default_text)
     }
 
     fn label(&mut self, text: &str) {

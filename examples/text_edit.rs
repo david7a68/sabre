@@ -8,7 +8,6 @@ use plinth::runtime::ViewportConfig;
 use plinth::ui::Alignment;
 use plinth::ui::LayoutDirection;
 use plinth::ui::Padding;
-use plinth::ui::Size::Fit;
 use plinth::ui::UiBuilder;
 use plinth::ui::widget::UiBuilderWidgetsExt;
 
@@ -55,18 +54,8 @@ impl AppWindow {
 
         panel.label("TextEdit Widget Demo:");
 
-        // Create a text edit field
-        let (text_result, interaction) = panel
-            .text_edit(
-                &self.text_content,
-                Fit {
-                    min: 50.0,
-                    max: 200.0,
-                },
-            )
-            .finish();
+        let (text_result, interaction) = panel.text_edit(&self.text_content, 200.0).finish();
 
-        // Update stored text if available (not composing)
         let is_composing = if let Some(text_str) = text_result {
             self.text_content = text_str.to_string();
             false

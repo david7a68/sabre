@@ -101,11 +101,16 @@ impl TextLayoutStorage {
         match layout_id {
             Some(id) => (id, self.dynamic_layouts.get_mut(id).unwrap()),
             None => {
+                let mut editor = PlainEditor::new(14.0);
+
+                editor.set_quantize(true);
+
                 let layout = DynamicTextLayout {
-                    editor: PlainEditor::new(14.0),
+                    editor,
                     prev_width: 0.0,
                     prev_alignment: None,
                 };
+
                 let id = self.dynamic_layouts.insert(layout);
                 (id, self.dynamic_layouts.get_mut(id).unwrap())
             }
