@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::sync::OnceLock;
 
 use smallvec::SmallVec;
 
@@ -12,6 +13,9 @@ use super::style::StyleError;
 use super::style::StyleId;
 use super::style::StyleProperty;
 use super::style::StyleRegistry;
+
+static DEFAULT_FONT_FEATURES: OnceLock<parley::FontSettings<'static, parley::FontFeature>> =
+    OnceLock::new();
 
 #[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -127,38 +131,11 @@ impl Theme {
     ) {
         use parley::StyleProperty as Prop;
 
-        let style = self.styles.get(style_id).unwrap();
+        let style = self.enumerate_styles(style_id, state, |prop| {
+            builder.push_default(prop);
+        });
 
-        builder.push_default(Prop::Brush(style.text_color.get(state)));
-        builder.push_default(Prop::FontSize(style.font_size.get(state) as f32));
-        builder.push_default(Prop::FontStyle(style.font_style.get(state).into()));
-        builder.push_default(Prop::FontWeight(parley::FontWeight::new(
-            style.font_weight.get(state) as f32,
-        )));
-        builder.push_default(Prop::StrikethroughBrush(Some(
-            style.strikethrough_color.get(state),
-        )));
-        builder.push_default(Prop::StrikethroughOffset(Some(
-            style.strikethrough_offset.get(state),
-        )));
-        builder.push_default(Prop::UnderlineBrush(Some(style.underline_color.get(state))));
-        builder.push_default(Prop::UnderlineOffset(Some(
-            style.underline_offset.get(state),
-        )));
-
-        let font = style.font.get(state);
-
-        let features = font
-            .features
-            .iter()
-            .map(|f| (*f).into())
-            .collect::<SmallVec<[_; 16]>>();
-
-        builder.push_default(Prop::FontFeatures(parley::FontSettings::List(
-            features.as_slice().into(),
-        )));
-
-        match &font.family {
+        match &style.font.get(state).family {
             FontStack::Source(cow) => {
                 builder.push_default(Prop::FontStack(parley::FontStack::Source(cow.clone())));
             }
@@ -179,10 +156,84 @@ impl Theme {
             }
         }
     }
+
+    pub(crate) fn apply_plain_editor_styles(
+        &self,
+        style_id: StyleId,
+        state: StateFlags,
+        editor: &mut parley::PlainEditor<Color>,
+    ) {
+        use parley::StyleProperty as Prop;
+
+        let styles = editor.edit_styles();
+
+        let style = self.enumerate_styles(style_id, state, |prop| {
+            styles.insert(prop);
+        });
+
+        match &style.font.get(state).family {
+            FontStack::Source(cow) => {
+                styles.insert(Prop::FontStack(parley::FontStack::Source(cow.clone())));
+            }
+            FontStack::Single(font_family) => {
+                styles.insert(Prop::FontStack(parley::FontStack::Single(
+                    font_family.clone().into(),
+                )));
+            }
+            FontStack::List(cow) => {
+                let families: Vec<parley::FontFamily> =
+                    cow.iter().cloned().map(|f| f.into()).collect();
+                styles.insert(Prop::FontStack(parley::FontStack::List(families.into())));
+            }
+        }
+    }
+
+    fn enumerate_styles<'a>(
+        &self,
+        style_id: StyleId,
+        state: StateFlags,
+        mut callback: impl FnMut(parley::StyleProperty<'a, Color>),
+    ) -> &Style {
+        use parley::StyleProperty as Prop;
+
+        let style = self.styles.get(style_id).unwrap();
+
+        callback(Prop::FontFeatures(default_font_features()));
+        callback(Prop::Brush(style.text_color.get(state)));
+        callback(Prop::FontSize(style.font_size.get(state) as f32));
+        callback(Prop::FontStyle(style.font_style.get(state).into()));
+        callback(Prop::FontWeight(parley::FontWeight::new(
+            style.font_weight.get(state) as f32,
+        )));
+        callback(Prop::StrikethroughBrush(Some(
+            style.strikethrough_color.get(state),
+        )));
+        callback(Prop::StrikethroughOffset(Some(
+            style.strikethrough_offset.get(state),
+        )));
+        callback(Prop::UnderlineBrush(Some(style.underline_color.get(state))));
+        callback(Prop::UnderlineOffset(Some(
+            style.underline_offset.get(state),
+        )));
+
+        style
+    }
 }
 
 impl Default for Theme {
     fn default() -> Self {
         Self::new()
     }
+}
+
+fn default_font_features() -> parley::FontSettings<'static, parley::FontFeature> {
+    DEFAULT_FONT_FEATURES
+        .get_or_init(|| {
+            let list = Vec::leak(
+                parley::FontFeature::parse_list("kern, rlig, dlig, liga, clig, calt").collect(),
+            );
+
+            parley::FontSettings::List(Cow::Borrowed(list))
+        })
+        .clone()
 }

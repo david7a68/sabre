@@ -54,6 +54,7 @@ impl AppContextBuilder {
                 theme,
                 graphics: None,
                 text_system: TextLayoutContext::default(),
+                format_buffer: String::with_capacity(2048),
                 event_loop_proxy: event_loop.create_proxy(),
             },
             windows: HashMap::new(),
@@ -81,6 +82,7 @@ pub struct AppContext {
 
     graphics: Option<GraphicsContext>,
     text_system: TextLayoutContext,
+    format_buffer: String,
 
     event_loop_proxy: EventLoopProxy,
 }
@@ -129,6 +131,7 @@ impl AppContext {
 
             let ui_builder = window.ui_context.begin_frame(
                 &mut self.text_system,
+                &mut self.format_buffer,
                 &self.theme,
                 &input,
                 Duration::ZERO,
@@ -150,7 +153,9 @@ impl AppContext {
             }
 
             window.canvas.reset(Color::BLACK);
-            window.ui_context.finish(&mut window.canvas);
+            window
+                .ui_context
+                .finish(&mut self.text_system, &mut window.canvas);
 
             if window.canvas.has_unready_textures() {
                 window.window.request_redraw();
@@ -346,6 +351,12 @@ impl<App: AppLifecycleHandler> ApplicationHandler for WinitApp<App> {
                 });
 
                 window.window.request_redraw();
+            }
+            WindowEvent::ModifiersChanged(modifiers) => {
+                let window = self.windows.get(&window_id).unwrap();
+                let viewport = self.runtime.viewports.get_mut(window.viewport).unwrap();
+
+                viewport.input.modifiers = modifiers.state();
             }
             WindowEvent::SurfaceResized(physical_size) => {
                 let window = self.windows.get(&window_id).unwrap();

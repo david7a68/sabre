@@ -16,7 +16,7 @@ use plinth::ui::Theme;
 use plinth::ui::UiBuilder;
 use plinth::ui::style::StateFlags;
 use plinth::ui::style::StyleProperty;
-use plinth::ui::widgets::UiBuilderWidgetsExt;
+use plinth::ui::widget::UiBuilderWidgetsExt;
 use tracing::Level;
 use tracing::info;
 use tracing_subscriber::layer::SubscriberExt;
@@ -177,7 +177,7 @@ impl ViewportState {
                     top: 15.0,
                     bottom: 15.0,
                 })
-                .label("Menu Item 1", None)
+                .set_text("Menu Item 1", None)
                 .rect(Grow, None, None)
                 .rect(45.0, 45.0, Color::RED);
         });
@@ -192,7 +192,7 @@ impl ViewportState {
                     top: 15.0,
                     bottom: 15.0,
                 })
-                .label("modern morning merman even longer", None)
+                .set_text("modern morning merman even longer", None)
                 .rect(Grow, None, None)
                 .rect(45.0, 45.0, Color::RED);
         });
@@ -207,7 +207,7 @@ impl ViewportState {
                     top: 15.0,
                     bottom: 15.0,
                 })
-                .label("VA To ff ti it tt ft", None)
+                .set_text("VA To ff ti it tt ft", None)
                 .rect(Grow, None, None)
                 .rect(45.0, 45.0, Color::RED);
         });

@@ -6,6 +6,7 @@ use rapidhash::v3::rapidhash_v3;
 use crate::graphics::Color;
 use crate::graphics::GradientPaint;
 use crate::graphics::Paint;
+use crate::graphics::TextAlignment;
 use crate::graphics::TextLayoutContext;
 
 use super::Alignment;
@@ -17,14 +18,15 @@ use super::Padding;
 use super::Size;
 use super::UiElementId;
 use super::WidgetId;
-use super::WidgetState;
 use super::context::LayoutContent;
 use super::context::UiContext;
 use super::style::BorderWidths;
 use super::style::CornerRadii;
 use super::style::StateFlags;
+use super::style::StyleId;
 use super::theme::StyleClass;
 use super::theme::Theme;
+use super::widget::WidgetState;
 
 /// Compute a hash of a string for cache invalidation
 fn hash_string(text: &str) -> u64 {
@@ -37,8 +39,11 @@ pub struct UiBuilder<'a> {
     pub(super) theme: &'a Theme,
     pub(super) input: &'a Input,
     pub(super) context: &'a mut UiContext,
+    pub(super) format_buffer: &'a mut String,
     pub(super) text_context: &'a mut TextLayoutContext,
 
+    pub(super) style_id: StyleId,
+    pub(super) style_state: StateFlags,
     pub(super) num_child_widgets: usize,
 }
 
@@ -71,6 +76,9 @@ impl UiBuilder<'_> {
         let padding = style.padding.get(state);
         let spacing = style.child_spacing.get(state);
         let direction = style.child_direction.get(state);
+
+        self.style_id = self.theme.get_id(class);
+        self.style_state = state;
 
         self.child_alignment(major_align, minor_align)
             .child_spacing(spacing)
@@ -214,23 +222,13 @@ impl UiBuilder<'_> {
         self
     }
 
-    pub fn label(&mut self, text: &str, height: impl Into<Size>) -> &mut Self {
-        self.label_with_state(text, height, StateFlags::NORMAL)
-    }
-
-    pub fn label_with_state(
-        &mut self,
-        text: &str,
-        height: impl Into<Size>,
-        state: StateFlags,
-    ) -> &mut Self {
-        let style_id = self.theme.get_id(StyleClass::Label);
+    pub fn set_text(&mut self, text: &str, height: impl Into<Size>) -> &mut Self {
         let (text_layout_id, static_text_layout) = self.context.upsert_static_text_layout(self.id);
 
         let text_hash = hash_string(text);
 
-        let needs_rebuild = static_text_layout.style_id != style_id
-            || static_text_layout.state_flags != state
+        let needs_rebuild = static_text_layout.style_id != self.style_id
+            || static_text_layout.state_flags != self.style_state
             || static_text_layout.text_hash != text_hash;
 
         if needs_rebuild {
@@ -238,20 +236,23 @@ impl UiBuilder<'_> {
                 &mut self.text_context.fonts,
                 text,
                 1.0,
-                true,
+                false,
             );
 
-            self.theme.push_text_defaults(style_id, state, &mut builder);
+            self.theme
+                .push_text_defaults(self.style_id, self.style_state, &mut builder);
             builder.build_into(&mut static_text_layout.layout, text);
 
             // Update cache tracking fields
-            static_text_layout.style_id = style_id;
-            static_text_layout.state_flags = state;
+            static_text_layout.style_id = self.style_id;
+            static_text_layout.state_flags = self.style_state;
             static_text_layout.text_hash = text_hash;
             static_text_layout.needs_line_break = true;
         }
 
-        let alignment = self.theme.get(StyleClass::Label).text_align.get(state);
+        let alignment = self
+            .theme
+            .resolve_style::<TextAlignment>(self.style_id, self.style_state);
         let size = static_text_layout.layout.calculate_content_widths();
 
         self.context.ui_tree.add(
@@ -267,7 +268,10 @@ impl UiBuilder<'_> {
             (
                 LayoutContent::Text {
                     layout: text_layout_id,
+                    cursor_size: 0.0,
                     alignment,
+                    selection_color: Color::TRANSPARENT,
+                    cursor_color: Color::TRANSPARENT,
                 },
                 None,
             ),
@@ -276,41 +280,8 @@ impl UiBuilder<'_> {
         self
     }
 
-    pub fn container(&mut self) -> UiBuilder<'_> {
-        let container_index = self.context.ui_tree.add(
-            Some(self.index),
-            Atom::default(),
-            (LayoutContent::None, None),
-        );
-
-        UiBuilder {
-            id: self.id,
-            theme: self.theme,
-            input: self.input,
-            context: self.context,
-            index: container_index,
-            text_context: self.text_context,
-            num_child_widgets: 0,
-        }
-    }
-
     pub fn child(&mut self) -> UiBuilder<'_> {
-        let child_index = self.context.ui_tree.add(
-            Some(self.index),
-            Atom::default(),
-            (LayoutContent::None, None),
-        );
-
-        self.num_child_widgets += 1;
-        UiBuilder {
-            id: self.id.then(self.num_child_widgets),
-            theme: self.theme,
-            input: self.input,
-            context: self.context,
-            index: child_index,
-            text_context: self.text_context,
-            num_child_widgets: 0,
-        }
+        self.named_child(self.num_child_widgets + 1)
     }
 
     pub fn named_child(&mut self, name: impl Hash) -> UiBuilder<'_> {
@@ -329,7 +300,10 @@ impl UiBuilder<'_> {
             input: self.input,
             context: self.context,
             index: child_index,
+            format_buffer: self.format_buffer,
             text_context: self.text_context,
+            style_id: self.style_id,
+            style_state: self.style_state,
             num_child_widgets: 0,
         }
     }
@@ -346,5 +320,22 @@ impl UiBuilder<'_> {
     ) -> &mut Self {
         callback(&mut self.named_child(name));
         self
+    }
+
+    /// Check if this widget currently has focus
+    pub fn is_focused(&self) -> bool {
+        self.context.focused_widget == Some(self.id)
+    }
+
+    /// Request focus for this widget
+    pub fn request_focus(&mut self) {
+        self.context.focused_widget = Some(self.id);
+    }
+
+    /// Release focus if this widget has it
+    pub fn release_focus(&mut self) {
+        if self.context.focused_widget == Some(self.id) {
+            self.context.focused_widget = None;
+        }
     }
 }

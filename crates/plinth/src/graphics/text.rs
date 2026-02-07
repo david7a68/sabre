@@ -48,20 +48,12 @@ impl From<FontStyle> for parley::FontStyle {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Font {
     pub family: FontStack,
-    pub features: Cow<'static, [FontFeature]>,
 }
 
 impl Default for Font {
     fn default() -> Self {
         Self {
             family: FontStack::Source(Cow::Borrowed("serif")),
-            features: Cow::Borrowed(&[
-                FontFeature::ContextualAlternatives,
-                FontFeature::ContextualLigatures,
-                FontFeature::DiscretionaryLigatures,
-                FontFeature::Kerning,
-                FontFeature::StandardLigatures,
-            ]),
         }
     }
 }
@@ -132,46 +124,5 @@ impl FontWeight {
 impl From<FontWeight> for parley::FontWeight {
     fn from(value: FontWeight) -> Self {
         parley::FontWeight::new(value.0)
-    }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum FontFeature {
-    /// The CALT feature tag for contextual alternatives.
-    ///
-    ///
-    ContextualAlternatives,
-    /// The CLIG feature tag for contextual ligatures.
-    ///
-    /// Should usually be enabled by default.
-    ContextualLigatures,
-    /// The GLIG feature tag for discretionary ligatures.
-    ///
-    /// May be enabled with other ligatures and should usually be disabled by default.
-    DiscretionaryLigatures,
-    /// The LIGA feature tag for standard ligatures.
-    ///
-    /// Should usually be enabled by default.
-    StandardLigatures,
-    /// The RLIG feature tag for required ligatures.
-    ///
-    /// Required for correct rendering of some scripts.
-    RequiredLigatures,
-    /// The KERN feature tag for kerning.
-    ///
-    /// Should usually be enabled by default.
-    Kerning,
-}
-
-impl From<FontFeature> for parley::style::FontFeature {
-    fn from(value: FontFeature) -> Self {
-        match value {
-            FontFeature::ContextualAlternatives => Self::parse("\"calt\"").unwrap(),
-            FontFeature::ContextualLigatures => Self::parse("\"clig\"").unwrap(),
-            FontFeature::DiscretionaryLigatures => Self::parse("\"dlig\"").unwrap(),
-            FontFeature::Kerning => Self::parse("\"kern\"").unwrap(),
-            FontFeature::RequiredLigatures => Self::parse("\"rlig\"").unwrap(),
-            FontFeature::StandardLigatures => Self::parse("\"liga\"").unwrap(),
-        }
     }
 }

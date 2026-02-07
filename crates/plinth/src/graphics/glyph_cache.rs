@@ -106,23 +106,28 @@ impl GlyphCacheInner {
 }
 
 const SUBPIXEL_VARIANTS: f32 = 3.0;
+const SUBPIXEL_VARIANTS_U8: u8 = 3;
 
 #[derive(Clone, Copy, Debug)]
 struct SubpixelAlignment {
     step: u8,
     offset: f32,
+    needs_carry: bool,
 }
 
 impl SubpixelAlignment {
     fn new(value: f32) -> Self {
-        let fraction = value.fract();
-
+        let fraction = value - value.floor();
         let scaled = fraction * SUBPIXEL_VARIANTS;
-        let step = scaled.round() as u8 % SUBPIXEL_VARIANTS as u8;
+        let rounded = scaled.round() as u8;
+        let needs_carry = rounded >= SUBPIXEL_VARIANTS_U8;
+        let step = rounded % SUBPIXEL_VARIANTS_U8;
+        let offset = step as f32 / SUBPIXEL_VARIANTS;
 
         Self {
             step,
-            offset: fraction,
+            offset,
+            needs_carry,
         }
     }
 }
@@ -136,8 +141,8 @@ fn draw_glyph_run(
     glyph_run: &GlyphRun<Color>,
     origin: [f32; 2],
 ) {
-    let mut run_x = glyph_run.offset() + origin[0].floor();
-    let run_y = glyph_run.baseline() + origin[1].floor();
+    let mut run_x = glyph_run.offset() + origin[0];
+    let run_y = (glyph_run.baseline() + origin[1]).round();
     let style = glyph_run.style();
     let color = style.brush;
 
@@ -166,7 +171,17 @@ fn draw_glyph_run(
 
         // figure out which glyph offset variant to use
         let x_placement = SubpixelAlignment::new(x);
-        let y_placement = SubpixelAlignment::new(y);
+        let y_placement = SubpixelAlignment {
+            step: 0,
+            offset: 0.0,
+            needs_carry: false,
+        };
+
+        let mut snapped_x = x.floor();
+        let snapped_y = y.floor();
+        if x_placement.needs_carry {
+            snapped_x += 1.0;
+        }
 
         let glyph_id = glyph.id as u16;
         let key = GlyphCacheKey {
@@ -222,8 +237,8 @@ fn draw_glyph_run(
             }
         };
 
-        let glyph_x = (x as i32 + entry.left) as f32;
-        let glyph_y = (y as i32 - entry.top) as f32;
+        let glyph_x = (snapped_x as i32 + entry.left) as f32;
+        let glyph_y = (snapped_y as i32 - entry.top) as f32;
 
         canvas.push(
             textures,

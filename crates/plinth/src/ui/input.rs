@@ -39,6 +39,7 @@ pub struct Input {
     pub mouse_state: MouseButtonState,
     pub window_size: WindowSize,
     pub keyboard_events: SmallVec<[KeyboardEvent; 4]>,
+    pub modifiers: winit::keyboard::ModifiersState,
 }
 
 #[derive(Clone, Debug)]
