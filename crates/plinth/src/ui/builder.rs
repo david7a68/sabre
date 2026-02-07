@@ -236,7 +236,7 @@ impl UiBuilder<'_> {
                 &mut self.text_context.fonts,
                 text,
                 1.0,
-                true,
+                false,
             );
 
             self.theme

@@ -112,16 +112,23 @@ const SUBPIXEL_VARIANTS_U8: u8 = 3;
 struct SubpixelAlignment {
     step: u8,
     offset: f32,
+    needs_carry: bool,
 }
 
 impl SubpixelAlignment {
     fn new(value: f32) -> Self {
         let fraction = value - value.floor();
         let scaled = fraction * SUBPIXEL_VARIANTS;
-        let step = (scaled.floor() as u8) % SUBPIXEL_VARIANTS_U8;
+        let rounded = scaled.round() as u8;
+        let needs_carry = rounded >= SUBPIXEL_VARIANTS_U8;
+        let step = rounded % SUBPIXEL_VARIANTS_U8;
         let offset = step as f32 / SUBPIXEL_VARIANTS;
 
-        Self { step, offset }
+        Self {
+            step,
+            offset,
+            needs_carry,
+        }
     }
 }
 
@@ -167,10 +174,14 @@ fn draw_glyph_run(
         let y_placement = SubpixelAlignment {
             step: 0,
             offset: 0.0,
+            needs_carry: false,
         };
 
-        let snapped_x = x.floor();
+        let mut snapped_x = x.floor();
         let snapped_y = y.floor();
+        if x_placement.needs_carry {
+            snapped_x += 1.0;
+        }
 
         let glyph_id = glyph.id as u16;
         let key = GlyphCacheKey {
