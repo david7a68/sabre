@@ -142,6 +142,7 @@ impl AppContext {
             );
 
             let context = Context {
+                window: window.window.as_ref(),
                 viewports: &mut self.viewports,
                 deferred_commands: &mut self.deferred_commands,
                 event_loop_proxy: &self.event_loop_proxy,
@@ -196,6 +197,7 @@ pub struct ViewportConfig {
 }
 
 pub struct Context<'a> {
+    window: &'a dyn winit::window::Window,
     viewports: &'a mut SlotMap<ViewportId, Viewport>,
     deferred_commands: &'a mut Vec<ViewportCommand>,
     event_loop_proxy: &'a EventLoopProxy,
@@ -221,6 +223,10 @@ impl Context<'_> {
             id,
             event_loop_proxy: self.event_loop_proxy.clone(),
         }
+    }
+
+    pub fn request_repaint(&self) {
+        self.window.request_redraw();
     }
 }
 

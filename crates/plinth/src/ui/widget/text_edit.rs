@@ -32,10 +32,10 @@ impl<'a> TextEdit<'a> {
 
         // Apply styles early as defaults, so that users have opportunity to
         // override them before calling `finish()`.
-        builder.apply_style(StyleClass::Label, state_flags);
+        builder.apply_style(StyleClass::TextEdit, state_flags);
 
         let min_height = {
-            let style = builder.theme.get(StyleClass::Label);
+            let style = builder.theme.get(StyleClass::TextEdit);
 
             let text_height = style.font_size.get(state_flags) as f32;
             let padding = style.padding.get(state_flags);
@@ -58,7 +58,7 @@ impl<'a> TextEdit<'a> {
         }
     }
 
-    pub fn default_text(self, text: &str) -> Self {
+    pub fn default_text(&mut self, text: &str) -> &mut Self {
         let (_, dynamic_layout) = self
             .builder
             .context
@@ -71,7 +71,7 @@ impl<'a> TextEdit<'a> {
         self
     }
 
-    pub fn text(self, text: &str) -> Self {
+    pub fn text(&mut self, text: &str) -> &mut Self {
         let (_, dynamic_layout) = self
             .builder
             .context
@@ -82,7 +82,7 @@ impl<'a> TextEdit<'a> {
         self
     }
 
-    pub fn height(mut self, height: Size) -> Self {
+    pub fn height(&mut self, height: Size) -> &mut Self {
         self.builder.height(height);
         self
     }
@@ -96,7 +96,7 @@ impl<'a> TextEdit<'a> {
             self.builder.release_focus();
         }
 
-        let style_id = self.builder.theme().get_id(StyleClass::Label);
+        let style_id = self.builder.theme().get_id(StyleClass::TextEdit);
         let theme = self.builder.theme;
 
         let input = self.builder.input().clone();

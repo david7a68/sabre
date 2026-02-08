@@ -17,6 +17,7 @@ pub mod text_edit;
 pub struct Interaction {
     pub is_activated: bool,
     pub is_hovered: bool,
+    pub is_focused: bool,
 }
 
 pub trait UiBuilderWidgetsExt {
@@ -26,7 +27,7 @@ pub trait UiBuilderWidgetsExt {
 
     fn text_edit(&mut self, initial_text: &str, width: f32) -> text_edit::TextEdit<'_>;
 
-    fn label(&mut self, text: &str);
+    fn label(&mut self, text: &str) -> label::Label<'_>;
 }
 
 impl UiBuilderWidgetsExt for UiBuilder<'_> {
@@ -39,11 +40,13 @@ impl UiBuilderWidgetsExt for UiBuilder<'_> {
     }
 
     fn text_edit(&mut self, default_text: &str, width: f32) -> text_edit::TextEdit<'_> {
-        text_edit::TextEdit::new(self, Size::Fixed(width)).default_text(default_text)
+        let mut edit = text_edit::TextEdit::new(self, Size::Fixed(width));
+        edit.default_text(default_text);
+        edit
     }
 
-    fn label(&mut self, text: &str) {
-        label::Label::new(self, text);
+    fn label(&mut self, text: &str) -> label::Label<'_> {
+        label::Label::new(self, text)
     }
 }
 
@@ -76,7 +79,7 @@ impl Interaction {
         let just_pressed = is_left_down && !was_active;
         let just_released = !is_left_down && was_active;
 
-        let is_clicked = match behavior {
+        let is_activated = match behavior {
             ClickBehavior::OnPress => is_hovered && just_pressed,
             ClickBehavior::OnRelease => is_hovered && just_released,
         };
@@ -88,14 +91,15 @@ impl Interaction {
         if is_hovered && is_left_down {
             state |= StateFlags::PRESSED & interest;
         }
-        if is_clicked || ((is_hovered || !just_pressed) && was_focused) {
+        if is_activated || ((is_hovered || !just_pressed) && was_focused) {
             state |= StateFlags::FOCUSED & interest;
         }
 
         (
             Self {
-                is_activated: is_clicked,
+                is_activated,
                 is_hovered,
+                is_focused: state.contains(StateFlags::FOCUSED),
             },
             state,
         )

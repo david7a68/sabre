@@ -23,11 +23,12 @@ pub enum StyleClass {
     Panel = 0,
     Button,
     Label,
+    TextEdit,
 }
 
 impl StyleClass {
     /// Number of style class variants. Update when adding new variants.
-    pub const COUNT: usize = 3;
+    pub const COUNT: usize = 4;
 }
 
 pub struct Theme {
@@ -74,16 +75,24 @@ impl Theme {
         self.styles.update(default_style_id, properties);
     }
 
-    /// Creates a new inline style and assigns it to a style class.
+    /// Modifies a style class by replacing its properties, registering a new
+    /// style if the class doesn't already have one assigned.
     ///
-    /// This is a convenience method for creating and assigning a style in one step.
-    pub fn set_class_properties(
+    pub fn set_style_class(
         &mut self,
         class: StyleClass,
         parent: Option<StyleId>,
         properties: impl IntoIterator<Item = (StateFlags, StyleProperty)>,
     ) -> Result<StyleId, StyleError> {
-        let style = self.create_style(parent, properties)?;
+        let current = self.get_id(class);
+
+        let style = if current == self.styles.default_style_id() {
+            self.create_style(parent, properties)?
+        } else {
+            self.update_style(current, properties);
+            current
+        };
+
         self.set(class, style);
         Ok(style)
     }
