@@ -26,7 +26,7 @@ impl AppLifecycleHandler for Demo {
     fn resume(&mut self, runtime: &mut AppContext) {
         runtime.create_viewport(
             ViewportConfig {
-                title: "Counter Demo".into(),
+                title: "Counter".into(),
                 width: 400,
                 height: 300,
             },

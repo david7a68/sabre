@@ -68,7 +68,7 @@ impl AppLifecycleHandler for Demo {
     fn resume(&mut self, runtime: &mut AppContext) {
         runtime.create_viewport(
             ViewportConfig {
-                title: "Temprature Converter Demo".into(),
+                title: "Temperature Converter".into(),
                 width: 400,
                 height: 300,
             },
@@ -95,7 +95,7 @@ impl AppWindow {
 
         let mut edit_c = panel.text_edit("", 60.0);
         if let Some(temp_c) = self.temp_c.take() {
-            edit_c.text(&format!("{:.2}", temp_c));
+            edit_c.set_text(&format!("{:.2}", temp_c));
         }
 
         let temp_c = parse_temp(edit_c.finish());
@@ -107,7 +107,7 @@ impl AppWindow {
         if let Some(temp_c) = temp_c {
             let temp_f = temp_c * 9.0 / 5.0 + 32.0;
             if temp_f != self.temp_f {
-                edit_f.text(&format!("{:.2}", temp_f));
+                edit_f.set_text(&format!("{:.2}", temp_f));
                 self.temp_f = temp_f;
             }
         }

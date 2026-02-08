@@ -40,9 +40,7 @@ impl UiBuilderWidgetsExt for UiBuilder<'_> {
     }
 
     fn text_edit(&mut self, default_text: &str, width: f32) -> text_edit::TextEdit<'_> {
-        let mut edit = text_edit::TextEdit::new(self, Size::Fixed(width));
-        edit.default_text(default_text);
-        edit
+        text_edit::TextEdit::new(self, Size::Fixed(width)).default_text(default_text)
     }
 
     fn label(&mut self, text: &str) -> label::Label<'_> {

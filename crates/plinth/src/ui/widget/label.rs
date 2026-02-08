@@ -33,27 +33,27 @@ impl<'a> Label<'a> {
         self
     }
 
-    pub fn color(&mut self, color: Color) -> &mut Self {
+    pub fn color(mut self, color: Color) -> Self {
         self.builder.color(color);
         self
     }
 
-    pub fn width(&mut self, width: impl Into<Size>) -> &mut Self {
+    pub fn width(mut self, width: impl Into<Size>) -> Self {
         self.builder.width(width);
         self
     }
 
-    pub fn height(&mut self, height: impl Into<Size>) -> &mut Self {
+    pub fn height(mut self, height: impl Into<Size>) -> Self {
         self.builder.height(height);
         self
     }
 
-    pub fn size(&mut self, width: impl Into<Size>, height: impl Into<Size>) -> &mut Self {
+    pub fn size(mut self, width: impl Into<Size>, height: impl Into<Size>) -> Self {
         self.builder.size(width, height);
         self
     }
 
-    pub fn padding(&mut self, padding: Padding) -> &mut Self {
+    pub fn padding(mut self, padding: Padding) -> Self {
         self.builder.padding(padding);
         self
     }

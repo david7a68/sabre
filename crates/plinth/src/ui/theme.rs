@@ -32,18 +32,17 @@ impl StyleClass {
 }
 
 pub struct Theme {
-    well_known_classes: [StyleId; StyleClass::COUNT],
+    well_known_classes: [Option<StyleId>; StyleClass::COUNT],
     styles: StyleRegistry,
 }
 
 impl Theme {
     pub fn new() -> Self {
         let styles = StyleRegistry::default();
-        let default_style = styles.default_style_id();
 
         Self {
             styles,
-            well_known_classes: [default_style; StyleClass::COUNT],
+            well_known_classes: [None; StyleClass::COUNT],
         }
     }
 
@@ -55,12 +54,12 @@ impl Theme {
 
     /// Gets the style ID assigned to a style class.
     pub fn get_id(&self, class: StyleClass) -> StyleId {
-        self.well_known_classes[class as usize]
+        self.well_known_classes[class as usize].unwrap_or(self.styles.default_style_id())
     }
 
     /// Assigns a style to a style class.
     pub fn set(&mut self, class: StyleClass, style_id: StyleId) {
-        self.well_known_classes[class as usize] = style_id;
+        self.well_known_classes[class as usize] = Some(style_id);
     }
 
     /// Sets properties on the default style.
@@ -84,13 +83,11 @@ impl Theme {
         parent: Option<StyleId>,
         properties: impl IntoIterator<Item = (StateFlags, StyleProperty)>,
     ) -> Result<StyleId, StyleError> {
-        let current = self.get_id(class);
-
-        let style = if current == self.styles.default_style_id() {
-            self.create_style(parent, properties)?
-        } else {
+        let style = if let Some(current) = self.well_known_classes[class as usize] {
             self.update_style(current, properties);
             current
+        } else {
+            self.create_style(parent, properties)?
         };
 
         self.set(class, style);
@@ -99,7 +96,8 @@ impl Theme {
 
     /// Resolves a property for a specific style class and state combination.
     pub fn resolve<K: PropertyKey>(&self, style: StyleClass, state: StateFlags) -> K::Value {
-        let style_id = self.well_known_classes[style as usize];
+        let style_id =
+            self.well_known_classes[style as usize].unwrap_or(self.styles.default_style_id());
         self.styles.resolve::<K>(style_id, state)
     }
 

@@ -58,7 +58,7 @@ impl<'a> TextEdit<'a> {
         }
     }
 
-    pub fn default_text(&mut self, text: &str) -> &mut Self {
+    pub fn default_text(self, text: &str) -> Self {
         let (_, dynamic_layout) = self
             .builder
             .context
@@ -71,7 +71,7 @@ impl<'a> TextEdit<'a> {
         self
     }
 
-    pub fn text(&mut self, text: &str) -> &mut Self {
+    pub fn text(self, text: &str) -> Self {
         let (_, dynamic_layout) = self
             .builder
             .context
@@ -82,7 +82,18 @@ impl<'a> TextEdit<'a> {
         self
     }
 
-    pub fn height(&mut self, height: Size) -> &mut Self {
+    pub fn set_text(&mut self, text: &str) -> &mut Self {
+        let (_, dynamic_layout) = self
+            .builder
+            .context
+            .dynamic_text_layout(self.builder.text_layouts, self.builder.id);
+
+        dynamic_layout.editor.set_text(text);
+
+        self
+    }
+
+    pub fn height(mut self, height: Size) -> Self {
         self.builder.height(height);
         self
     }
