@@ -302,7 +302,7 @@ fn write_commands(
                         .entry((*color_storage_id, *alpha_storage_id))
                         .or_insert_with(|| {
                             render_pipeline
-                                .create_texure_bind_group(&color_texture_view, &alpha_texture_view)
+                                .create_texture_bind_group(&color_texture_view, &alpha_texture_view)
                         });
 
                     render_pipeline.bind_texture(&mut render_pass, bind_group);

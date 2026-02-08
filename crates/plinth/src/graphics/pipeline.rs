@@ -19,7 +19,7 @@ pub(crate) struct RenderPipeline {
 }
 
 impl RenderPipeline {
-    pub fn create_texure_bind_group(
+    pub fn create_texture_bind_group(
         &self,
         color_texture: &wgpu::TextureView,
         alpha_texture: &wgpu::TextureView,

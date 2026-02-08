@@ -1,4 +1,6 @@
 name: Check
+permissions:
+  contents: read
 
 on:
   push:
@@ -14,8 +16,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  clippy:
-    runs-on: windows-2025
+  lints:
+    runs-on: windows-latest
 
     steps:
     # Setup
@@ -26,12 +28,18 @@ jobs:
       with:
         shared-key: "rust-cache"
 
-    # Checks
+    - name: Install wget for Windows
+      run: choco install wget --no-progress
+
+    # Lints 
+    - name: Check spelling of file.txt
+      uses: crate-ci/typos@v1.43.3
+
     - name: Run Clippy
       run: cargo clippy --locked --all-targets -- -D warnings
 
   test:
-    runs-on: windows-2025
+    runs-on: windows-latest
 
     steps:
     # Setup
