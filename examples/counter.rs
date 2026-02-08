@@ -1,3 +1,7 @@
+//! Task 1 of the 7 GUIs benchmark: Counter.
+//!
+//! A simple counter that increments when the button is pressed.
+
 #![allow(unused_crate_dependencies)]
 
 use plinth::graphics::Color;
@@ -13,16 +17,16 @@ use plinth::ui::widget::UiBuilderWidgetsExt;
 
 fn main() {
     tracing_subscriber::fmt().pretty().init();
-    AppContextBuilder::default().run(CounterDemo {});
+    AppContextBuilder::default().run(Demo {});
 }
 
-struct CounterDemo {}
+struct Demo {}
 
-impl AppLifecycleHandler for CounterDemo {
+impl AppLifecycleHandler for Demo {
     fn resume(&mut self, runtime: &mut AppContext) {
         runtime.create_viewport(
             ViewportConfig {
-                title: "Counter Demo".into(),
+                title: "Counter".into(),
                 width: 400,
                 height: 300,
             },
@@ -51,15 +55,9 @@ impl AppWindow {
             .child_direction(LayoutDirection::Vertical);
 
         panel.label(&format!("Counter Value: {}", self.value));
-        panel.label("Press the button or any key to increment");
+        panel.label("Press the button to increment");
 
-        let was_key_pressed = panel
-            .input()
-            .keyboard_events
-            .iter()
-            .any(|event| event.state.is_pressed());
-
-        if panel.text_button("Increment").is_activated || was_key_pressed {
+        if panel.text_button("Increment").is_activated {
             self.value += 1;
         }
     }
