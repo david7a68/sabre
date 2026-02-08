@@ -26,7 +26,10 @@ jobs:
       with:
         shared-key: "rust-cache"
 
-    # Checks
+    # Lints 
+    - name: Check spelling of file.txt
+      uses: crate-ci/typos@v1.43.3
+
     - name: Run Clippy
       run: cargo clippy --locked --all-targets -- -D warnings
 
