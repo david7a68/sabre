@@ -190,39 +190,34 @@ impl UiContext {
                     cursor_size,
                     selection_color,
                     cursor_color,
-                } => {
-                    let Some(text_layout) = text_layouts.get_mut(*text_layout_id) else {
-                        continue;
-                    };
-
-                    match text_layout {
-                        TextLayoutMut::Static(text_layout) => {
-                            canvas.draw_text_layout(text_layout, [layout.x, layout.y]);
-                        }
-                        TextLayoutMut::Dynamic(text_layout) => {
-                            text_layout.editor.selection_geometry_with(|bbox, _| {
-                                Self::draw_selection_rect(
-                                    canvas,
-                                    &bbox,
-                                    *selection_color,
-                                    layout.x,
-                                    layout.y,
-                                );
-                            });
-
-                            if let Some(rect) = text_layout.editor.cursor_geometry(*cursor_size) {
-                                Self::draw_cursor(canvas, &rect, *cursor_color, layout.x, layout.y);
-                            }
-
-                            canvas.draw_text_layout(
-                                text_layout
-                                    .editor
-                                    .layout(&mut text_context.fonts, &mut text_context.layouts),
-                                [layout.x, layout.y],
-                            );
-                        }
+                } => match text_layouts.get_mut(*text_layout_id) {
+                    None => {}
+                    Some(TextLayoutMut::Static(text_layout)) => {
+                        canvas.draw_text_layout(text_layout, [layout.x, layout.y]);
                     }
-                }
+                    Some(TextLayoutMut::Dynamic(text_layout)) => {
+                        text_layout.editor.selection_geometry_with(|bbox, _| {
+                            Self::draw_selection_rect(
+                                canvas,
+                                &bbox,
+                                *selection_color,
+                                layout.x,
+                                layout.y,
+                            );
+                        });
+
+                        if let Some(rect) = text_layout.editor.cursor_geometry(*cursor_size) {
+                            Self::draw_cursor(canvas, &rect, *cursor_color, layout.x, layout.y);
+                        }
+
+                        canvas.draw_text_layout(
+                            text_layout
+                                .editor
+                                .layout(&mut text_context.fonts, &mut text_context.layouts),
+                            [layout.x, layout.y],
+                        );
+                    }
+                },
             }
 
             if let Some(widget_id) = widget_id {

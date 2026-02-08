@@ -68,17 +68,13 @@ impl AppWindow {
         let mut info_panel = panel.panel();
         info_panel.child_direction(LayoutDirection::Horizontal);
 
-        // Copy interaction values before using panel again
-        let is_hovered = interaction.is_hovered;
-        let is_clicked = interaction.is_activated;
-
         info_panel.label(&format!("Current text: {}", self.text_content));
         info_panel.label(&format!(
             "Text length: {} characters",
             self.text_content.len()
         ));
-        info_panel.label(&format!("Hovered: {}", is_hovered));
-        info_panel.label(&format!("Clicked: {}", is_clicked));
+        info_panel.label(&format!("Hovered: {}", interaction.is_hovered));
+        info_panel.label(&format!("Clicked: {}", interaction.is_activated));
 
         if is_composing {
             info_panel.label("(IME composition in progress)");

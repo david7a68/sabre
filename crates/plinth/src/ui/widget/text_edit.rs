@@ -43,10 +43,6 @@ impl<'a> TextEdit<'a> {
             text_height + padding.top + padding.bottom
         };
 
-        // Apply styles early as defaults, so that users have opportunity to
-        // override them before calling `finish()`.
-        builder.apply_style(StyleClass::Label, state_flags);
-
         builder.size(
             width,
             Size::Fit {
@@ -255,12 +251,9 @@ impl<'a> TextEdit<'a> {
         state_flags: StateFlags,
     ) {
         let left_click_count = input.mouse_state.left_click_count;
-        if left_click_count == 0 {
-            return;
-        }
-
         let is_hovered = state_flags.contains(StateFlags::HOVERED);
         let is_focused = state_flags.contains(StateFlags::FOCUSED);
+
         if !(is_hovered || is_focused) {
             return;
         }
