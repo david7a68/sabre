@@ -16,7 +16,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  clippy:
+  lints:
     runs-on: windows-latest
 
     steps:
