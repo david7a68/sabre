@@ -12,6 +12,8 @@ use plinth::ui::UiBuilder;
 use plinth::ui::widget::UiBuilderWidgetsExt;
 
 fn main() {
+    tracing_subscriber::fmt().pretty().init();
+
     AppContextBuilder::default().run(TextEditDemo {});
 }
 
@@ -68,7 +70,7 @@ impl AppWindow {
 
         // Copy interaction values before using panel again
         let is_hovered = interaction.is_hovered;
-        let is_clicked = interaction.is_clicked;
+        let is_clicked = interaction.is_activated;
 
         info_panel.label(&format!("Current text: {}", self.text_content));
         info_panel.label(&format!(

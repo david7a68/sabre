@@ -24,14 +24,10 @@ use super::style::BorderWidths;
 use super::style::CornerRadii;
 use super::style::StateFlags;
 use super::style::StyleId;
+use super::text::TextLayoutStorage;
 use super::theme::StyleClass;
 use super::theme::Theme;
 use super::widget::WidgetState;
-
-/// Compute a hash of a string for cache invalidation
-fn hash_string(text: &str) -> u64 {
-    rapidhash_v3(text.as_bytes())
-}
 
 pub struct UiBuilder<'a> {
     pub(super) id: WidgetId,
@@ -41,9 +37,10 @@ pub struct UiBuilder<'a> {
     pub(super) context: &'a mut UiContext,
     pub(super) format_buffer: &'a mut String,
     pub(super) text_context: &'a mut TextLayoutContext,
+    pub(super) text_layouts: &'a mut TextLayoutStorage,
 
     pub(super) style_id: StyleId,
-    pub(super) style_state: StateFlags,
+    pub(super) state: StateFlags,
     pub(super) num_child_widgets: usize,
 }
 
@@ -71,19 +68,21 @@ impl UiBuilder<'_> {
         self.paint(paint, border, border_width, corner_radii);
 
         // Layout
-        let major_align = style.child_major_alignment.get(state);
-        let minor_align = style.child_minor_alignment.get(state);
-        let padding = style.padding.get(state);
-        let spacing = style.child_spacing.get(state);
-        let direction = style.child_direction.get(state);
-
         self.style_id = self.theme.get_id(class);
-        self.style_state = state;
+        self.state = state;
 
-        self.child_alignment(major_align, minor_align)
-            .child_spacing(spacing)
-            .child_direction(direction)
-            .padding(padding)
+        let atom = self.context.ui_tree.atom_mut(self.index);
+        *atom = Atom {
+            width: style.width.get(state),
+            height: style.height.get(state),
+            inner_padding: style.padding.get(state),
+            major_align: style.child_major_alignment.get(state),
+            minor_align: style.child_minor_alignment.get(state),
+            direction: style.child_direction.get(state),
+            inter_child_padding: style.child_spacing.get(state),
+        };
+
+        self
     }
 
     pub fn color(&mut self, color: impl Into<Color>) -> &mut Self {
@@ -222,14 +221,14 @@ impl UiBuilder<'_> {
         self
     }
 
-    pub fn set_text(&mut self, text: &str, height: impl Into<Size>) -> &mut Self {
-        let (text_layout_id, static_text_layout) = self.context.upsert_static_text_layout(self.id);
+    pub fn text(&mut self, text: &str, height: impl Into<Size>) -> &mut Self {
+        let (text_id, text_layout) = self.context.static_text_layout(self.text_layouts, self.id);
 
         let text_hash = hash_string(text);
 
-        let needs_rebuild = static_text_layout.style_id != self.style_id
-            || static_text_layout.state_flags != self.style_state
-            || static_text_layout.text_hash != text_hash;
+        let needs_rebuild = text_layout.style_id != self.style_id
+            || text_layout.state != self.state
+            || text_layout.text_hash != text_hash;
 
         if needs_rebuild {
             let mut builder = self.text_context.layouts.ranged_builder(
@@ -240,20 +239,20 @@ impl UiBuilder<'_> {
             );
 
             self.theme
-                .push_text_defaults(self.style_id, self.style_state, &mut builder);
-            builder.build_into(&mut static_text_layout.layout, text);
+                .push_text_defaults(self.style_id, self.state, &mut builder);
+            builder.build_into(&mut text_layout.layout, text);
 
             // Update cache tracking fields
-            static_text_layout.style_id = self.style_id;
-            static_text_layout.state_flags = self.style_state;
-            static_text_layout.text_hash = text_hash;
-            static_text_layout.needs_line_break = true;
+            text_layout.style_id = self.style_id;
+            text_layout.state = self.state;
+            text_layout.text_hash = text_hash;
+            text_layout.needs_line_break = true;
         }
 
         let alignment = self
             .theme
-            .resolve_style::<TextAlignment>(self.style_id, self.style_state);
-        let size = static_text_layout.layout.calculate_content_widths();
+            .resolve_style::<TextAlignment>(self.style_id, self.state);
+        let size = text_layout.layout.calculate_content_widths();
 
         self.context.ui_tree.add(
             Some(self.index),
@@ -267,7 +266,7 @@ impl UiBuilder<'_> {
             },
             (
                 LayoutContent::Text {
-                    layout: text_layout_id,
+                    layout: text_id,
                     cursor_size: 0.0,
                     alignment,
                     selection_color: Color::TRANSPARENT,
@@ -295,15 +294,17 @@ impl UiBuilder<'_> {
 
         self.num_child_widgets += 1;
         UiBuilder {
-            id: child_id,
             theme: self.theme,
             input: self.input,
             context: self.context,
-            index: child_index,
             format_buffer: self.format_buffer,
             text_context: self.text_context,
+            text_layouts: self.text_layouts,
+
+            id: child_id,
+            index: child_index,
             style_id: self.style_id,
-            style_state: self.style_state,
+            state: self.state,
             num_child_widgets: 0,
         }
     }
@@ -338,4 +339,9 @@ impl UiBuilder<'_> {
             self.context.focused_widget = None;
         }
     }
+}
+
+/// Compute a hash of a string for cache invalidation
+fn hash_string(text: &str) -> u64 {
+    rapidhash_v3(text.as_bytes())
 }

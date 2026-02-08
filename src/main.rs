@@ -163,7 +163,7 @@ impl ViewportState {
         })
         .child_direction(LayoutDirection::Vertical);
 
-        if menu.text_button("Menu Button").is_clicked {
+        if menu.text_button("Menu Button").is_activated {
             info!("Menu Item 1 clicked");
         };
 
@@ -177,7 +177,7 @@ impl ViewportState {
                     top: 15.0,
                     bottom: 15.0,
                 })
-                .set_text("Menu Item 1", None)
+                .text("Menu Item 1", None)
                 .rect(Grow, None, None)
                 .rect(45.0, 45.0, Color::RED);
         });
@@ -192,7 +192,7 @@ impl ViewportState {
                     top: 15.0,
                     bottom: 15.0,
                 })
-                .set_text("modern morning merman even longer", None)
+                .text("modern morning merman even longer", None)
                 .rect(Grow, None, None)
                 .rect(45.0, 45.0, Color::RED);
         });
@@ -207,7 +207,7 @@ impl ViewportState {
                     top: 15.0,
                     bottom: 15.0,
                 })
-                .set_text("VA To ff ti it tt ft", None)
+                .text("VA To ff ti it tt ft", None)
                 .rect(Grow, None, None)
                 .rect(45.0, 45.0, Color::RED);
         });

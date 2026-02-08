@@ -59,7 +59,7 @@ impl AppWindow {
             .iter()
             .any(|event| event.state.is_pressed());
 
-        if panel.text_button("Increment").is_clicked || was_key_pressed {
+        if panel.text_button("Increment").is_activated || was_key_pressed {
             self.value += 1;
         }
     }

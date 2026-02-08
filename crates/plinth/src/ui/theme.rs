@@ -38,7 +38,6 @@ pub struct Theme {
 impl Theme {
     pub fn new() -> Self {
         let styles = StyleRegistry::default();
-
         let default_style = styles.default_style_id();
 
         Self {
@@ -49,7 +48,7 @@ impl Theme {
 
     /// Gets the style assigned to a style class.
     pub fn get(&self, class: StyleClass) -> &Style {
-        let styled_id = self.well_known_classes[class as usize];
+        let styled_id = self.get_id(class);
         self.styles.get(styled_id).unwrap()
     }
 
@@ -162,7 +161,7 @@ impl Theme {
         style_id: StyleId,
         state: StateFlags,
         editor: &mut parley::PlainEditor<Color>,
-    ) {
+    ) -> &Style {
         use parley::StyleProperty as Prop;
 
         let styles = editor.edit_styles();
@@ -186,6 +185,8 @@ impl Theme {
                 styles.insert(Prop::FontStack(parley::FontStack::List(families.into())));
             }
         }
+
+        style
     }
 
     fn enumerate_styles<'a>(
