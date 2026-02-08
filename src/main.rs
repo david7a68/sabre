@@ -71,7 +71,7 @@ fn main() {
     ]);
 
     theme
-        .set_class_properties(
+        .set_style_class(
             StyleClass::Button,
             None,
             [

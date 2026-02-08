@@ -23,26 +23,26 @@ pub enum StyleClass {
     Panel = 0,
     Button,
     Label,
+    TextEdit,
 }
 
 impl StyleClass {
     /// Number of style class variants. Update when adding new variants.
-    pub const COUNT: usize = 3;
+    pub const COUNT: usize = 4;
 }
 
 pub struct Theme {
-    well_known_classes: [StyleId; StyleClass::COUNT],
+    well_known_classes: [Option<StyleId>; StyleClass::COUNT],
     styles: StyleRegistry,
 }
 
 impl Theme {
     pub fn new() -> Self {
         let styles = StyleRegistry::default();
-        let default_style = styles.default_style_id();
 
         Self {
             styles,
-            well_known_classes: [default_style; StyleClass::COUNT],
+            well_known_classes: [None; StyleClass::COUNT],
         }
     }
 
@@ -54,12 +54,12 @@ impl Theme {
 
     /// Gets the style ID assigned to a style class.
     pub fn get_id(&self, class: StyleClass) -> StyleId {
-        self.well_known_classes[class as usize]
+        self.well_known_classes[class as usize].unwrap_or(self.styles.default_style_id())
     }
 
     /// Assigns a style to a style class.
     pub fn set(&mut self, class: StyleClass, style_id: StyleId) {
-        self.well_known_classes[class as usize] = style_id;
+        self.well_known_classes[class as usize] = Some(style_id);
     }
 
     /// Sets properties on the default style.
@@ -74,23 +74,30 @@ impl Theme {
         self.styles.update(default_style_id, properties);
     }
 
-    /// Creates a new inline style and assigns it to a style class.
+    /// Modifies a style class by replacing its properties, registering a new
+    /// style if the class doesn't already have one assigned.
     ///
-    /// This is a convenience method for creating and assigning a style in one step.
-    pub fn set_class_properties(
+    pub fn set_style_class(
         &mut self,
         class: StyleClass,
         parent: Option<StyleId>,
         properties: impl IntoIterator<Item = (StateFlags, StyleProperty)>,
     ) -> Result<StyleId, StyleError> {
-        let style = self.create_style(parent, properties)?;
+        let style = if let Some(current) = self.well_known_classes[class as usize] {
+            self.update_style(current, properties);
+            current
+        } else {
+            self.create_style(parent, properties)?
+        };
+
         self.set(class, style);
         Ok(style)
     }
 
     /// Resolves a property for a specific style class and state combination.
     pub fn resolve<K: PropertyKey>(&self, style: StyleClass, state: StateFlags) -> K::Value {
-        let style_id = self.well_known_classes[style as usize];
+        let style_id =
+            self.well_known_classes[style as usize].unwrap_or(self.styles.default_style_id());
         self.styles.resolve::<K>(style_id, state)
     }
 
