@@ -17,7 +17,7 @@ concurrency:
 
 jobs:
   clippy:
-    runs-on: windows-2025
+    runs-on: windows-latest
 
     steps:
     # Setup
@@ -28,6 +28,10 @@ jobs:
       with:
         shared-key: "rust-cache"
 
+    - name: Install wget for Windows
+      if: matrix.os == 'windows-latest'
+      run: choco install wget --no-progress
+
     # Lints 
     - name: Check spelling of file.txt
       uses: crate-ci/typos@v1.43.3
@@ -36,7 +40,7 @@ jobs:
       run: cargo clippy --locked --all-targets -- -D warnings
 
   test:
-    runs-on: windows-2025
+    runs-on: windows-latest
 
     steps:
     # Setup
