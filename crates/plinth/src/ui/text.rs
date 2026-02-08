@@ -21,7 +21,7 @@ pub struct StaticTextLayout {
 
     // Cache invalidation tracking: relayout when any of these change
     pub style_id: StyleId,
-    pub state_flags: StateFlags,
+    pub state: StateFlags,
     pub text_hash: u64,
     pub prev_width: f32,
     pub prev_alignment: Option<TextAlignment>,
@@ -78,7 +78,7 @@ impl TextLayoutStorage {
                 let layout = StaticTextLayout {
                     layout: parley::Layout::new(),
                     style_id: Default::default(),
-                    state_flags: Default::default(),
+                    state: Default::default(),
                     text_hash: 0,
                     prev_width: 0.0,
                     prev_alignment: None,

@@ -6,9 +6,17 @@ pub use Size::*;
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Size {
     Fixed(f32),
-    Fit { min: f32, max: f32 },
+    /// Size to fit content, with optional min and max constraints.
+    Fit {
+        min: f32,
+        max: f32,
+    },
     Grow,
-    Flex { min: f32, max: f32 },
+    /// Size to fit container, with optional min and max constraints.
+    Flex {
+        min: f32,
+        max: f32,
+    },
 }
 
 impl From<f32> for Size {

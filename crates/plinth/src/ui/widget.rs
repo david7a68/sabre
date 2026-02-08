@@ -15,7 +15,7 @@ pub mod text_edit;
 
 #[derive(Clone, Copy, Debug)]
 pub struct Interaction {
-    pub is_clicked: bool,
+    pub is_activated: bool,
     pub is_hovered: bool,
 }
 
@@ -94,7 +94,7 @@ impl Interaction {
 
         (
             Self {
-                is_clicked,
+                is_activated: is_clicked,
                 is_hovered,
             },
             state,

@@ -29,6 +29,7 @@ use crate::ui::KeyboardEvent;
 use crate::ui::Theme;
 use crate::ui::UiBuilder;
 use crate::ui::context::UiContext;
+use crate::ui::text::TextLayoutStorage;
 
 #[derive(Default)]
 pub struct AppContextBuilder {
@@ -54,6 +55,7 @@ impl AppContextBuilder {
                 theme,
                 graphics: None,
                 text_system: TextLayoutContext::default(),
+                text_layouts: TextLayoutStorage::default(),
                 format_buffer: String::with_capacity(2048),
                 event_loop_proxy: event_loop.create_proxy(),
             },
@@ -82,6 +84,7 @@ pub struct AppContext {
 
     graphics: Option<GraphicsContext>,
     text_system: TextLayoutContext,
+    text_layouts: TextLayoutStorage,
     format_buffer: String,
 
     event_loop_proxy: EventLoopProxy,
@@ -131,6 +134,7 @@ impl AppContext {
 
             let ui_builder = window.ui_context.begin_frame(
                 &mut self.text_system,
+                &mut self.text_layouts,
                 &mut self.format_buffer,
                 &self.theme,
                 &input,
@@ -153,9 +157,11 @@ impl AppContext {
             }
 
             window.canvas.reset(Color::BLACK);
-            window
-                .ui_context
-                .finish(&mut self.text_system, &mut window.canvas);
+            window.ui_context.finish(
+                &mut self.text_system,
+                &mut self.text_layouts,
+                &mut window.canvas,
+            );
 
             if window.canvas.has_unready_textures() {
                 window.window.request_redraw();

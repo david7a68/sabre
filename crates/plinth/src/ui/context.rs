@@ -22,7 +22,6 @@ use super::UiBuilder;
 use super::WidgetId;
 use super::style::BorderWidths;
 use super::style::CornerRadii;
-use super::text::StaticTextLayout;
 use super::text::TextLayoutId;
 use super::text::TextLayoutMut;
 use super::text::TextLayoutStorage;
@@ -34,7 +33,6 @@ pub(crate) struct UiContext {
 
     pub(super) ui_tree: LayoutTree<(LayoutContent, Option<WidgetId>)>,
     pub(super) widget_states: IdMap<WidgetContainer>,
-    pub(super) text_layouts: TextLayoutStorage,
 
     pub(super) frame_counter: u64,
     pub(super) focused_widget: Option<WidgetId>,
@@ -44,6 +42,7 @@ impl UiContext {
     pub(crate) fn begin_frame<'a>(
         &'a mut self,
         text_context: &'a mut TextLayoutContext,
+        text_layouts: &'a mut TextLayoutStorage,
         format_buffer: &'a mut String,
         theme: &'a Theme,
         input: &'a Input,
@@ -75,23 +74,22 @@ impl UiContext {
         self.time_delta = time_delta;
 
         UiBuilder {
-            id,
-            index: root,
             theme,
             input,
             context: self,
             text_context,
+            text_layouts,
             format_buffer,
+
+            id,
+            index: root,
             style_id: theme.get_id(StyleClass::Panel),
-            style_state: Default::default(),
+            state: Default::default(),
             num_child_widgets: 0,
         }
     }
 
-    pub fn upsert_static_text_layout(
-        &mut self,
-        widget_id: WidgetId,
-    ) -> (TextLayoutId, &mut StaticTextLayout) {
+    pub fn state_mut(&mut self, widget_id: WidgetId) -> &mut WidgetState {
         let container = self
             .widget_states
             .entry(widget_id)
@@ -104,51 +102,53 @@ impl UiContext {
                 frame_last_used: self.frame_counter,
             });
 
-        container.frame_last_used = self.frame_counter;
+        &mut container.state
+    }
 
-        let static_layout_id = match container.state.text_layout {
+    pub fn static_text_layout<'a>(
+        &mut self,
+        text_layouts: &'a mut TextLayoutStorage,
+        widget_id: WidgetId,
+    ) -> (TextLayoutId, &'a mut super::text::StaticTextLayout) {
+        let state = self.state_mut(widget_id);
+
+        let static_layout_id = match state.text_layout {
             Some(TextLayoutId::Static(id)) => Some(id),
             Some(other) => panic!("Widget has non-static text layout assigned: {other:?}"),
             None => None,
         };
 
-        let (layout_id, layout) = self.text_layouts.get_or_create_static(static_layout_id);
-        container.state.text_layout = Some(TextLayoutId::Static(layout_id));
+        let (layout_id, layout) = text_layouts.get_or_create_static(static_layout_id);
+        state.text_layout = Some(TextLayoutId::Static(layout_id));
 
         (TextLayoutId::Static(layout_id), layout)
     }
 
-    pub fn upsert_dynamic_text_layout(
+    pub fn dynamic_text_layout<'a>(
         &mut self,
+        text_layouts: &'a mut TextLayoutStorage,
         widget_id: WidgetId,
-    ) -> (TextLayoutId, &mut super::text::DynamicTextLayout) {
-        let container = self
-            .widget_states
-            .entry(widget_id)
-            .or_insert_with(|| WidgetContainer {
-                state: WidgetState {
-                    placement: Default::default(),
-                    was_active: false,
-                    text_layout: None,
-                },
-                frame_last_used: self.frame_counter,
-            });
+    ) -> (TextLayoutId, &'a mut super::text::DynamicTextLayout) {
+        let state = self.state_mut(widget_id);
 
-        container.frame_last_used = self.frame_counter;
-
-        let dynamic_layout_id = match container.state.text_layout {
+        let dynamic_layout_id = match state.text_layout {
             Some(TextLayoutId::Dynamic(id)) => Some(id),
             Some(other) => panic!("Widget has non-dynamic text layout assigned: {other:?}"),
             None => None,
         };
 
-        let (layout_id, layout) = self.text_layouts.get_or_create_dynamic(dynamic_layout_id);
-        container.state.text_layout = Some(TextLayoutId::Dynamic(layout_id));
+        let (layout_id, layout) = text_layouts.get_or_create_dynamic(dynamic_layout_id);
+        state.text_layout = Some(TextLayoutId::Dynamic(layout_id));
 
         (TextLayoutId::Dynamic(layout_id), layout)
     }
 
-    pub fn finish(&mut self, text_context: &mut TextLayoutContext, canvas: &mut Canvas) {
+    pub fn finish(
+        &mut self,
+        text_context: &mut TextLayoutContext,
+        text_layouts: &mut TextLayoutStorage,
+        canvas: &mut Canvas,
+    ) {
         self.ui_tree.compute_layout(|(content, _), max_width| {
             let (layout_id, alignment) = match content {
                 LayoutContent::Text {
@@ -157,8 +157,7 @@ impl UiContext {
                 _ => return None,
             };
 
-            self.text_layouts
-                .break_lines(text_context, *layout_id, max_width, *alignment)
+            text_layouts.break_lines(text_context, *layout_id, max_width, *alignment)
         });
 
         for (node, (content, widget_id)) in self.ui_tree.iter_nodes() {
@@ -191,39 +190,34 @@ impl UiContext {
                     cursor_size,
                     selection_color,
                     cursor_color,
-                } => {
-                    let Some(text_layout) = self.text_layouts.get_mut(*text_layout_id) else {
-                        continue;
-                    };
-
-                    match text_layout {
-                        TextLayoutMut::Static(text_layout) => {
-                            canvas.draw_text_layout(text_layout, [layout.x, layout.y]);
-                        }
-                        TextLayoutMut::Dynamic(text_layout) => {
-                            text_layout.editor.selection_geometry_with(|bbox, _| {
-                                Self::draw_selection_rect(
-                                    canvas,
-                                    &bbox,
-                                    *selection_color,
-                                    layout.x,
-                                    layout.y,
-                                );
-                            });
-
-                            if let Some(rect) = text_layout.editor.cursor_geometry(*cursor_size) {
-                                Self::draw_cursor(canvas, &rect, *cursor_color, layout.x, layout.y);
-                            }
-
-                            canvas.draw_text_layout(
-                                text_layout
-                                    .editor
-                                    .layout(&mut text_context.fonts, &mut text_context.layouts),
-                                [layout.x, layout.y],
-                            );
-                        }
+                } => match text_layouts.get_mut(*text_layout_id) {
+                    None => {}
+                    Some(TextLayoutMut::Static(text_layout)) => {
+                        canvas.draw_text_layout(text_layout, [layout.x, layout.y]);
                     }
-                }
+                    Some(TextLayoutMut::Dynamic(text_layout)) => {
+                        text_layout.editor.selection_geometry_with(|bbox, _| {
+                            Self::draw_selection_rect(
+                                canvas,
+                                &bbox,
+                                *selection_color,
+                                layout.x,
+                                layout.y,
+                            );
+                        });
+
+                        if let Some(rect) = text_layout.editor.cursor_geometry(*cursor_size) {
+                            Self::draw_cursor(canvas, &rect, *cursor_color, layout.x, layout.y);
+                        }
+
+                        canvas.draw_text_layout(
+                            text_layout
+                                .editor
+                                .layout(&mut text_context.fonts, &mut text_context.layouts),
+                            [layout.x, layout.y],
+                        );
+                    }
+                },
             }
 
             if let Some(widget_id) = widget_id {
@@ -249,7 +243,7 @@ impl UiContext {
 
         for (_, element) in removed {
             if let Some(text_layout_id) = element.state.text_layout {
-                self.text_layouts.remove(text_layout_id);
+                text_layouts.remove(text_layout_id);
             }
         }
 

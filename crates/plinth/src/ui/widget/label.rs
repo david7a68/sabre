@@ -8,7 +8,7 @@ impl Label {
     pub fn new(builder: &mut UiBuilder<'_>, text: &str) -> Self {
         let mut builder = builder.child();
         builder.apply_style(StyleClass::Label, StateFlags::NORMAL);
-        builder.set_text(text, None);
+        builder.text(text, None);
         Self {}
     }
 }

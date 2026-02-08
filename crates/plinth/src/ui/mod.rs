@@ -13,7 +13,7 @@ mod id;
 mod input;
 mod layout;
 pub mod style;
-mod text;
+pub(crate) mod text;
 mod theme;
 pub mod widget;
 
