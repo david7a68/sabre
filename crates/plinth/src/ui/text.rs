@@ -51,13 +51,13 @@ pub enum TextLayoutMut<'a> {
     Dynamic(&'a mut DynamicTextLayout),
 }
 
-pub(crate) struct TextLayoutStorage {
+pub struct TextLayoutStorage {
     static_layouts: SlotMap<StaticTextLayoutId, StaticTextLayout>,
     dynamic_layouts: SlotMap<DynamicTextLayoutId, DynamicTextLayout>,
 }
 
 impl TextLayoutStorage {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             static_layouts: SlotMap::with_key(),
             dynamic_layouts: SlotMap::with_key(),
@@ -68,7 +68,7 @@ impl TextLayoutStorage {
     /// is `None`.
     ///
     /// If the `layout_id` is `Some`, this method panics if the ID is not found.
-    pub fn get_or_create_static(
+    pub(crate) fn get_or_create_static(
         &mut self,
         layout_id: Option<StaticTextLayoutId>,
     ) -> (StaticTextLayoutId, &mut StaticTextLayout) {
@@ -94,7 +94,7 @@ impl TextLayoutStorage {
     /// is `None`.
     ///
     /// If the `layout_id` is `Some`, this method panics if the ID is not found.
-    pub fn get_or_create_dynamic(
+    pub(crate) fn get_or_create_dynamic(
         &mut self,
         layout_id: Option<DynamicTextLayoutId>,
     ) -> (DynamicTextLayoutId, &mut DynamicTextLayout) {
@@ -113,7 +113,7 @@ impl TextLayoutStorage {
         }
     }
 
-    pub fn remove(&mut self, layout_id: TextLayoutId) {
+    pub(crate) fn remove(&mut self, layout_id: TextLayoutId) {
         match layout_id {
             TextLayoutId::Static(id) => {
                 self.static_layouts.remove(id);
@@ -125,7 +125,7 @@ impl TextLayoutStorage {
         }
     }
 
-    pub fn break_lines(
+    pub(crate) fn break_lines(
         &mut self,
         context: &mut TextLayoutContext,
         layout_id: TextLayoutId,
@@ -177,7 +177,7 @@ impl TextLayoutStorage {
         }
     }
 
-    pub fn get_mut<'a>(&'a mut self, layout_id: TextLayoutId) -> Option<TextLayoutMut<'a>> {
+    pub(crate) fn get_mut<'a>(&'a mut self, layout_id: TextLayoutId) -> Option<TextLayoutMut<'a>> {
         match layout_id {
             TextLayoutId::Static(id) => self
                 .static_layouts

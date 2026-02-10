@@ -8,11 +8,12 @@ use crate::graphics::GradientPaint;
 use crate::graphics::Paint;
 use crate::graphics::TextAlignment;
 use crate::graphics::TextLayoutContext;
+use crate::shell::Clipboard;
+use crate::shell::Input;
 
 use super::Alignment;
 use super::Atom;
 use super::Flex;
-use super::Input;
 use super::LayoutDirection;
 use super::Padding;
 use super::Size;
@@ -34,10 +35,12 @@ pub struct UiBuilder<'a> {
     pub(super) index: UiElementId,
     pub(super) theme: &'a Theme,
     pub(super) input: &'a Input,
+
     pub(super) context: &'a mut UiContext,
-    pub(super) format_buffer: &'a mut String,
-    pub(super) text_context: &'a mut TextLayoutContext,
-    pub(super) text_layouts: &'a mut TextLayoutStorage,
+    pub clipboard: &'a mut Clipboard,
+    pub format_buffer: &'a mut String,
+    pub text_context: &'a mut TextLayoutContext,
+    pub text_layouts: &'a mut TextLayoutStorage,
 
     pub(super) style_id: StyleId,
     pub(super) state: StateFlags,
@@ -297,6 +300,8 @@ impl UiBuilder<'_> {
             theme: self.theme,
             input: self.input,
             context: self.context,
+
+            clipboard: self.clipboard,
             format_buffer: self.format_buffer,
             text_context: self.text_context,
             text_layouts: self.text_layouts,

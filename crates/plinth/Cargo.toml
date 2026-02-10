@@ -10,7 +10,7 @@ workspace = true
 profile = ["dep:tracing-tracy"]
 
 [dependencies]
-
+arboard = { workspace = true }
 bitflags = { workspace = true }
 bytemuck = { workspace = true }
 color = { workspace = true }

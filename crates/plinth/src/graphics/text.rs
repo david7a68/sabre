@@ -6,9 +6,18 @@ use parley::LayoutContext;
 use crate::graphics::Color;
 
 #[derive(Default)]
-pub(crate) struct TextLayoutContext {
+pub struct TextLayoutContext {
     pub(crate) fonts: FontContext,
     pub(crate) layouts: LayoutContext<Color>,
+}
+
+impl TextLayoutContext {
+    pub(crate) fn drive<'a>(
+        &'a mut self,
+        editor: &'a mut parley::PlainEditor<Color>,
+    ) -> parley::PlainEditorDriver<'a, Color> {
+        editor.driver(&mut self.fonts, &mut self.layouts)
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
