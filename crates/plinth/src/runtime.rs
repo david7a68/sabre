@@ -19,13 +19,14 @@ use winit::window::Window;
 use winit::window::WindowAttributes;
 use winit::window::WindowId;
 
-use crate::double_click_tracker::DoubleClickTracker;
 use crate::graphics::Canvas;
 use crate::graphics::Color;
 use crate::graphics::GraphicsContext;
 use crate::graphics::TextLayoutContext;
-use crate::ui::Input;
-use crate::ui::KeyboardEvent;
+use crate::shell::Clipboard;
+use crate::shell::DoubleClickTracker;
+use crate::shell::Input;
+use crate::shell::KeyboardEvent;
 use crate::ui::Theme;
 use crate::ui::UiBuilder;
 use crate::ui::context::UiContext;
@@ -51,13 +52,14 @@ impl AppContextBuilder {
         let runtime = WinitApp {
             runtime: AppContext {
                 viewports: SlotMap::with_key(),
+                clipboard: Clipboard::new(),
+                event_loop_proxy: event_loop.create_proxy(),
                 deferred_commands: Vec::new(),
                 theme,
                 graphics: None,
                 text_system: TextLayoutContext::default(),
                 text_layouts: TextLayoutStorage::default(),
                 format_buffer: String::with_capacity(2048),
-                event_loop_proxy: event_loop.create_proxy(),
             },
             windows: HashMap::new(),
             user_handler: handler,
@@ -77,7 +79,8 @@ pub trait AppLifecycleHandler: 'static {
 
 pub struct AppContext {
     viewports: SlotMap<ViewportId, Viewport>,
-
+    clipboard: Clipboard,
+    event_loop_proxy: EventLoopProxy,
     deferred_commands: Vec<ViewportCommand>,
 
     theme: Theme,
@@ -86,8 +89,6 @@ pub struct AppContext {
     text_system: TextLayoutContext,
     text_layouts: TextLayoutStorage,
     format_buffer: String,
-
-    event_loop_proxy: EventLoopProxy,
 }
 
 impl AppContext {
@@ -133,6 +134,7 @@ impl AppContext {
             let input = std::mem::take(&mut viewport.input);
 
             let ui_builder = window.ui_context.begin_frame(
+                &mut self.clipboard,
                 &mut self.text_system,
                 &mut self.text_layouts,
                 &mut self.format_buffer,

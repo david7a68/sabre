@@ -16,6 +16,7 @@ unused_crate_dependencies = "warn"
 plinth = { path = "crates/plinth" }
 
 # External dependencies
+arboard = { version = "3", default-features = false }
 bitflags = { version = "2", features = ["bytemuck"] }
 bytemuck = "1"
 color = "0.3"

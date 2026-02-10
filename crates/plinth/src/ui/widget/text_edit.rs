@@ -1,9 +1,12 @@
+use parley::PlainEditor;
 use winit::keyboard::KeyCode;
 use winit::keyboard::PhysicalKey;
 
 use crate::graphics::Color;
+use crate::graphics::TextLayoutContext;
+use crate::shell::Clipboard;
+use crate::shell::Input;
 use crate::ui::Atom;
-use crate::ui::Input;
 use crate::ui::Size;
 use crate::ui::builder::UiBuilder;
 use crate::ui::context::LayoutContent;
@@ -125,14 +128,12 @@ impl<'a> TextEdit<'a> {
         let style =
             theme.apply_plain_editor_styles(style_id, self.state_flags, &mut dynamic_layout.editor);
 
-        let mut driver = dynamic_layout.editor.driver(
-            &mut self.builder.text_context.fonts,
-            &mut self.builder.text_context.layouts,
-        );
-
         if has_text_layout {
             Self::handle_mouse_events(
-                &mut driver,
+                &mut dynamic_layout.editor.driver(
+                    &mut self.builder.text_context.fonts,
+                    &mut self.builder.text_context.layouts,
+                ),
                 &input,
                 placement,
                 self.interaction,
@@ -141,7 +142,12 @@ impl<'a> TextEdit<'a> {
         }
 
         if is_focused {
-            Self::handle_keyboard_events(&mut driver, &input);
+            Self::handle_keyboard_events(
+                self.builder.clipboard,
+                self.builder.text_context,
+                &mut dynamic_layout.editor,
+                &input,
+            );
         }
 
         let cursor_size = style.font_size.get(self.state_flags) as f32;
@@ -182,7 +188,18 @@ impl<'a> TextEdit<'a> {
         (text, self.interaction)
     }
 
-    fn handle_keyboard_events(driver: &mut parley::PlainEditorDriver<Color>, input: &Input) {
+    fn handle_keyboard_events(
+        clipboard: &mut Clipboard,
+        context: &mut TextLayoutContext,
+        editor: &mut PlainEditor<Color>,
+        input: &Input,
+    ) {
+        macro_rules! driver {
+            () => {
+                context.drive(editor)
+            };
+        }
+
         for event in input.keyboard_events.iter() {
             if !event.state.is_pressed() {
                 continue;
@@ -195,59 +212,69 @@ impl<'a> TextEdit<'a> {
                 PhysicalKey::Code(KeyCode::ControlLeft | KeyCode::ControlRight) => {}
                 PhysicalKey::Code(KeyCode::ShiftLeft | KeyCode::ShiftRight) => {}
                 PhysicalKey::Code(KeyCode::KeyA) if ctrl_held => {
-                    driver.select_all();
+                    driver!().select_all();
                 }
                 PhysicalKey::Code(KeyCode::ArrowLeft) => match (ctrl_held, shift_held) {
-                    (true, true) => driver.select_word_left(),
-                    (true, false) => driver.move_word_left(),
-                    (false, true) => driver.select_left(),
-                    (false, false) => driver.move_left(),
+                    (true, true) => driver!().select_word_left(),
+                    (true, false) => driver!().move_word_left(),
+                    (false, true) => driver!().select_left(),
+                    (false, false) => driver!().move_left(),
                 },
                 PhysicalKey::Code(KeyCode::ArrowRight) => match (ctrl_held, shift_held) {
-                    (true, true) => driver.select_word_right(),
-                    (true, false) => driver.move_word_right(),
-                    (false, true) => driver.select_right(),
-                    (false, false) => driver.move_right(),
+                    (true, true) => driver!().select_word_right(),
+                    (true, false) => driver!().move_word_right(),
+                    (false, true) => driver!().select_right(),
+                    (false, false) => driver!().move_right(),
                 },
                 PhysicalKey::Code(KeyCode::ArrowUp) => match shift_held {
-                    true => driver.select_up(),
-                    false => driver.move_up(),
+                    true => driver!().select_up(),
+                    false => driver!().move_up(),
                 },
                 PhysicalKey::Code(KeyCode::ArrowDown) => match shift_held {
-                    true => driver.select_down(),
-                    false => driver.move_down(),
+                    true => driver!().select_down(),
+                    false => driver!().move_down(),
                 },
                 PhysicalKey::Code(KeyCode::PageUp) => match shift_held {
-                    true => driver.select_up(),
-                    false => driver.move_up(),
+                    true => driver!().select_up(),
+                    false => driver!().move_up(),
                 },
                 PhysicalKey::Code(KeyCode::PageDown) => match shift_held {
-                    true => driver.select_down(),
-                    false => driver.move_down(),
+                    true => driver!().select_down(),
+                    false => driver!().move_down(),
                 },
                 PhysicalKey::Code(KeyCode::Backspace) => match ctrl_held {
-                    true => driver.backdelete_word(),
-                    false => driver.backdelete(),
+                    true => driver!().backdelete_word(),
+                    false => driver!().backdelete(),
                 },
                 PhysicalKey::Code(KeyCode::Delete) => match ctrl_held {
-                    true => driver.delete_word(),
-                    false => driver.delete(),
+                    true => driver!().delete_word(),
+                    false => driver!().delete(),
                 },
                 PhysicalKey::Code(KeyCode::Home) => match (ctrl_held, shift_held) {
-                    (true, true) => driver.select_to_text_start(),
-                    (true, false) => driver.move_to_text_start(),
-                    (false, true) => driver.select_to_line_start(),
-                    (false, false) => driver.move_to_line_start(),
+                    (true, true) => driver!().select_to_text_start(),
+                    (true, false) => driver!().move_to_text_start(),
+                    (false, true) => driver!().select_to_line_start(),
+                    (false, false) => driver!().move_to_line_start(),
                 },
                 PhysicalKey::Code(KeyCode::End) => match (ctrl_held, shift_held) {
-                    (true, true) => driver.select_to_text_end(),
-                    (true, false) => driver.move_to_text_end(),
-                    (false, true) => driver.select_to_line_end(),
-                    (false, false) => driver.move_to_line_end(),
+                    (true, true) => driver!().select_to_text_end(),
+                    (true, false) => driver!().move_to_text_end(),
+                    (false, true) => driver!().select_to_line_end(),
+                    (false, false) => driver!().move_to_line_end(),
                 },
+                PhysicalKey::Code(KeyCode::KeyC) if ctrl_held => {
+                    if let Some(text) = editor.selected_text() {
+                        clipboard.set_text(text);
+                    }
+                }
+                PhysicalKey::Code(KeyCode::KeyV) if ctrl_held => {
+                    if let Some(text) = clipboard.get_text() {
+                        driver!().insert_or_replace_selection(&text);
+                    }
+                }
                 _ => {
                     if let Some(text) = &event.text {
-                        driver.insert_or_replace_selection(text.as_str());
+                        driver!().insert_or_replace_selection(text.as_str());
                     }
                 }
             }

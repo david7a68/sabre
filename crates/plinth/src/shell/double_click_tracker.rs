@@ -16,7 +16,7 @@ const WINDOWS_STANDARD_DPI: f64 = 96.0;
 ///
 /// Winit doesn't currently provide double-click events, so we have to track
 /// them ourselves.
-pub(super) struct DoubleClickTracker {
+pub(crate) struct DoubleClickTracker {
     last_click_time: Instant,
     last_click_button: winit::event::MouseButton,
     last_click_position: glamour::Point2<Pixels>,

@@ -11,11 +11,12 @@ use crate::graphics::Paint;
 use crate::graphics::Primitive;
 use crate::graphics::TextAlignment;
 use crate::graphics::TextLayoutContext;
+use crate::shell::Clipboard;
+use crate::shell::Input;
 use crate::ui::theme::Theme;
 
 use super::Atom;
 use super::IdMap;
-use super::Input;
 use super::LayoutTree;
 use super::StyleClass;
 use super::UiBuilder;
@@ -39,8 +40,10 @@ pub(crate) struct UiContext {
 }
 
 impl UiContext {
+    #[expect(clippy::too_many_arguments)]
     pub(crate) fn begin_frame<'a>(
         &'a mut self,
+        clipboard: &'a mut Clipboard,
         text_context: &'a mut TextLayoutContext,
         text_layouts: &'a mut TextLayoutStorage,
         format_buffer: &'a mut String,
@@ -77,6 +80,8 @@ impl UiContext {
             theme,
             input,
             context: self,
+
+            clipboard,
             text_context,
             text_layouts,
             format_buffer,
