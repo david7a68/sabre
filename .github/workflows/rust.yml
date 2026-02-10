@@ -32,7 +32,7 @@ jobs:
       run: choco install wget --no-progress
 
     # Lints 
-    - name: Check spelling of file.txt
+    - name: Run typos
       uses: crate-ci/typos@v1.43.3
 
     - name: Run Clippy

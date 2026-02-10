@@ -5,11 +5,11 @@
 #![allow(unused_crate_dependencies)]
 
 use plinth::graphics::Color;
-use plinth::runtime::AppContext;
-use plinth::runtime::AppContextBuilder;
-use plinth::runtime::AppLifecycleHandler;
-use plinth::runtime::Context;
-use plinth::runtime::ViewportConfig;
+use plinth::shell::AppContext;
+use plinth::shell::AppContextBuilder;
+use plinth::shell::AppLifecycleHandler;
+use plinth::shell::Context;
+use plinth::shell::WindowConfig;
 use plinth::ui::Alignment;
 use plinth::ui::LayoutDirection;
 use plinth::ui::UiBuilder;
@@ -25,7 +25,7 @@ struct Demo {}
 impl AppLifecycleHandler for Demo {
     fn resume(&mut self, runtime: &mut AppContext) {
         runtime.create_viewport(
-            ViewportConfig {
+            WindowConfig {
                 title: "Counter".into(),
                 width: 400,
                 height: 300,

@@ -1,249 +1,56 @@
-use std::borrow::Cow;
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::time::Duration;
 
-use slotmap::SlotMap;
-use slotmap::new_key_type;
-use smallvec::SmallVec;
 use winit::application::ApplicationHandler;
 use winit::event::ButtonSource;
 use winit::event::WindowEvent;
 use winit::event_loop::ActiveEventLoop;
-use winit::event_loop::ControlFlow;
-use winit::event_loop::EventLoop;
-use winit::event_loop::EventLoopProxy;
-use winit::platform::windows::EventLoopBuilderExtWindows;
 use winit::platform::windows::WindowAttributesWindows;
 use winit::window::Window;
 use winit::window::WindowAttributes;
 use winit::window::WindowId;
 
 use crate::graphics::Canvas;
-use crate::graphics::Color;
 use crate::graphics::GraphicsContext;
-use crate::graphics::TextLayoutContext;
-use crate::shell::Clipboard;
-use crate::shell::DoubleClickTracker;
-use crate::shell::Input;
 use crate::shell::KeyboardEvent;
-use crate::ui::Theme;
+use crate::shell::double_click_tracker::DoubleClickTracker;
 use crate::ui::UiBuilder;
 use crate::ui::context::UiContext;
-use crate::ui::text::TextLayoutStorage;
 
-#[derive(Default)]
-pub struct AppContextBuilder {
-    theme: Option<Theme>,
+use super::app_context::AppContext;
+use super::app_context::AppLifecycleHandler;
+use super::frame::Context;
+use super::window::ViewportId;
+
+pub(super) struct WinitWindow {
+    pub window: Arc<dyn Window>,
+    pub double_click_tracker: DoubleClickTracker,
+
+    pub canvas: Canvas,
+    pub viewport: ViewportId,
+    pub ui_context: UiContext,
+    pub handler: Box<dyn FnMut(Context, UiBuilder)>,
 }
 
-impl AppContextBuilder {
-    pub fn with_theme(mut self, theme: Theme) -> Self {
-        self.theme = Some(theme);
-        self
-    }
-
-    pub fn run(self, handler: impl AppLifecycleHandler) {
-        let event_loop = EventLoop::builder().with_dpi_aware(true).build().unwrap();
-        event_loop.set_control_flow(ControlFlow::Wait);
-
-        let theme = self.theme.unwrap_or_default();
-
-        let runtime = WinitApp {
-            runtime: AppContext {
-                viewports: SlotMap::with_key(),
-                clipboard: Clipboard::new(),
-                event_loop_proxy: event_loop.create_proxy(),
-                deferred_commands: Vec::new(),
-                theme,
-                graphics: None,
-                text_system: TextLayoutContext::default(),
-                text_layouts: TextLayoutStorage::default(),
-                format_buffer: String::with_capacity(2048),
-            },
-            windows: HashMap::new(),
-            user_handler: handler,
-        };
-
-        event_loop.run_app(runtime).unwrap();
-    }
+pub(super) enum DeferredCommand {
+    Create {
+        id: ViewportId,
+        handler: Box<dyn FnMut(Context, UiBuilder)>,
+    },
 }
 
-pub trait AppLifecycleHandler: 'static {
-    fn suspend(&mut self, runtime: &mut AppContext) {
-        let _ = runtime;
-    }
+pub(super) struct WinitApp<App> {
+    pub runtime: AppContext,
+    pub windows: HashMap<WindowId, WinitWindow>,
 
-    fn resume(&mut self, runtime: &mut AppContext);
-}
-
-pub struct AppContext {
-    viewports: SlotMap<ViewportId, Viewport>,
-    clipboard: Clipboard,
-    event_loop_proxy: EventLoopProxy,
-    deferred_commands: Vec<ViewportCommand>,
-
-    theme: Theme,
-
-    graphics: Option<GraphicsContext>,
-    text_system: TextLayoutContext,
-    text_layouts: TextLayoutStorage,
-    format_buffer: String,
-}
-
-impl AppContext {
-    pub fn create_viewport(
-        &mut self,
-        config: ViewportConfig,
-        handler: impl FnMut(Context, UiBuilder) + 'static,
-    ) -> ViewportHandle {
-        let id = self.viewports.insert(Viewport {
-            input: Input::default(),
-            config,
-        });
-
-        self.deferred_commands.push(ViewportCommand::Create {
-            id,
-            handler: Box::new(handler),
-        });
-
-        ViewportHandle {
-            id,
-            event_loop_proxy: self.event_loop_proxy.clone(),
-        }
-    }
-
-    pub fn theme(&self) -> &Theme {
-        &self.theme
-    }
-
-    pub fn theme_mut(&mut self) -> &mut Theme {
-        &mut self.theme
-    }
-
-    fn repaint<'a>(&mut self, windows: impl IntoIterator<Item = &'a mut WinitWindow>) {
-        let windows = windows.into_iter();
-        let mut outputs = SmallVec::with_capacity(windows.size_hint().0);
-
-        for window in windows {
-            let Some(viewport) = self.viewports.get_mut(window.viewport) else {
-                continue;
-            };
-
-            // borrow input for this frame
-            let input = std::mem::take(&mut viewport.input);
-
-            let ui_builder = window.ui_context.begin_frame(
-                &mut self.clipboard,
-                &mut self.text_system,
-                &mut self.text_layouts,
-                &mut self.format_buffer,
-                &self.theme,
-                &input,
-                Duration::ZERO,
-            );
-
-            let context = Context {
-                window: window.window.as_ref(),
-                viewports: &mut self.viewports,
-                deferred_commands: &mut self.deferred_commands,
-                event_loop_proxy: &self.event_loop_proxy,
-            };
-
-            (window.handler)(context, ui_builder);
-
-            // Restore input allocs for next frame; use branch to avoid unwrap.
-            // This should never fail.
-            if let Some(viewport) = self.viewports.get_mut(window.viewport) {
-                viewport.input = input;
-                viewport.input.keyboard_events.clear();
-            }
-
-            window.canvas.reset(Color::BLACK);
-            window.ui_context.finish(
-                &mut self.text_system,
-                &mut self.text_layouts,
-                &mut window.canvas,
-            );
-
-            if window.canvas.has_unready_textures() {
-                window.window.request_redraw();
-            }
-
-            outputs.push((window.window.id(), &window.canvas));
-        }
-
-        let graphics = self.graphics.as_mut().unwrap();
-        graphics.render(outputs).unwrap();
-    }
-}
-
-#[derive(Clone)]
-pub struct ViewportHandle {
-    #[expect(unused)]
-    id: ViewportId,
-    event_loop_proxy: EventLoopProxy,
-}
-
-impl ViewportHandle {
-    pub fn send_message(&self, _: ()) {
-        self.event_loop_proxy.wake_up();
-    }
-}
-
-#[derive(Clone, Debug)]
-pub struct ViewportConfig {
-    pub title: Cow<'static, str>,
-    pub width: u32,
-    pub height: u32,
-}
-
-pub struct Context<'a> {
-    window: &'a dyn winit::window::Window,
-    viewports: &'a mut SlotMap<ViewportId, Viewport>,
-    deferred_commands: &'a mut Vec<ViewportCommand>,
-    event_loop_proxy: &'a EventLoopProxy,
-}
-
-impl Context<'_> {
-    pub fn create_viewport(
-        &mut self,
-        config: ViewportConfig,
-        handler: impl FnMut(Context, UiBuilder) + 'static,
-    ) -> ViewportHandle {
-        let id = self.viewports.insert(Viewport {
-            input: Input::default(),
-            config,
-        });
-
-        self.deferred_commands.push(ViewportCommand::Create {
-            id,
-            handler: Box::new(handler),
-        });
-
-        ViewportHandle {
-            id,
-            event_loop_proxy: self.event_loop_proxy.clone(),
-        }
-    }
-
-    pub fn request_repaint(&self) {
-        self.window.request_redraw();
-    }
-}
-
-struct WinitApp<App> {
-    runtime: AppContext,
-    windows: HashMap<WindowId, WinitWindow>,
-
-    user_handler: App,
+    pub user_handler: App,
 }
 
 impl<App> WinitApp<App> {
     fn handle_deferred_commands(&mut self, event_loop: &dyn ActiveEventLoop) {
         for command in self.runtime.deferred_commands.drain(..) {
             match command {
-                ViewportCommand::Create { id, handler } => {
+                DeferredCommand::Create { id, handler } => {
                     let window = Arc::<dyn Window>::from(
                         event_loop
                             .create_window(
@@ -408,30 +215,4 @@ impl<App: AppLifecycleHandler> ApplicationHandler for WinitApp<App> {
 
         self.handle_deferred_commands(event_loop);
     }
-}
-
-new_key_type! {
-    struct ViewportId;
-}
-
-struct Viewport {
-    input: Input,
-    config: ViewportConfig,
-}
-
-struct WinitWindow {
-    window: Arc<dyn Window>,
-    double_click_tracker: DoubleClickTracker,
-
-    canvas: Canvas,
-    viewport: ViewportId,
-    ui_context: UiContext,
-    handler: Box<dyn FnMut(Context, UiBuilder)>,
-}
-
-enum ViewportCommand {
-    Create {
-        id: ViewportId,
-        handler: Box<dyn FnMut(Context, UiBuilder)>,
-    },
 }
