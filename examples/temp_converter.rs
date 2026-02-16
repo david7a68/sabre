@@ -24,7 +24,7 @@ use plinth::ui::widget::UiBuilderWidgetsExt;
 fn main() {
     tracing_subscriber::fmt().pretty().init();
 
-    let mut theme = Theme::new();
+    let mut theme = Theme::default();
 
     theme.set_base_style([(
         StateFlags::NORMAL,
@@ -39,23 +39,6 @@ fn main() {
                 StateFlags::NORMAL,
                 StyleProperty::Background(Paint::solid(Color::WHITE)),
             )],
-        )
-        .unwrap();
-
-    theme
-        .set_style_class(
-            StyleClass::Label,
-            None,
-            [
-                (
-                    StateFlags::NORMAL,
-                    StyleProperty::BorderWidths(Default::default()),
-                ),
-                (
-                    StateFlags::NORMAL,
-                    StyleProperty::CornerRadii(Default::default()),
-                ),
-            ],
         )
         .unwrap();
 

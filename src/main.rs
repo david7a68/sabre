@@ -60,7 +60,7 @@ fn main() {
 
     registry.with(def_filter).init();
 
-    let mut theme = Theme::new();
+    let mut theme = Theme::default();
 
     theme.set_base_style([
         (
