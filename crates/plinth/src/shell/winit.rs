@@ -202,9 +202,12 @@ impl<App: AppLifecycleHandler> ApplicationHandler for WinitApp<App> {
 
                 self.runtime.repaint([window]);
             }
-            WindowEvent::Focused(_) => {
+            WindowEvent::Focused(is_focused) if is_focused => {
                 let window = self.windows.get_mut(&window_id).unwrap();
                 window.double_click_tracker.on_activate();
+
+                let viewport = self.runtime.viewports.get_mut(window.viewport).unwrap();
+                viewport.input.lost_focus();
             }
             WindowEvent::ScaleFactorChanged { scale_factor, .. } => {
                 let window = self.windows.get_mut(&window_id).unwrap();
