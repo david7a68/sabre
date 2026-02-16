@@ -30,9 +30,26 @@ new_key_type! {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum TextureFormat {
+    Rgba8Unorm,
+    Rgba8UnormSrgb,
+    R8Unorm,
+}
+
+impl From<TextureFormat> for wgpu::TextureFormat {
+    fn from(format: TextureFormat) -> Self {
+        match format {
+            TextureFormat::Rgba8Unorm => wgpu::TextureFormat::Rgba8Unorm,
+            TextureFormat::Rgba8UnormSrgb => wgpu::TextureFormat::Rgba8UnormSrgb,
+            TextureFormat::R8Unorm => wgpu::TextureFormat::R8Unorm,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct StorageId {
     id: RawStorageId,
-    format: wgpu::TextureFormat,
+    format: TextureFormat,
 }
 
 impl Default for StorageId {
@@ -42,7 +59,7 @@ impl Default for StorageId {
         // valid anyway.
         Self {
             id: RawStorageId::default(),
-            format: wgpu::TextureFormat::Rgba8UnormSrgb,
+            format: TextureFormat::Rgba8UnormSrgb,
         }
     }
 }
@@ -70,7 +87,8 @@ impl From<image::ImageError> for TextureLoadError {
 
 pub struct Texture {
     id: TextureId,
-    storage_id: StorageId,
+    storage_id: RawStorageId,
+    format: TextureFormat,
     uvwh: [f32; 4],
     size: [u16; 2],
 
@@ -84,12 +102,15 @@ impl Texture {
     }
 
     pub(crate) fn storage_id(&self) -> StorageId {
-        self.storage_id
+        StorageId {
+            id: self.storage_id,
+            format: self.format,
+        }
     }
 
     #[must_use]
     pub fn format(&self) -> wgpu::TextureFormat {
-        self.storage_id.format
+        self.format.into()
     }
 
     #[must_use]
@@ -132,9 +153,9 @@ impl std::fmt::Debug for Texture {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Texture")
             .field("id", &self.id)
-            .field("storage_id", &self.storage_id.id)
+            .field("storage_id", &self.storage_id)
             .field("uvwh", &self.uvwh)
-            .field("format", &self.storage_id.format)
+            .field("format", &self.format)
             .finish()
     }
 }
@@ -180,12 +201,7 @@ impl TextureManager {
     }
 
     #[instrument(skip(self, data))]
-    pub fn load_from_memory(
-        &self,
-        data: &[u8],
-        width: u16,
-        format: wgpu::TextureFormat,
-    ) -> Texture {
+    pub fn load_from_memory(&self, data: &[u8], width: u16, format: TextureFormat) -> Texture {
         self.inner.from_memory(data, width, format)
     }
 
@@ -222,17 +238,17 @@ struct TextureManagerInner {
 impl TextureManagerInner {
     fn new(queue: wgpu::Queue, device: wgpu::Device) -> Rc<Self> {
         let rgba_textures = FormattedTextureManager {
-            format: wgpu::TextureFormat::Rgba8Unorm,
+            format: TextureFormat::Rgba8Unorm,
             storage: SlotMap::with_key(),
         };
 
         let srgba_textures = FormattedTextureManager {
-            format: wgpu::TextureFormat::Rgba8UnormSrgb,
+            format: TextureFormat::Rgba8UnormSrgb,
             storage: SlotMap::with_key(),
         };
 
         let alpha_textures = FormattedTextureManager {
-            format: wgpu::TextureFormat::R8Unorm,
+            format: TextureFormat::R8Unorm,
             storage: SlotMap::with_key(),
         };
 
@@ -252,14 +268,13 @@ impl TextureManagerInner {
         });
 
         // Set up the white pixel and forget it so that its refcount is never 0.
-        let white_pixel =
-            this.from_memory(&[255, 255, 255, 255], 1, wgpu::TextureFormat::Rgba8Unorm);
+        let white_pixel = this.from_memory(&[255, 255, 255, 255], 1, TextureFormat::Rgba8Unorm);
 
         this.white_pixel.set(white_pixel.id());
         std::mem::forget(white_pixel);
 
         // Set up the opaque pixel and forget it so that its refcount is never 0.
-        let opaque_pixel = this.from_memory(&[255], 1, wgpu::TextureFormat::R8Unorm);
+        let opaque_pixel = this.from_memory(&[255], 1, TextureFormat::R8Unorm);
 
         this.opaque_pixel.set(opaque_pixel.id());
         std::mem::forget(opaque_pixel);
@@ -278,10 +293,9 @@ impl TextureManagerInner {
     #[inline]
     fn storage_view(self: &Rc<Self>, storage_id: StorageId) -> Option<wgpu::TextureView> {
         let storage = match storage_id.format {
-            wgpu::TextureFormat::Rgba8Unorm => &self.rgba_textures,
-            wgpu::TextureFormat::Rgba8UnormSrgb => &self.srgba_textures,
-            wgpu::TextureFormat::R8Unorm => &self.alpha_textures,
-            _ => unreachable!(),
+            TextureFormat::Rgba8Unorm => &self.rgba_textures,
+            TextureFormat::Rgba8UnormSrgb => &self.srgba_textures,
+            TextureFormat::R8Unorm => &self.alpha_textures,
         };
 
         storage
@@ -300,6 +314,7 @@ impl TextureManagerInner {
         Some(Texture {
             id,
             storage_id: usage.storage,
+            format: usage.format,
             uvwh: usage.uvwh,
             size: usage.size,
             manager: self.clone(),
@@ -321,15 +336,12 @@ impl TextureManagerInner {
                 let usage = texture_map.remove(id).unwrap();
 
                 let storage = match usage.format {
-                    wgpu::TextureFormat::Rgba8Unorm => &self.rgba_textures,
-                    wgpu::TextureFormat::Rgba8UnormSrgb => &self.srgba_textures,
-                    wgpu::TextureFormat::R8Unorm => &self.alpha_textures,
-                    _ => unreachable!(),
+                    TextureFormat::Rgba8Unorm => &self.rgba_textures,
+                    TextureFormat::Rgba8UnormSrgb => &self.srgba_textures,
+                    TextureFormat::R8Unorm => &self.alpha_textures,
                 };
 
-                storage
-                    .borrow_mut()
-                    .release(usage.storage.id, usage.atlas_id);
+                storage.borrow_mut().release(usage.storage, usage.atlas_id);
             }
         }
     }
@@ -344,15 +356,12 @@ impl TextureManagerInner {
                 let usage = texture_map.remove(id).unwrap();
 
                 let storage = match usage.format {
-                    wgpu::TextureFormat::Rgba8Unorm => &self.rgba_textures,
-                    wgpu::TextureFormat::Rgba8UnormSrgb => &self.srgba_textures,
-                    wgpu::TextureFormat::R8Unorm => &self.alpha_textures,
-                    _ => unreachable!(),
+                    TextureFormat::Rgba8Unorm => &self.rgba_textures,
+                    TextureFormat::Rgba8UnormSrgb => &self.srgba_textures,
+                    TextureFormat::R8Unorm => &self.alpha_textures,
                 };
 
-                storage
-                    .borrow_mut()
-                    .release(usage.storage.id, usage.atlas_id);
+                storage.borrow_mut().release(usage.storage, usage.atlas_id);
             }
         }
     }
@@ -367,12 +376,7 @@ impl TextureManagerInner {
         Some(callback(usage))
     }
 
-    fn from_memory(
-        self: &Rc<Self>,
-        data: &[u8],
-        width: u16,
-        format: wgpu::TextureFormat,
-    ) -> Texture {
+    fn from_memory(self: &Rc<Self>, data: &[u8], width: u16, format: TextureFormat) -> Texture {
         let bytes_per_row = width as usize * bytes_per_pixel(format);
         let height = (data.len() / bytes_per_row)
             .try_into()
@@ -387,10 +391,9 @@ impl TextureManagerInner {
         );
 
         let mut manager = match format {
-            wgpu::TextureFormat::Rgba8UnormSrgb => &self.srgba_textures,
-            wgpu::TextureFormat::Rgba8Unorm => &self.rgba_textures,
-            wgpu::TextureFormat::R8Unorm => &self.alpha_textures,
-            _ => unreachable!(),
+            TextureFormat::Rgba8UnormSrgb => &self.srgba_textures,
+            TextureFormat::Rgba8Unorm => &self.rgba_textures,
+            TextureFormat::R8Unorm => &self.alpha_textures,
         }
         .borrow_mut();
 
@@ -440,6 +443,7 @@ impl TextureManagerInner {
         Texture {
             id: texture_id,
             storage_id,
+            format,
             uvwh,
             size: [width, height],
             manager: self.clone(),
@@ -467,7 +471,7 @@ impl TextureManagerInner {
 
         let (format, mut manager) = match color_type {
             image::ColorType::Rgba8 => (
-                wgpu::TextureFormat::Rgba8UnormSrgb,
+                TextureFormat::Rgba8UnormSrgb,
                 self.srgba_textures.borrow_mut(),
             ),
             other => unimplemented!("Unsupported color type: {:?}", other),
@@ -490,6 +494,7 @@ impl TextureManagerInner {
         let handle = Texture {
             id: texture_id,
             storage_id,
+            format,
             uvwh,
             size: [width, height],
             manager: self.clone(),
@@ -600,11 +605,11 @@ impl Drop for TextureManagerInner {
 
 #[derive(Clone)]
 struct TextureUsage {
-    storage: StorageId,
+    storage: RawStorageId,
     is_ready: bool,
     refcount: u32,
     atlas_id: AllocId,
-    format: wgpu::TextureFormat,
+    format: TextureFormat,
     uvwh: [f32; 4],
     size: [u16; 2],
 }
@@ -626,7 +631,7 @@ impl Drop for TextureStorage {
 }
 
 struct FormattedTextureManager {
-    format: wgpu::TextureFormat,
+    format: TextureFormat,
     storage: SlotMap<RawStorageId, TextureStorage>,
 }
 
@@ -696,10 +701,9 @@ impl FormattedTextureManager {
             let atlas_height = 4096.max(height);
 
             let label = match self.format {
-                wgpu::TextureFormat::Rgba8UnormSrgb => "Atlas Texture (sRGB)",
-                wgpu::TextureFormat::Rgba8Unorm => "Atlas Texture (RGBA)",
-                wgpu::TextureFormat::R8Unorm => "Atlas Texture (Alpha)",
-                _ => unreachable!(),
+                TextureFormat::Rgba8UnormSrgb => "Atlas Texture (sRGB)",
+                TextureFormat::Rgba8Unorm => "Atlas Texture (RGBA)",
+                TextureFormat::R8Unorm => "Atlas Texture (Alpha)",
             };
 
             let texture = device.create_texture(&wgpu::TextureDescriptor {
@@ -712,7 +716,7 @@ impl FormattedTextureManager {
                 mip_level_count: 1,
                 sample_count: 1,
                 dimension: wgpu::TextureDimension::D2,
-                format: self.format,
+                format: self.format.into(),
                 usage: wgpu::TextureUsages::COPY_DST | wgpu::TextureUsages::TEXTURE_BINDING,
                 view_formats: &[],
             });
@@ -744,10 +748,7 @@ impl FormattedTextureManager {
         (
             texture,
             TextureUsage {
-                storage: StorageId {
-                    id: storage_id,
-                    format: self.format,
-                },
+                storage: storage_id,
                 is_ready: false,
                 refcount: 1,
                 atlas_id: id,
@@ -760,10 +761,9 @@ impl FormattedTextureManager {
     }
 }
 
-fn bytes_per_pixel(format: wgpu::TextureFormat) -> usize {
+fn bytes_per_pixel(format: TextureFormat) -> usize {
     match format {
-        wgpu::TextureFormat::Rgba8Unorm | wgpu::TextureFormat::Rgba8UnormSrgb => 4,
-        wgpu::TextureFormat::R8Unorm => 1,
-        _ => unimplemented!(),
+        TextureFormat::Rgba8Unorm | TextureFormat::Rgba8UnormSrgb => 4,
+        TextureFormat::R8Unorm => 1,
     }
 }

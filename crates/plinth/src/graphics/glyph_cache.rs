@@ -25,6 +25,7 @@ use crate::graphics::Primitive;
 use crate::graphics::Texture;
 use crate::graphics::draw::CanvasStorage;
 use crate::graphics::paint::GradientPaint;
+use crate::graphics::texture::TextureFormat;
 use crate::graphics::texture::TextureManager;
 
 #[derive(Clone)]
@@ -216,8 +217,8 @@ fn draw_glyph_run(
                 }
 
                 let format = match temp_glyph.content {
-                    Content::Color => wgpu::TextureFormat::Rgba8UnormSrgb,
-                    Content::Mask => wgpu::TextureFormat::R8Unorm,
+                    Content::Color => TextureFormat::Rgba8UnormSrgb,
+                    Content::Mask => TextureFormat::R8Unorm,
                     _ => unimplemented!(),
                 };
 
