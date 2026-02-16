@@ -46,9 +46,7 @@ impl<'a> Image<'a> {
     }
 
     pub fn with_scale(mut self, scale: f32) -> Self {
-        let size = self.texture.size();
-        self.builder
-            .size(size[0] as f32 * scale, size[1] as f32 * scale);
+        self.scale(scale);
         self
     }
 
