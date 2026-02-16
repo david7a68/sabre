@@ -126,8 +126,12 @@ impl AppWindow {
                 }
             }
 
-            for file in &self.open_files_result {
-                panel.label(file).width(Grow);
+            if self.open_files_result.is_empty() {
+                panel.label("");
+            } else {
+                for file in &self.open_files_result {
+                    panel.label(file).width(Grow);
+                }
             }
         })
         .with_panel(|mut panel| {
@@ -151,8 +155,12 @@ impl AppWindow {
                 }
             }
 
-            for folder in &self.open_folders_result {
-                panel.label(folder).width(Grow);
+            if self.open_folders_result.is_empty() {
+                panel.label("");
+            } else {
+                for folder in &self.open_folders_result {
+                    panel.label(folder).width(Grow);
+                }
             }
         });
     }

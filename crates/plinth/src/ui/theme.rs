@@ -5,7 +5,10 @@ use smallvec::SmallVec;
 
 use crate::graphics::Color;
 use crate::graphics::FontStack;
+use crate::graphics::Paint;
 
+use super::style::BorderWidths;
+use super::style::CornerRadii;
 use super::style::PropertyKey;
 use super::style::StateFlags;
 use super::style::Style;
@@ -230,7 +233,7 @@ impl Theme {
 
 impl Default for Theme {
     fn default() -> Self {
-        Self::new()
+        default_theme()
     }
 }
 
@@ -244,4 +247,48 @@ fn default_font_features() -> parley::FontSettings<'static, parley::FontFeature>
             parley::FontSettings::List(Cow::Borrowed(list))
         })
         .clone()
+}
+
+fn default_theme() -> Theme {
+    let mut theme = Theme::new();
+
+    theme
+        .set_style_class(
+            StyleClass::Button,
+            None,
+            [(
+                StateFlags::empty(),
+                StyleProperty::CornerRadii(CornerRadii {
+                    top_left: 5.0,
+                    top_right: 5.0,
+                    bottom_right: 5.0,
+                    bottom_left: 5.0,
+                }),
+            )],
+        )
+        .unwrap();
+
+    theme
+        .set_style_class(
+            StyleClass::Label,
+            None,
+            [
+                (
+                    StateFlags::empty(),
+                    StyleProperty::BorderWidths(BorderWidths {
+                        left: 0.0,
+                        right: 0.0,
+                        top: 0.0,
+                        bottom: 0.0,
+                    }),
+                ),
+                (
+                    StateFlags::empty(),
+                    StyleProperty::Background(Paint::solid(Color::TRANSPARENT)),
+                ),
+            ],
+        )
+        .unwrap();
+
+    theme
 }
