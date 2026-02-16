@@ -125,11 +125,6 @@ impl UiBuilder<'_> {
         self
     }
 
-    pub fn invisible(&mut self) -> &mut Self {
-        self.context.ui_tree.content_mut(self.index).0 = LayoutContent::None;
-        self
-    }
-
     pub fn width(&mut self, width: impl Into<Size>) -> &mut Self {
         self.context.ui_tree.atom_mut(self.index).width = width.into();
         self

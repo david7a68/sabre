@@ -92,15 +92,6 @@ pub struct GradientPaint {
 }
 
 impl GradientPaint {
-    pub fn solid(color: Color) -> Self {
-        Self {
-            color_a: color,
-            color_b: color,
-            start: [0.0, 0.0],
-            end: [1.0, 1.0],
-        }
-    }
-
     /// Create a horizontal gradient from left to right.
     pub fn horizontal_gradient(left: Color, right: Color) -> Self {
         Self {

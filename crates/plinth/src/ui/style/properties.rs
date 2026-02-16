@@ -38,15 +38,6 @@ pub struct BorderWidths {
 }
 
 impl BorderWidths {
-    pub fn uniform(width: f32) -> Self {
-        Self {
-            left: width,
-            right: width,
-            top: width,
-            bottom: width,
-        }
-    }
-
     /// Convert to array [left, top, right, bottom]
     pub fn into_array(self) -> [f32; 4] {
         [self.left, self.top, self.right, self.bottom]
