@@ -9,6 +9,7 @@ use super::UiBuilder;
 use super::style::StateFlags;
 
 pub mod button;
+pub mod container;
 pub mod label;
 pub mod panel;
 pub mod text_edit;
@@ -21,6 +22,18 @@ pub struct Interaction {
 }
 
 pub trait UiBuilderWidgetsExt {
+    /// Creates an invisible, non-interactive layout widget for grouping other
+    /// widgets together.
+    fn container(&mut self) -> container::Container<'_>;
+
+    /// Creates an invisible, non-interactive layout widget for grouping other
+    /// widgets together.
+    fn with_container(&mut self, callback: impl FnOnce(container::Container<'_>)) -> &mut Self {
+        let container = self.container();
+        callback(container);
+        self
+    }
+
     fn panel(&mut self) -> panel::Panel<'_>;
 
     fn with_panel(&mut self, callback: impl FnOnce(panel::Panel<'_>)) -> &mut Self {
@@ -37,6 +50,10 @@ pub trait UiBuilderWidgetsExt {
 }
 
 impl UiBuilderWidgetsExt for UiBuilder<'_> {
+    fn container(&mut self) -> container::Container<'_> {
+        container::Container::new(self)
+    }
+
     fn panel(&mut self) -> panel::Panel<'_> {
         panel::Panel::new(self)
     }
