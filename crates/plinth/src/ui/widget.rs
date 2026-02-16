@@ -23,6 +23,12 @@ pub struct Interaction {
 pub trait UiBuilderWidgetsExt {
     fn panel(&mut self) -> panel::Panel<'_>;
 
+    fn with_panel(&mut self, callback: impl FnOnce(panel::Panel<'_>)) -> &mut Self {
+        let panel = self.panel();
+        callback(panel);
+        self
+    }
+
     fn text_button(&mut self, label: &str) -> Interaction;
 
     fn text_edit(&mut self, initial_text: &str, width: f32) -> text_edit::TextEdit<'_>;

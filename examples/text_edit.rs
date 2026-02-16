@@ -65,8 +65,9 @@ impl AppWindow {
             true
         };
 
-        let mut info_panel = panel.panel();
-        info_panel.child_direction(LayoutDirection::Horizontal);
+        let mut info_panel = panel
+            .panel()
+            .with_child_direction(LayoutDirection::Horizontal);
 
         info_panel.label(&format!("Current text: {}", self.text_content));
         info_panel.label(&format!(
