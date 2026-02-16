@@ -146,7 +146,7 @@ impl GraphicsContext {
     }
 
     #[instrument(skip(self, path), fields(path = %path.as_ref().display()))]
-    pub fn load_image(&mut self, path: impl AsRef<Path>) -> Result<Texture, TextureLoadError> {
+    pub fn load_image(&self, path: impl AsRef<Path>) -> Result<Texture, TextureLoadError> {
         self.textures.load(path)
     }
 

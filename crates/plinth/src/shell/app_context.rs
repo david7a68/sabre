@@ -107,6 +107,8 @@ impl AppContext {
     }
 
     pub(super) fn repaint<'a>(&mut self, windows: impl IntoIterator<Item = &'a mut WinitWindow>) {
+        let graphics = self.graphics.as_mut().unwrap();
+
         let windows = windows.into_iter();
         let mut outputs = SmallVec::with_capacity(windows.size_hint().0);
 
@@ -130,6 +132,7 @@ impl AppContext {
 
             let context = Context {
                 window: window.window.as_ref(),
+                graphics,
                 viewports: &mut self.viewports,
                 deferred_commands: &mut self.deferred_commands,
             };
@@ -157,7 +160,6 @@ impl AppContext {
             outputs.push((window.window.id(), &window.canvas));
         }
 
-        let graphics = self.graphics.as_mut().unwrap();
         graphics.render(outputs).unwrap();
     }
 }
