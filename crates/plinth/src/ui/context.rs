@@ -88,7 +88,7 @@ impl UiContext {
 
             id,
             index: root,
-            style_id: theme.get_id(StyleClass::Panel),
+            style_id: theme.get_id(StyleClass::Surface),
             state: Default::default(),
             num_child_widgets: 0,
         }

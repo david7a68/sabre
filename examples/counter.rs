@@ -48,7 +48,7 @@ impl AppWindow {
     fn update(&mut self, _context: Context, mut ui: UiBuilder) {
         let mut panel = ui
             .child_alignment(Alignment::Center, Alignment::Center)
-            .panel();
+            .surface();
 
         panel
             .color(Color::LIGHT_GRAY)

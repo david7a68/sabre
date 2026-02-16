@@ -10,11 +10,11 @@ use super::UiBuilder;
 use super::style::StateFlags;
 
 pub mod button;
-pub mod container;
+pub mod frame;
 pub mod horizontal_separator;
 pub mod image;
 pub mod label;
-pub mod panel;
+pub mod surface;
 pub mod text_edit;
 pub mod vertical_separator;
 
@@ -28,22 +28,22 @@ pub struct Interaction {
 pub trait UiBuilderWidgetsExt {
     /// Creates an invisible, non-interactive layout widget for grouping other
     /// widgets together.
-    fn container(&mut self) -> container::Container<'_>;
+    fn frame(&mut self) -> frame::Frame<'_>;
 
     /// Creates an invisible, non-interactive layout widget for grouping other
     /// widgets together.
-    fn with_container(&mut self, callback: impl FnOnce(container::Container<'_>)) -> &mut Self {
-        let container = self.container();
+    fn with_frame(&mut self, callback: impl FnOnce(frame::Frame<'_>)) -> &mut Self {
+        let container = self.frame();
         callback(container);
         self
     }
 
     fn image(&mut self, texture: &Texture, width: Size);
 
-    fn panel(&mut self) -> panel::Panel<'_>;
+    fn surface(&mut self) -> surface::Surface<'_>;
 
-    fn with_panel(&mut self, callback: impl FnOnce(panel::Panel<'_>)) -> &mut Self {
-        let panel = self.panel();
+    fn with_surface(&mut self, callback: impl FnOnce(surface::Surface<'_>)) -> &mut Self {
+        let panel = self.surface();
         callback(panel);
         self
     }
@@ -60,16 +60,16 @@ pub trait UiBuilderWidgetsExt {
 }
 
 impl UiBuilderWidgetsExt for UiBuilder<'_> {
-    fn container(&mut self) -> container::Container<'_> {
-        container::Container::new(self)
+    fn frame(&mut self) -> frame::Frame<'_> {
+        frame::Frame::new(self)
     }
 
     fn image(&mut self, texture: &Texture, width: Size) {
         image::Image::new(self, texture).with_width(width).finish()
     }
 
-    fn panel(&mut self) -> panel::Panel<'_> {
-        panel::Panel::new(self)
+    fn surface(&mut self) -> surface::Surface<'_> {
+        surface::Surface::new(self)
     }
 
     fn text_button(&mut self, label: &str) -> Interaction {

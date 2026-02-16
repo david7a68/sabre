@@ -20,13 +20,13 @@ use crate::ui::style::StateFlags;
 /// By default, the container will inherit the child layout properties from the
 /// theme's Panel style, but you can override these properties using the builder
 /// methods.
-pub struct Container<'a> {
+pub struct Frame<'a> {
     builder: UiBuilder<'a>,
 }
 
-impl<'a> Container<'a> {
+impl<'a> Frame<'a> {
     pub fn new(builder: &'a mut UiBuilder<'_>) -> Self {
-        let style = builder.theme().get(StyleClass::Panel);
+        let style = builder.theme().get(StyleClass::Surface);
 
         let major_alignment = style.child_major_alignment.get(StateFlags::NORMAL);
         let minor_alignment = style.child_minor_alignment.get(StateFlags::NORMAL);
@@ -68,13 +68,13 @@ impl<'a> Container<'a> {
     }
 }
 
-impl<'a> DerefMut for Container<'a> {
+impl<'a> DerefMut for Frame<'a> {
     fn deref_mut(&mut self) -> &mut UiBuilder<'a> {
         &mut self.builder
     }
 }
 
-impl<'a> Deref for Container<'a> {
+impl<'a> Deref for Frame<'a> {
     type Target = UiBuilder<'a>;
 
     fn deref(&self) -> &Self::Target {

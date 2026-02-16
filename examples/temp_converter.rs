@@ -74,7 +74,7 @@ impl AppWindow {
     fn update(&mut self, context: Context, mut ui: UiBuilder) {
         let mut panel = ui
             .child_alignment(Alignment::Center, Alignment::Center)
-            .panel();
+            .surface();
 
         let mut edit_c = panel.text_edit("", 60.0);
         if let Some(temp_c) = self.temp_c.take() {
