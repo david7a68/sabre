@@ -43,7 +43,7 @@ pub struct Input {
 }
 
 impl Input {
-    pub fn lost_focus(&mut self) {
+    pub fn focus_changed(&mut self) {
         *self = Self {
             window_size: self.window_size,
             ..Default::default()
