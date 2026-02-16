@@ -5,6 +5,7 @@ use plinth::shell::AppContextBuilder;
 use plinth::shell::AppLifecycleHandler;
 use plinth::shell::Context;
 use plinth::shell::FileDialog;
+use plinth::shell::FolderDialog;
 use plinth::shell::WindowConfig;
 use plinth::ui::Alignment;
 use plinth::ui::LayoutDirection;
@@ -23,7 +24,7 @@ impl AppLifecycleHandler for Demo {
     fn resume(&mut self, runtime: &mut AppContext) {
         runtime.create_viewport(
             WindowConfig {
-                title: "Counter".into(),
+                title: "File Picker".into(),
                 width: 400,
                 height: 300,
             },
@@ -84,9 +85,8 @@ impl AppWindow {
                 .width(200.0);
 
             if panel.text_button("Open Folder").is_activated {
-                let folder = context.pick_folder(FileDialog {
+                let folder = context.pick_folder(FolderDialog {
                     title: "Open Folder".into(),
-                    initial_file: String::new(),
                     directory: String::new(),
                     filters: vec![],
                 });
@@ -137,9 +137,8 @@ impl AppWindow {
                 .width(200.0);
 
             if panel.text_button("Open Multiple Folders").is_activated {
-                let folders = context.pick_folders(FileDialog {
+                let folders = context.pick_folders(FolderDialog {
                     title: "Open Multiple Folders".into(),
-                    initial_file: String::new(),
                     directory: String::new(),
                     filters: vec![],
                 });
@@ -152,8 +151,8 @@ impl AppWindow {
                 }
             }
 
-            for file in &self.open_folders_result {
-                panel.label(file).width(Grow);
+            for folder in &self.open_folders_result {
+                panel.label(folder).width(Grow);
             }
         });
     }

@@ -10,6 +10,7 @@ use super::window::Viewport;
 use super::window::ViewportId;
 use super::winit::DeferredCommand;
 
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct FileDialog {
     /// The title of the file dialog window.
     pub title: String,
@@ -23,6 +24,49 @@ pub struct FileDialog {
     /// On MacOS, the name is ignored and all extensions are merged into a
     /// single filter.
     pub filters: Vec<(String, Vec<String>)>,
+}
+
+impl FileDialog {
+    fn builder(self, window: &dyn winit::window::Window) -> rfd::FileDialog {
+        let mut builder = rfd::FileDialog::new()
+            .set_title(self.title)
+            .set_directory(self.directory)
+            .set_file_name(self.initial_file);
+
+        for (name, extensions) in self.filters {
+            builder = builder.add_filter(&name, &extensions);
+        }
+
+        builder.set_parent(window)
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct FolderDialog {
+    /// The title of the folder dialog window.
+    pub title: String,
+    /// The starting directory for the folder dialog.
+    pub directory: String,
+    /// File extension filters for the file dialog. Each filter consists of a
+    /// name and a list of extensions.
+    ///
+    /// On MacOS, the name is ignored and all extensions are merged into a
+    /// single filter.
+    pub filters: Vec<(String, Vec<String>)>,
+}
+
+impl FolderDialog {
+    fn builder(self, window: &dyn winit::window::Window) -> rfd::FileDialog {
+        let mut builder = rfd::FileDialog::new()
+            .set_title(self.title)
+            .set_directory(self.directory);
+
+        for (name, extensions) in self.filters {
+            builder = builder.add_filter(&name, &extensions);
+        }
+
+        builder.set_parent(window)
+    }
 }
 
 pub struct Context<'a> {
@@ -53,52 +97,18 @@ impl Context<'_> {
     }
 
     pub fn pick_file(&self, dialog: FileDialog) -> Option<PathBuf> {
-        let mut builder = rfd::FileDialog::new()
-            .set_title(dialog.title)
-            .set_directory(dialog.directory)
-            .set_file_name(dialog.initial_file);
-
-        for (name, extensions) in dialog.filters {
-            builder = builder.add_filter(&name, &extensions);
-        }
-
-        builder.set_parent(self.window).pick_file()
+        dialog.builder(self.window).pick_file()
     }
 
     pub fn pick_files(&self, dialog: FileDialog) -> Option<Vec<PathBuf>> {
-        let mut builder = rfd::FileDialog::new()
-            .set_title(dialog.title)
-            .set_directory(dialog.directory)
-            .set_file_name(dialog.initial_file);
-
-        for (name, extensions) in dialog.filters {
-            builder = builder.add_filter(&name, &extensions);
-        }
-
-        builder.set_parent(self.window).pick_files()
+        dialog.builder(self.window).pick_files()
     }
 
-    pub fn pick_folder(&self, dialog: FileDialog) -> Option<PathBuf> {
-        let mut builder = rfd::FileDialog::new()
-            .set_title(dialog.title)
-            .set_directory(dialog.directory);
-
-        for (name, extensions) in dialog.filters {
-            builder = builder.add_filter(&name, &extensions);
-        }
-
-        builder.set_parent(self.window).pick_folder()
+    pub fn pick_folder(&self, dialog: FolderDialog) -> Option<PathBuf> {
+        dialog.builder(self.window).pick_folder()
     }
 
-    pub fn pick_folders(&self, dialog: FileDialog) -> Option<Vec<PathBuf>> {
-        let mut builder = rfd::FileDialog::new()
-            .set_title(dialog.title)
-            .set_directory(dialog.directory);
-
-        for (name, extensions) in dialog.filters {
-            builder = builder.add_filter(&name, &extensions);
-        }
-
-        builder.set_parent(self.window).pick_folders()
+    pub fn pick_folders(&self, dialog: FolderDialog) -> Option<Vec<PathBuf>> {
+        dialog.builder(self.window).pick_folders()
     }
 }
