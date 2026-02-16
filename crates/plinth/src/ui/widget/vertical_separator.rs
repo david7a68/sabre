@@ -38,7 +38,7 @@ impl<'a> VerticalSeparator<'a> {
     }
 
     pub fn thickness(mut self, thickness: f32) -> Self {
-        self.builder.height(thickness);
+        self.builder.width(thickness);
         self
     }
 
