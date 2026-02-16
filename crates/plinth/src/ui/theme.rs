@@ -7,6 +7,7 @@ use crate::graphics::Color;
 use crate::graphics::FontStack;
 use crate::graphics::Paint;
 
+use super::Size;
 use super::style::BorderWidths;
 use super::style::CornerRadii;
 use super::style::PropertyKey;
@@ -28,11 +29,13 @@ pub enum StyleClass {
     Label,
     TextEdit,
     Image,
+    HorizontalSeparator,
+    VerticalSeparator,
 }
 
 impl StyleClass {
     /// Number of style class variants. Update when adding new variants.
-    pub const COUNT: usize = 5;
+    pub const COUNT: usize = 7;
 }
 
 pub struct Theme {
@@ -287,6 +290,54 @@ fn default_theme() -> Theme {
                     StateFlags::empty(),
                     StyleProperty::Background(Paint::solid(Color::TRANSPARENT)),
                 ),
+            ],
+        )
+        .unwrap();
+
+    theme
+        .set_style_class(
+            StyleClass::HorizontalSeparator,
+            None,
+            [
+                (
+                    StateFlags::empty(),
+                    StyleProperty::BorderWidths(BorderWidths {
+                        left: 0.0,
+                        right: 0.0,
+                        top: 0.0,
+                        bottom: 0.0,
+                    }),
+                ),
+                (
+                    StateFlags::empty(),
+                    StyleProperty::Background(Paint::solid(Color::BLACK)),
+                ),
+                (StateFlags::empty(), StyleProperty::Width(Size::Grow)),
+                (StateFlags::empty(), StyleProperty::Height(1.0.into())),
+            ],
+        )
+        .unwrap();
+
+    theme
+        .set_style_class(
+            StyleClass::VerticalSeparator,
+            None,
+            [
+                (
+                    StateFlags::empty(),
+                    StyleProperty::BorderWidths(BorderWidths {
+                        left: 0.0,
+                        right: 0.0,
+                        top: 0.0,
+                        bottom: 0.0,
+                    }),
+                ),
+                (
+                    StateFlags::empty(),
+                    StyleProperty::Background(Paint::solid(Color::BLACK)),
+                ),
+                (StateFlags::empty(), StyleProperty::Width(1.0.into())),
+                (StateFlags::empty(), StyleProperty::Height(Size::Grow)),
             ],
         )
         .unwrap();

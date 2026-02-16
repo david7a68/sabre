@@ -55,6 +55,7 @@ impl AppWindow {
             .child_direction(LayoutDirection::Vertical);
 
         panel.label(&format!("Counter Value: {}", self.value));
+        panel.horizontal_separator();
         panel.label("Press the button to increment");
 
         if panel.text_button("Increment").is_activated {
