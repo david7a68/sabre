@@ -11,10 +11,12 @@ use super::style::StateFlags;
 
 pub mod button;
 pub mod container;
+pub mod horizontal_separator;
 pub mod image;
 pub mod label;
 pub mod panel;
 pub mod text_edit;
+pub mod vertical_separator;
 
 #[derive(Clone, Copy, Debug)]
 pub struct Interaction {
@@ -51,6 +53,10 @@ pub trait UiBuilderWidgetsExt {
     fn text_edit(&mut self, initial_text: &str, width: f32) -> text_edit::TextEdit<'_>;
 
     fn label(&mut self, text: &str) -> label::Label<'_>;
+
+    fn horizontal_separator(&mut self) -> horizontal_separator::HorizontalSeparator<'_>;
+
+    fn vertical_separator(&mut self) -> vertical_separator::VerticalSeparator<'_>;
 }
 
 impl UiBuilderWidgetsExt for UiBuilder<'_> {
@@ -76,6 +82,14 @@ impl UiBuilderWidgetsExt for UiBuilder<'_> {
 
     fn label(&mut self, text: &str) -> label::Label<'_> {
         label::Label::new(self, text)
+    }
+
+    fn horizontal_separator(&mut self) -> horizontal_separator::HorizontalSeparator<'_> {
+        horizontal_separator::HorizontalSeparator::new(self)
+    }
+
+    fn vertical_separator(&mut self) -> vertical_separator::VerticalSeparator<'_> {
+        vertical_separator::VerticalSeparator::new(self)
     }
 }
 
