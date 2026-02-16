@@ -1,6 +1,7 @@
 use glamour::Contains;
 use glamour::Rect;
 
+use crate::graphics::Texture;
 use crate::ui::Pixels;
 use crate::ui::text::TextLayoutId;
 
@@ -10,6 +11,7 @@ use super::style::StateFlags;
 
 pub mod button;
 pub mod container;
+pub mod image;
 pub mod label;
 pub mod panel;
 pub mod text_edit;
@@ -34,6 +36,8 @@ pub trait UiBuilderWidgetsExt {
         self
     }
 
+    fn image(&mut self, texture: &Texture, width: Size);
+
     fn panel(&mut self) -> panel::Panel<'_>;
 
     fn with_panel(&mut self, callback: impl FnOnce(panel::Panel<'_>)) -> &mut Self {
@@ -52,6 +56,10 @@ pub trait UiBuilderWidgetsExt {
 impl UiBuilderWidgetsExt for UiBuilder<'_> {
     fn container(&mut self) -> container::Container<'_> {
         container::Container::new(self)
+    }
+
+    fn image(&mut self, texture: &Texture, width: Size) {
+        image::Image::new(self, texture).with_width(width).finish()
     }
 
     fn panel(&mut self) -> panel::Panel<'_> {

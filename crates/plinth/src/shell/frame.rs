@@ -1,7 +1,11 @@
+use std::path::Path;
 use std::path::PathBuf;
 
 use slotmap::SlotMap;
 
+use crate::graphics::GraphicsContext;
+use crate::graphics::Texture;
+use crate::graphics::TextureLoadError;
 use crate::ui::UiBuilder;
 
 use super::Input;
@@ -71,6 +75,7 @@ impl FolderDialog {
 
 pub struct Context<'a> {
     pub(super) window: &'a dyn winit::window::Window,
+    pub(super) graphics: &'a mut GraphicsContext,
     pub(super) viewports: &'a mut SlotMap<ViewportId, Viewport>,
     pub(super) deferred_commands: &'a mut Vec<DeferredCommand>,
 }
@@ -94,6 +99,10 @@ impl Context<'_> {
 
     pub fn request_repaint(&self) {
         self.window.request_redraw();
+    }
+
+    pub fn load_image(&self, path: impl AsRef<Path>) -> Result<Texture, TextureLoadError> {
+        self.graphics.load_image(path)
     }
 
     pub fn pick_file(&self, dialog: FileDialog) -> Option<PathBuf> {

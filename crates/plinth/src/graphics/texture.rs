@@ -72,6 +72,7 @@ pub struct Texture {
     id: TextureId,
     storage_id: StorageId,
     uvwh: [f32; 4],
+    size: [u16; 2],
 
     manager: Rc<TextureManagerInner>,
 }
@@ -94,6 +95,11 @@ impl Texture {
     #[must_use]
     pub fn uvwh(&self) -> [f32; 4] {
         self.uvwh
+    }
+
+    #[must_use]
+    pub fn size(&self) -> [u16; 2] {
+        self.size
     }
 
     #[must_use]
@@ -295,6 +301,7 @@ impl TextureManagerInner {
             id,
             storage_id: usage.storage,
             uvwh: usage.uvwh,
+            size: usage.size,
             manager: self.clone(),
         })
     }
@@ -434,6 +441,7 @@ impl TextureManagerInner {
             id: texture_id,
             storage_id,
             uvwh,
+            size: [width, height],
             manager: self.clone(),
         }
     }
@@ -465,15 +473,27 @@ impl TextureManagerInner {
             other => unimplemented!("Unsupported color type: {:?}", other),
         };
 
-        let (texture, usage, rectangle) = manager.allocate(
-            width.try_into().unwrap(),
-            height.try_into().unwrap(),
-            &self.device,
-        );
+        let width = width
+            .try_into()
+            .expect("Max texture dimension of 65535 exceeded.");
+
+        let height = height
+            .try_into()
+            .expect("Max texture dimension of 65535 exceeded.");
+
+        let (texture, usage, rectangle) = manager.allocate(width, height, &self.device);
 
         let uvwh = usage.uvwh;
         let storage_id = usage.storage;
         let texture_id = self.texture_map.borrow_mut().insert(usage);
+
+        let handle = Texture {
+            id: texture_id,
+            storage_id,
+            uvwh,
+            size: [width, height],
+            manager: self.clone(),
+        };
 
         // todo: figure out a better way
         std::thread::spawn({
@@ -489,8 +509,15 @@ impl TextureManagerInner {
 
             let queue = self.queue.clone();
             let ready = self.ready_sender.clone();
+            let handle = handle.clone();
 
             move || {
+                // Clone the handle and keep it around to ensure that the
+                // texture isn't released while we're loading it. We'll drop it
+                // at the end of this closure, which will allow the texture to
+                // be released if the caller drops their handle.
+                let _ = handle;
+
                 let _enter = span.enter();
 
                 let temp = {
@@ -521,12 +548,12 @@ impl TextureManagerInner {
                     &temp,
                     wgpu::TexelCopyBufferLayout {
                         offset: 0,
-                        bytes_per_row: Some(width * u32::from(bytes_per_pixel)),
-                        rows_per_image: Some(height),
+                        bytes_per_row: Some(u32::from(width) * u32::from(bytes_per_pixel)),
+                        rows_per_image: Some(height.into()),
                     },
                     wgpu::Extent3d {
-                        width,
-                        height,
+                        width: width.into(),
+                        height: height.into(),
                         depth_or_array_layers: 1,
                     },
                 );
@@ -545,12 +572,7 @@ impl TextureManagerInner {
             }
         });
 
-        Ok(Texture {
-            id: texture_id,
-            storage_id,
-            uvwh,
-            manager: self.clone(),
-        })
+        Ok(handle)
     }
 
     fn flush(self: &Rc<Self>) {
@@ -584,6 +606,7 @@ struct TextureUsage {
     atlas_id: AllocId,
     format: wgpu::TextureFormat,
     uvwh: [f32; 4],
+    size: [u16; 2],
 }
 
 #[derive(Clone)]
@@ -730,6 +753,7 @@ impl FormattedTextureManager {
                 atlas_id: id,
                 format: self.format,
                 uvwh: [u, v, w, h],
+                size: [width, height],
             },
             rectangle,
         )
