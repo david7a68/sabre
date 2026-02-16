@@ -53,7 +53,7 @@ impl AppWindow {
             .with_child_direction(LayoutDirection::Vertical);
 
         let mut row1 = ui
-            .panel()
+            .container()
             .with_child_direction(LayoutDirection::Horizontal)
             .with_child_alignment(Alignment::Center, Alignment::Center);
 
@@ -100,7 +100,7 @@ impl AppWindow {
         });
 
         let mut row2 = ui
-            .panel()
+            .container()
             .with_child_direction(LayoutDirection::Horizontal)
             .with_child_alignment(Alignment::Center, Alignment::Center);
 
