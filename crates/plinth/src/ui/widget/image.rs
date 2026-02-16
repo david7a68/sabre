@@ -3,14 +3,16 @@ use crate::graphics::GradientPaint;
 use crate::graphics::Paint;
 use crate::graphics::Texture;
 use crate::ui::Size;
+use crate::ui::StyleClass;
 use crate::ui::UiBuilder;
 use crate::ui::style::BorderWidths;
 use crate::ui::style::CornerRadii;
+use crate::ui::style::StateFlags;
 
 pub struct Image<'a> {
     builder: UiBuilder<'a>,
 
-    texture: Option<Texture>,
+    texture: Texture,
     mask: Option<Texture>,
 
     border: Option<GradientPaint>,
@@ -22,11 +24,13 @@ impl<'a> Image<'a> {
     pub fn new(builder: &'a mut UiBuilder<'_>, texture: &Texture) -> Self {
         let mut builder = builder.child();
 
+        builder.apply_style(StyleClass::Image, StateFlags::NORMAL);
+
         builder.size(texture.size()[0] as f32, texture.size()[1] as f32);
 
         Self {
             builder,
-            texture: Some(texture.clone()),
+            texture: texture.clone(),
             mask: None,
             border: None,
             border_widths: None,
@@ -35,20 +39,16 @@ impl<'a> Image<'a> {
     }
 
     pub fn scale(&mut self, scale: f32) -> &mut Self {
-        if let Some(texture) = &self.texture {
-            let size = texture.size();
-            self.builder
-                .size(size[0] as f32 * scale, size[1] as f32 * scale);
-        }
+        let size = self.texture.size();
+        self.builder
+            .size(size[0] as f32 * scale, size[1] as f32 * scale);
         self
     }
 
     pub fn with_scale(mut self, scale: f32) -> Self {
-        if let Some(texture) = &self.texture {
-            let size = texture.size();
-            self.builder
-                .size(size[0] as f32 * scale, size[1] as f32 * scale);
-        }
+        let size = self.texture.size();
+        self.builder
+            .size(size[0] as f32 * scale, size[1] as f32 * scale);
         self
     }
 
@@ -113,22 +113,18 @@ impl<'a> Image<'a> {
         self.corner_radii = Some(corner_radii);
         self
     }
-}
 
-impl Drop for Image<'_> {
-    fn drop(&mut self) {
-        if let Some(texture) = self.texture.take() {
-            self.builder.paint(
-                Paint::Sampled {
-                    color_tint: Color::WHITE,
-                    color_texture: Some(texture),
-                    alpha_texture: self.mask.take(),
-                },
-                self.border
-                    .unwrap_or(GradientPaint::solid(Color::TRANSPARENT)),
-                self.border_widths.unwrap_or_default(),
-                self.corner_radii.unwrap_or_default(),
-            );
-        }
+    pub fn finish(mut self) {
+        self.builder.paint(
+            Paint::Sampled {
+                color_tint: Color::WHITE,
+                color_texture: Some(self.texture),
+                alpha_texture: self.mask.take(),
+            },
+            self.border
+                .unwrap_or(GradientPaint::solid(Color::TRANSPARENT)),
+            self.border_widths.unwrap_or_default(),
+            self.corner_radii.unwrap_or_default(),
+        );
     }
 }

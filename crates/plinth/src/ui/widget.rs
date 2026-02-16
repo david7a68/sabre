@@ -36,7 +36,7 @@ pub trait UiBuilderWidgetsExt {
         self
     }
 
-    fn image(&mut self, texture: &Texture) -> image::Image<'_>;
+    fn image(&mut self, texture: &Texture, width: Size);
 
     fn panel(&mut self) -> panel::Panel<'_>;
 
@@ -58,8 +58,8 @@ impl UiBuilderWidgetsExt for UiBuilder<'_> {
         container::Container::new(self)
     }
 
-    fn image(&mut self, texture: &Texture) -> image::Image<'_> {
-        image::Image::new(self, texture)
+    fn image(&mut self, texture: &Texture, width: Size) {
+        image::Image::new(self, texture).with_width(width).finish()
     }
 
     fn panel(&mut self) -> panel::Panel<'_> {

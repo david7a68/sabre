@@ -27,11 +27,12 @@ pub enum StyleClass {
     Button,
     Label,
     TextEdit,
+    Image,
 }
 
 impl StyleClass {
     /// Number of style class variants. Update when adding new variants.
-    pub const COUNT: usize = 4;
+    pub const COUNT: usize = 5;
 }
 
 pub struct Theme {
