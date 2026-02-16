@@ -11,6 +11,8 @@ pub use app_context::AppContextBuilder;
 pub use app_context::AppLifecycleHandler;
 pub use clipboard::Clipboard;
 pub use frame::Context;
+pub use frame::FileDialog;
+pub use frame::FolderDialog;
 pub use input::ElementState;
 pub use input::Input;
 pub use input::KeyboardEvent;

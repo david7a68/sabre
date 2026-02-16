@@ -22,6 +22,7 @@ memmap2 = { workspace = true }
 parley = { workspace = true }
 pollster = { workspace = true }
 rapidhash = { workspace = true }
+rfd = { workspace = true }
 slotmap = { workspace = true }
 smallvec = { workspace = true, features = ["union", "const_generics"] }
 swash = { workspace = true, features = ["scale"] }
