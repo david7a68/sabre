@@ -487,6 +487,14 @@ impl TextureManagerInner {
         let storage_id = usage.storage;
         let texture_id = self.texture_map.borrow_mut().insert(usage);
 
+        let handle = Texture {
+            id: texture_id,
+            storage_id,
+            uvwh,
+            size: [width, height],
+            manager: self.clone(),
+        };
+
         // todo: figure out a better way
         std::thread::spawn({
             let span = debug_span!(
@@ -501,8 +509,15 @@ impl TextureManagerInner {
 
             let queue = self.queue.clone();
             let ready = self.ready_sender.clone();
+            let handle = handle.clone();
 
             move || {
+                // Clone the handle and keep it around to ensure that the
+                // texture isn't released while we're loading it. We'll drop it
+                // at the end of this closure, which will allow the texture to
+                // be released if the caller drops their handle.
+                let _ = handle;
+
                 let _enter = span.enter();
 
                 let temp = {
@@ -557,13 +572,7 @@ impl TextureManagerInner {
             }
         });
 
-        Ok(Texture {
-            id: texture_id,
-            storage_id,
-            uvwh,
-            size: [width, height],
-            manager: self.clone(),
-        })
+        Ok(handle)
     }
 
     fn flush(self: &Rc<Self>) {
