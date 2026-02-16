@@ -42,6 +42,15 @@ pub struct Input {
     pub modifiers: winit::keyboard::ModifiersState,
 }
 
+impl Input {
+    pub fn focus_changed(&mut self) {
+        *self = Self {
+            window_size: self.window_size,
+            ..Default::default()
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct KeyboardEvent {
     pub key: PhysicalKey,
