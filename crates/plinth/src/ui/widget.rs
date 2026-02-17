@@ -1,22 +1,35 @@
+use std::hash::Hash;
+
 use glamour::Contains;
 use glamour::Rect;
 
-use crate::graphics::Texture;
 use crate::ui::Pixels;
 use crate::ui::text::TextLayoutId;
 
-use super::Size;
+use super::Alignment;
+use super::LayoutDirection;
 use super::UiBuilder;
 use super::style::StateFlags;
 
-pub mod button;
-pub mod container;
-pub mod horizontal_separator;
-pub mod image;
-pub mod label;
-pub mod panel;
-pub mod text_edit;
-pub mod vertical_separator;
+mod button;
+mod frame;
+mod horizontal_separator;
+mod image;
+mod label;
+mod surface;
+mod text_edit;
+mod vertical_separator;
+
+pub use button::Button;
+pub use frame::Frame;
+pub use horizontal_separator::HorizontalSeparator;
+pub use image::Image;
+pub use label::Label;
+pub use surface::Surface;
+pub use text_edit::TextEdit;
+pub use vertical_separator::VerticalSeparator;
+
+use macros::*;
 
 #[derive(Clone, Copy, Debug)]
 pub struct Interaction {
@@ -25,71 +38,61 @@ pub struct Interaction {
     pub is_focused: bool,
 }
 
-pub trait UiBuilderWidgetsExt {
-    /// Creates an invisible, non-interactive layout widget for grouping other
-    /// widgets together.
-    fn container(&mut self) -> container::Container<'_>;
+pub trait Container<'a>: Sized {
+    fn builder_mut(&mut self) -> &mut UiBuilder<'a>;
 
-    /// Creates an invisible, non-interactive layout widget for grouping other
-    /// widgets together.
-    fn with_container(&mut self, callback: impl FnOnce(container::Container<'_>)) -> &mut Self {
-        let container = self.container();
-        callback(container);
+    fn child<'this>(&'this mut self) -> UiBuilder<'this>
+    where
+        'a: 'this,
+    {
+        self.builder_mut().child()
+    }
+
+    fn named_child<'this>(&'this mut self, name: impl Hash) -> UiBuilder<'this>
+    where
+        'a: 'this,
+    {
+        self.builder_mut().named_child(name)
+    }
+
+    fn child_direction(&mut self, direction: LayoutDirection) -> &mut Self {
+        self.builder_mut().child_direction(direction);
         self
     }
 
-    fn image(&mut self, texture: &Texture, width: Size);
-
-    fn panel(&mut self) -> panel::Panel<'_>;
-
-    fn with_panel(&mut self, callback: impl FnOnce(panel::Panel<'_>)) -> &mut Self {
-        let panel = self.panel();
-        callback(panel);
+    fn with_child_direction(mut self, direction: LayoutDirection) -> Self {
+        self.child_direction(direction);
         self
     }
 
-    fn text_button(&mut self, label: &str) -> Interaction;
+    fn child_alignment(&mut self, major: Alignment, minor: Alignment) -> &mut Self {
+        self.builder_mut().child_alignment(major, minor);
+        self
+    }
 
-    fn text_edit(&mut self, initial_text: &str, width: f32) -> text_edit::TextEdit<'_>;
-
-    fn label(&mut self, text: &str) -> label::Label<'_>;
-
-    fn horizontal_separator(&mut self) -> horizontal_separator::HorizontalSeparator<'_>;
-
-    fn vertical_separator(&mut self) -> vertical_separator::VerticalSeparator<'_>;
+    fn with_child_alignment(mut self, major: Alignment, minor: Alignment) -> Self {
+        self.child_alignment(major, minor);
+        self
+    }
 }
 
-impl UiBuilderWidgetsExt for UiBuilder<'_> {
-    fn container(&mut self) -> container::Container<'_> {
-        container::Container::new(self)
+impl<'a> Container<'a> for UiBuilder<'a> {
+    fn builder_mut(&mut self) -> &mut UiBuilder<'a> {
+        self
     }
 
-    fn image(&mut self, texture: &Texture, width: Size) {
-        image::Image::new(self, texture).with_width(width).finish()
+    fn child<'this>(&'this mut self) -> UiBuilder<'this>
+    where
+        'a: 'this,
+    {
+        self.child()
     }
 
-    fn panel(&mut self) -> panel::Panel<'_> {
-        panel::Panel::new(self)
-    }
-
-    fn text_button(&mut self, label: &str) -> Interaction {
-        button::Button::new(self, Some(label)).finish()
-    }
-
-    fn text_edit(&mut self, default_text: &str, width: f32) -> text_edit::TextEdit<'_> {
-        text_edit::TextEdit::new(self, Size::Fixed(width)).default_text(default_text)
-    }
-
-    fn label(&mut self, text: &str) -> label::Label<'_> {
-        label::Label::new(self, text)
-    }
-
-    fn horizontal_separator(&mut self) -> horizontal_separator::HorizontalSeparator<'_> {
-        horizontal_separator::HorizontalSeparator::new(self)
-    }
-
-    fn vertical_separator(&mut self) -> vertical_separator::VerticalSeparator<'_> {
-        vertical_separator::VerticalSeparator::new(self)
+    fn named_child<'this>(&'this mut self, name: impl Hash) -> UiBuilder<'this>
+    where
+        'a: 'this,
+    {
+        self.named_child(name)
     }
 }
 
@@ -156,4 +159,133 @@ pub struct WidgetState {
     pub was_active: bool,
 
     pub text_layout: Option<TextLayoutId>,
+}
+
+mod macros {
+    /// Macro to forward builder property methods from a widget struct to its
+    /// internal UiBuilder.
+    ///
+    /// Each method is forwarded in two forms: `property` takes `&mut self` and
+    /// returns `&mut Self` for chaining, and `with_property` takes `self` by
+    /// value and returns `Self` for builder-style use.
+    ///
+    /// Supported properties:
+    ///
+    /// - color (with_color)
+    /// - width (with_width)
+    /// - height (with_height)
+    /// - size (with_size)
+    /// - padding (with_padding)
+    macro_rules! forward_properties {
+        ($($method:ident),+) => {
+            $crate::ui::widget::macros::forward_properties!(@impl $($method),+);
+        };
+        (@impl color $(, $method:ident)*) => {
+            pub fn color(&mut self, color: impl Into<$crate::graphics::Color>) -> &mut Self {
+                self.builder.color(color.into());
+                self
+            }
+
+            pub fn with_color(mut self, color: impl Into<$crate::graphics::Color>) -> Self {
+                self.color(color);
+                self
+            }
+
+            $crate::ui::widget::macros::forward_properties!(@impl $($method),*);
+        };
+        (@impl width $(, $method:ident)*) => {
+            pub fn width(&mut self, width: impl Into<$crate::ui::Size>) -> &mut Self {
+                self.builder.width(width);
+                self
+            }
+
+            pub fn with_width(mut self, width: impl Into<$crate::ui::Size>) -> Self {
+                self.width(width);
+                self
+            }
+
+            $crate::ui::widget::macros::forward_properties!(@impl $($method),*);
+        };
+        (@impl height $(, $method:ident)*) => {
+            pub fn height(&mut self, height: impl Into<$crate::ui::Size>) -> &mut Self {
+                self.builder.height(height);
+                self
+            }
+
+            pub fn with_height(mut self, height: impl Into<$crate::ui::Size>) -> Self {
+                self.height(height);
+                self
+            }
+
+            $crate::ui::widget::macros::forward_properties!(@impl $($method),*);
+        };
+        (@impl size $(, $method:ident)*) => {
+            pub fn size(&mut self, width: impl Into<$crate::ui::Size>, height: impl Into<$crate::ui::Size>) -> &mut Self {
+                self.builder.size(width, height);
+                self
+            }
+
+            pub fn with_size(mut self, width: impl Into<$crate::ui::Size>, height: impl Into<$crate::ui::Size>) -> Self {
+                self.size(width, height);
+                self
+            }
+
+            $crate::ui::widget::macros::forward_properties!(@impl $($method),*);
+        };
+        (@impl padding $(, $method:ident)*) => {
+            pub fn padding(&mut self, padding: $crate::ui::Padding) -> &mut Self {
+                self.builder.padding(padding);
+                self
+            }
+
+            pub fn with_padding(mut self, padding: $crate::ui::Padding) -> Self {
+                self.padding(padding);
+                self
+            }
+
+            $crate::ui::widget::macros::forward_properties!(@impl $($method),*);
+        };
+        (@impl ) => {};
+    }
+
+    pub(crate) use forward_properties;
+
+    macro_rules! impl_container {
+        ($type:ident < $($lt:lifetime),+>) => {
+            impl <$($lt),+> $crate::ui::widget::Container<$($lt),+> for $type <$($lt),+> {
+                fn builder_mut(&mut self) -> &mut UiBuilder<$($lt),+> {
+                    &mut self.builder
+                }
+            }
+
+            impl <$($lt),+> $type <$($lt),+> {
+                pub fn child_direction(&mut self, direction: $crate::ui::LayoutDirection) -> &mut Self {
+                    use $crate::ui::widget::Container;
+
+                    self.builder_mut().child_direction(direction);
+                    self
+                }
+
+                pub fn with_child_direction(mut self, direction: $crate::ui::LayoutDirection) -> Self {
+
+                    self.child_direction(direction);
+                    self
+                }
+
+                pub fn child_alignment(&mut self, major: $crate::ui::Alignment, minor: $crate::ui::Alignment) -> &mut Self {
+                    use $crate::ui::widget::Container;
+
+                    self.builder_mut().child_alignment(major, minor);
+                    self
+                }
+
+                pub fn with_child_alignment(mut self, major: $crate::ui::Alignment, minor: $crate::ui::Alignment) -> Self {
+                    self.child_alignment(major, minor);
+                    self
+                }
+            }
+        };
+    }
+
+    pub(crate) use impl_container;
 }

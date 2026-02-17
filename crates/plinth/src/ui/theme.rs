@@ -24,7 +24,7 @@ static DEFAULT_FONT_FEATURES: OnceLock<parley::FontSettings<'static, parley::Fon
 #[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum StyleClass {
-    Panel = 0,
+    Surface = 0,
     Button,
     Label,
     TextEdit,

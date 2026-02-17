@@ -3,6 +3,8 @@ use winit::keyboard::KeyCode;
 use winit::keyboard::PhysicalKey;
 
 use crate::graphics::Color;
+use crate::graphics::GradientPaint;
+use crate::graphics::Paint;
 use crate::graphics::TextLayoutContext;
 use crate::shell::Clipboard;
 use crate::shell::Input;
@@ -10,10 +12,14 @@ use crate::ui::Atom;
 use crate::ui::Size;
 use crate::ui::builder::UiBuilder;
 use crate::ui::context::LayoutContent;
+use crate::ui::style::BorderWidths;
+use crate::ui::style::CornerRadii;
 use crate::ui::style::StateFlags;
 use crate::ui::theme::StyleClass;
 use crate::ui::widget::ClickBehavior;
 use crate::ui::widget::Interaction;
+
+use super::macros::forward_properties;
 
 pub struct TextEdit<'a> {
     builder: UiBuilder<'a>,
@@ -61,6 +67,8 @@ impl<'a> TextEdit<'a> {
         }
     }
 
+    forward_properties!(width, height);
+
     pub fn default_text(self, text: &str) -> Self {
         let (_, dynamic_layout) = self
             .builder
@@ -96,8 +104,15 @@ impl<'a> TextEdit<'a> {
         self
     }
 
-    pub fn height(mut self, height: Size) -> Self {
-        self.builder.height(height);
+    pub fn paint(
+        &mut self,
+        paint: Paint,
+        border: GradientPaint,
+        border_width: BorderWidths,
+        corner_radii: CornerRadii,
+    ) -> &mut Self {
+        self.builder
+            .paint(paint, border, border_width, corner_radii);
         self
     }
 

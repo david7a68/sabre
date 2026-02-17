@@ -1,12 +1,11 @@
-use std::ops::Deref;
-use std::ops::DerefMut;
-
 use crate::ui::StyleClass;
 use crate::ui::UiBuilder;
 use crate::ui::style::StateFlags;
 
 use super::ClickBehavior;
 use super::Interaction;
+use super::impl_container;
+use super::macros::forward_properties;
 
 pub struct Button<'a> {
     builder: UiBuilder<'a>,
@@ -39,21 +38,11 @@ impl Button<'_> {
         }
     }
 
+    forward_properties!(width, height, size, padding);
+
     pub fn finish(self) -> Interaction {
         self.interaction
     }
 }
 
-impl<'a> DerefMut for Button<'a> {
-    fn deref_mut(&mut self) -> &mut UiBuilder<'a> {
-        &mut self.builder
-    }
-}
-
-impl<'a> Deref for Button<'a> {
-    type Target = UiBuilder<'a>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.builder
-    }
-}
+impl_container!(Button<'a>);

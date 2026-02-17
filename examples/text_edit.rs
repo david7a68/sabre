@@ -6,10 +6,10 @@ use plinth::shell::AppLifecycleHandler;
 use plinth::shell::Context;
 use plinth::shell::WindowConfig;
 use plinth::ui::Alignment;
+use plinth::ui::CommonWidgetsExt;
 use plinth::ui::LayoutDirection;
 use plinth::ui::Padding;
 use plinth::ui::UiBuilder;
-use plinth::ui::widget::UiBuilderWidgetsExt;
 
 fn main() {
     tracing_subscriber::fmt().pretty().init();
@@ -45,12 +45,11 @@ impl AppWindow {
     fn update(&mut self, _context: Context, mut ui: UiBuilder) {
         ui.child_alignment(Alignment::Center, Alignment::Center);
 
-        let mut panel = ui.panel();
+        let mut panel = ui.surface();
         panel
             .width(600.0)
             .height(400.0)
-            .child_major_alignment(Alignment::Start)
-            .child_minor_alignment(Alignment::Start)
+            .child_alignment(Alignment::Start, Alignment::Start)
             .child_direction(LayoutDirection::Vertical)
             .padding(Padding::equal(20.0));
 
@@ -66,7 +65,7 @@ impl AppWindow {
         };
 
         let mut info_panel = panel
-            .panel()
+            .surface()
             .with_child_direction(LayoutDirection::Horizontal);
 
         info_panel.label(&format!("Current text: {}", self.text_content));

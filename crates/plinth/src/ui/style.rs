@@ -4,7 +4,7 @@ mod stateful_property;
 
 // Public API
 pub use properties::*;
-pub(crate) use registry::*;
+pub use registry::*;
 pub(crate) use stateful_property::StatefulProperty;
 
 #[cfg(test)]
@@ -67,10 +67,8 @@ mod tests {
             .unwrap();
 
         // Resolve properties for different states
-        let base_normal: Paint =
-            registry.resolve::<Background>(button_base, StateFlags::NORMAL);
-        let base_hovered: Paint =
-            registry.resolve::<Background>(button_base, StateFlags::HOVERED);
+        let base_normal: Paint = registry.resolve::<Background>(button_base, StateFlags::NORMAL);
+        let base_hovered: Paint = registry.resolve::<Background>(button_base, StateFlags::HOVERED);
         let primary_normal: Paint =
             registry.resolve::<Background>(button_primary, StateFlags::NORMAL);
         let primary_text: Color = registry.resolve::<TextColor>(button_primary, StateFlags::NORMAL);
@@ -80,7 +78,10 @@ mod tests {
         assert_eq!(base_hovered, Paint::solid(Color::srgb(0.3, 0.3, 0.3, 1.0)));
 
         // Primary inherits text color, overrides background
-        assert_eq!(primary_normal, Paint::solid(Color::srgb(0.0, 0.4, 0.8, 1.0)));
+        assert_eq!(
+            primary_normal,
+            Paint::solid(Color::srgb(0.0, 0.4, 0.8, 1.0))
+        );
         assert_eq!(primary_text, Color::WHITE); // Inherited from base
     }
 }

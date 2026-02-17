@@ -1,13 +1,12 @@
-use crate::graphics::Color;
 use crate::graphics::GradientPaint;
 use crate::graphics::Paint;
-use crate::ui::Padding;
-use crate::ui::Size;
 use crate::ui::StyleClass;
 use crate::ui::UiBuilder;
 use crate::ui::style::BorderWidths;
 use crate::ui::style::CornerRadii;
 use crate::ui::style::StateFlags;
+
+use super::macros::forward_properties;
 
 pub struct Label<'a> {
     builder: UiBuilder<'a>,
@@ -33,28 +32,5 @@ impl<'a> Label<'a> {
         self
     }
 
-    pub fn color(mut self, color: Color) -> Self {
-        self.builder.color(color);
-        self
-    }
-
-    pub fn width(mut self, width: impl Into<Size>) -> Self {
-        self.builder.width(width);
-        self
-    }
-
-    pub fn height(mut self, height: impl Into<Size>) -> Self {
-        self.builder.height(height);
-        self
-    }
-
-    pub fn size(mut self, width: impl Into<Size>, height: impl Into<Size>) -> Self {
-        self.builder.size(width, height);
-        self
-    }
-
-    pub fn padding(mut self, padding: Padding) -> Self {
-        self.builder.padding(padding);
-        self
-    }
+    forward_properties!(color, width, height, size, padding);
 }

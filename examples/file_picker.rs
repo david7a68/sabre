@@ -8,10 +8,10 @@ use plinth::shell::FileDialog;
 use plinth::shell::FolderDialog;
 use plinth::shell::WindowConfig;
 use plinth::ui::Alignment;
+use plinth::ui::CommonWidgetsExt;
 use plinth::ui::LayoutDirection;
 use plinth::ui::Size::Grow;
 use plinth::ui::UiBuilder;
-use plinth::ui::widget::UiBuilderWidgetsExt;
 
 fn main() {
     tracing_subscriber::fmt().pretty().init();
@@ -49,15 +49,15 @@ impl AppWindow {
     fn update(&mut self, context: Context, mut ui: UiBuilder) {
         let mut ui = ui
             .child_alignment(Alignment::Center, Alignment::Center)
-            .panel()
+            .surface()
             .with_child_direction(LayoutDirection::Vertical);
 
         let mut row1 = ui
-            .container()
+            .frame()
             .with_child_direction(LayoutDirection::Horizontal)
             .with_child_alignment(Alignment::Center, Alignment::Center);
 
-        row1.with_panel(|mut panel| {
+        row1.with_surface(|mut panel| {
             panel
                 .child_direction(LayoutDirection::Vertical)
                 .child_alignment(Alignment::Start, Alignment::Start)
@@ -78,7 +78,7 @@ impl AppWindow {
 
             panel.label(&self.open_file_result).width(Grow);
         })
-        .with_panel(|mut panel| {
+        .with_surface(|mut panel| {
             panel
                 .child_direction(LayoutDirection::Vertical)
                 .child_alignment(Alignment::Start, Alignment::Start)
@@ -100,11 +100,11 @@ impl AppWindow {
         });
 
         let mut row2 = ui
-            .container()
+            .frame()
             .with_child_direction(LayoutDirection::Horizontal)
             .with_child_alignment(Alignment::Center, Alignment::Center);
 
-        row2.with_panel(|mut panel| {
+        row2.with_surface(|mut panel| {
             panel
                 .child_direction(LayoutDirection::Vertical)
                 .child_alignment(Alignment::Start, Alignment::Start)
@@ -134,7 +134,7 @@ impl AppWindow {
                 }
             }
         })
-        .with_panel(|mut panel| {
+        .with_surface(|mut panel| {
             panel
                 .child_direction(LayoutDirection::Vertical)
                 .child_alignment(Alignment::Start, Alignment::Start)

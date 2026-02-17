@@ -11,9 +11,9 @@ use plinth::shell::AppLifecycleHandler;
 use plinth::shell::Context;
 use plinth::shell::WindowConfig;
 use plinth::ui::Alignment;
+use plinth::ui::CommonWidgetsExt;
 use plinth::ui::LayoutDirection;
 use plinth::ui::UiBuilder;
-use plinth::ui::widget::UiBuilderWidgetsExt;
 
 fn main() {
     tracing_subscriber::fmt().pretty().init();
@@ -48,7 +48,7 @@ impl AppWindow {
     fn update(&mut self, _context: Context, mut ui: UiBuilder) {
         let mut panel = ui
             .child_alignment(Alignment::Center, Alignment::Center)
-            .panel();
+            .surface();
 
         panel
             .color(Color::LIGHT_GRAY)

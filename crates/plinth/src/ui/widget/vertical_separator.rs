@@ -1,13 +1,12 @@
-use crate::graphics::Color;
 use crate::graphics::GradientPaint;
 use crate::graphics::Paint;
-use crate::ui::Padding;
-use crate::ui::Size;
 use crate::ui::StyleClass;
 use crate::ui::UiBuilder;
 use crate::ui::style::BorderWidths;
 use crate::ui::style::CornerRadii;
 use crate::ui::style::StateFlags;
+
+use super::macros::forward_properties;
 
 pub struct VerticalSeparator<'a> {
     builder: UiBuilder<'a>,
@@ -32,23 +31,10 @@ impl<'a> VerticalSeparator<'a> {
         self
     }
 
-    pub fn color(mut self, color: Color) -> Self {
-        self.builder.color(color);
-        self
-    }
+    forward_properties!(color, width, padding);
 
     pub fn thickness(mut self, thickness: f32) -> Self {
         self.builder.width(thickness);
-        self
-    }
-
-    pub fn height(mut self, height: impl Into<Size>) -> Self {
-        self.builder.height(height);
-        self
-    }
-
-    pub fn padding(mut self, padding: Padding) -> Self {
-        self.builder.padding(padding);
         self
     }
 }
