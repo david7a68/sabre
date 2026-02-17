@@ -18,7 +18,7 @@ pub enum StyleError {
     StyleTreeDepthLimitExceeded,
 }
 
-pub struct StyleRegistry {
+pub(crate) struct StyleRegistry {
     default_style: StyleId,
     /// Source definitions - kept for regeneration when parent changes
     definitions: SlotMap<StyleId, StyleDef>,
