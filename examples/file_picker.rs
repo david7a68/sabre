@@ -8,10 +8,10 @@ use plinth::shell::FileDialog;
 use plinth::shell::FolderDialog;
 use plinth::shell::WindowConfig;
 use plinth::ui::Alignment;
+use plinth::ui::CommonWidgetsExt;
 use plinth::ui::LayoutDirection;
 use plinth::ui::Size::Grow;
 use plinth::ui::UiBuilder;
-use plinth::ui::widget::UiBuilderWidgetsExt;
 
 fn main() {
     tracing_subscriber::fmt().pretty().init();

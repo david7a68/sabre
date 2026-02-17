@@ -11,9 +11,9 @@ use plinth::shell::AppLifecycleHandler;
 use plinth::shell::Context;
 use plinth::shell::WindowConfig;
 use plinth::ui::Alignment;
+use plinth::ui::CommonWidgetsExt;
 use plinth::ui::LayoutDirection;
 use plinth::ui::UiBuilder;
-use plinth::ui::widget::UiBuilderWidgetsExt;
 
 fn main() {
     tracing_subscriber::fmt().pretty().init();

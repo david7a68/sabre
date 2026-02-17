@@ -3,13 +3,11 @@ use std::hash::Hash;
 use glamour::Contains;
 use glamour::Rect;
 
-use crate::graphics::Texture;
 use crate::ui::Pixels;
 use crate::ui::text::TextLayoutId;
 
 use super::Alignment;
 use super::LayoutDirection;
-use super::Size;
 use super::UiBuilder;
 use super::style::StateFlags;
 
@@ -97,84 +95,6 @@ impl<'a> Container<'a> for UiBuilder<'a> {
         self.named_child(name)
     }
 }
-
-pub trait UiBuilderWidgetsExt<'a>: Container<'a> {
-    /// Creates an invisible, non-interactive layout widget for grouping other
-    /// widgets together.
-    fn frame<'this>(&'this mut self) -> frame::Frame<'this>
-    where
-        'a: 'this,
-    {
-        frame::Frame::new(self.builder_mut())
-    }
-
-    /// Creates an invisible, non-interactive layout widget for grouping other
-    /// widgets together.
-    fn with_frame(&mut self, callback: impl FnOnce(frame::Frame<'_>)) -> &mut Self {
-        let container = self.frame();
-        callback(container);
-        self
-    }
-
-    fn image(&mut self, texture: &Texture, width: Size) {
-        image::Image::new(self.builder_mut(), texture)
-            .with_width(width)
-            .finish()
-    }
-
-    fn surface<'this>(&'this mut self) -> surface::Surface<'this>
-    where
-        'a: 'this,
-    {
-        surface::Surface::new(self.builder_mut())
-    }
-
-    fn with_surface(&mut self, callback: impl FnOnce(surface::Surface<'_>)) -> &mut Self {
-        let panel = self.surface();
-        callback(panel);
-        self
-    }
-
-    fn text_button(&mut self, label: &str) -> Interaction {
-        button::Button::new(self.builder_mut(), Some(label)).finish()
-    }
-
-    fn text_edit<'this>(
-        &'this mut self,
-        initial_text: &str,
-        width: f32,
-    ) -> text_edit::TextEdit<'this>
-    where
-        'a: 'this,
-    {
-        text_edit::TextEdit::new(self.builder_mut(), Size::Fixed(width)).default_text(initial_text)
-    }
-
-    fn label<'this>(&'this mut self, text: &str) -> label::Label<'this>
-    where
-        'a: 'this,
-    {
-        label::Label::new(self.builder_mut(), text)
-    }
-
-    fn horizontal_separator<'this>(
-        &'this mut self,
-    ) -> horizontal_separator::HorizontalSeparator<'this>
-    where
-        'a: 'this,
-    {
-        horizontal_separator::HorizontalSeparator::new(self.builder_mut())
-    }
-
-    fn vertical_separator<'this>(&'this mut self) -> vertical_separator::VerticalSeparator<'this>
-    where
-        'a: 'this,
-    {
-        vertical_separator::VerticalSeparator::new(self.builder_mut())
-    }
-}
-
-impl<'a, C: Container<'a>> UiBuilderWidgetsExt<'a> for C {}
 
 /// Controls when a click is registered.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]

@@ -13,13 +13,13 @@ use plinth::shell::AppLifecycleHandler;
 use plinth::shell::Context;
 use plinth::shell::WindowConfig;
 use plinth::ui::Alignment;
+use plinth::ui::CommonWidgetsExt;
 use plinth::ui::StyleClass;
 use plinth::ui::Theme;
 use plinth::ui::UiBuilder;
 use plinth::ui::style::StateFlags;
 use plinth::ui::style::StyleProperty;
 use plinth::ui::widget::Interaction;
-use plinth::ui::widget::UiBuilderWidgetsExt;
 
 fn main() {
     tracing_subscriber::fmt().pretty().init();
