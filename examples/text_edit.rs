@@ -49,8 +49,7 @@ impl AppWindow {
         panel
             .width(600.0)
             .height(400.0)
-            .child_major_alignment(Alignment::Start)
-            .child_minor_alignment(Alignment::Start)
+            .child_alignment(Alignment::Start, Alignment::Start)
             .child_direction(LayoutDirection::Vertical)
             .padding(Padding::equal(20.0));
 

@@ -1,12 +1,9 @@
-use std::ops::Deref;
-use std::ops::DerefMut;
-
-use crate::ui::Alignment;
-use crate::ui::LayoutDirection;
-use crate::ui::Size;
 use crate::ui::StyleClass;
 use crate::ui::UiBuilder;
 use crate::ui::style::StateFlags;
+
+use super::impl_container;
+use super::macros::forward_properties;
 
 /// An invisible, non-interactive layout widget for grouping other widgets
 /// together.
@@ -34,7 +31,6 @@ impl<'a> Frame<'a> {
         let direction = style.child_direction.get(StateFlags::NORMAL);
 
         let mut child = builder.child();
-
         child.child_alignment(major_alignment, minor_alignment);
         child.child_spacing(spacing);
         child.child_direction(direction);
@@ -42,42 +38,7 @@ impl<'a> Frame<'a> {
         Self { builder: child }
     }
 
-    pub fn with_width(mut self, width: impl Into<Size>) -> Self {
-        self.builder.width(width);
-        self
-    }
-
-    pub fn with_height(mut self, height: impl Into<Size>) -> Self {
-        self.builder.height(height);
-        self
-    }
-
-    pub fn with_size(mut self, width: impl Into<Size>, height: impl Into<Size>) -> Self {
-        self.builder.size(width, height);
-        self
-    }
-
-    pub fn with_child_direction(mut self, direction: LayoutDirection) -> Self {
-        self.builder.child_direction(direction);
-        self
-    }
-
-    pub fn with_child_alignment(mut self, horizontal: Alignment, vertical: Alignment) -> Self {
-        self.builder.child_alignment(horizontal, vertical);
-        self
-    }
+    forward_properties!(width, height, size, padding);
 }
 
-impl<'a> DerefMut for Frame<'a> {
-    fn deref_mut(&mut self) -> &mut UiBuilder<'a> {
-        &mut self.builder
-    }
-}
-
-impl<'a> Deref for Frame<'a> {
-    type Target = UiBuilder<'a>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.builder
-    }
-}
+impl_container!(Frame<'a>);

@@ -1,12 +1,9 @@
-use std::ops::Deref;
-use std::ops::DerefMut;
-
-use crate::ui::Alignment;
-use crate::ui::LayoutDirection;
-use crate::ui::Size;
 use crate::ui::StyleClass;
 use crate::ui::UiBuilder;
 use crate::ui::style::StateFlags;
+
+use super::impl_container;
+use super::macros::forward_properties;
 
 pub struct Surface<'a> {
     builder: UiBuilder<'a>,
@@ -19,32 +16,7 @@ impl<'a> Surface<'a> {
         Self { builder }
     }
 
-    pub fn with_size(mut self, width: impl Into<Size>, height: impl Into<Size>) -> Self {
-        self.builder.size(width, height);
-        self
-    }
-
-    pub fn with_child_direction(mut self, direction: LayoutDirection) -> Self {
-        self.builder.child_direction(direction);
-        self
-    }
-
-    pub fn with_child_alignment(mut self, horizontal: Alignment, vertical: Alignment) -> Self {
-        self.builder.child_alignment(horizontal, vertical);
-        self
-    }
+    forward_properties!(color, width, height, size, padding);
 }
 
-impl<'a> DerefMut for Surface<'a> {
-    fn deref_mut(&mut self) -> &mut UiBuilder<'a> {
-        &mut self.builder
-    }
-}
-
-impl<'a> Deref for Surface<'a> {
-    type Target = UiBuilder<'a>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.builder
-    }
-}
+impl_container!(Surface<'a>);
