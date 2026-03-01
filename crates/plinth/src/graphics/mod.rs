@@ -15,6 +15,7 @@ mod draw;
 mod glyph_cache;
 mod paint;
 mod pipeline;
+mod shader_data;
 mod surface;
 mod text;
 mod texture;
