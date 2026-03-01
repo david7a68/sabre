@@ -80,7 +80,7 @@ impl DrawBuffer {
         });
 
         let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("Uniform Bindings"),
+            label: Some("Draw Data"),
             layout: bind_group_layout,
             entries: &[
                 wgpu::BindGroupEntry {
@@ -105,6 +105,7 @@ impl DrawBuffer {
         &mut self,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
+        layout: &wgpu::BindGroupLayout,
         render_pass: &mut wgpu::RenderPass,
         draw_info: DrawUniforms,
         primitives: &[GpuPrimitive],
@@ -114,10 +115,25 @@ impl DrawBuffer {
             self.primitive_buffer.destroy();
 
             self.primitive_buffer = device.create_buffer(&wgpu::BufferDescriptor {
-                label: Some("Draw Info Uniforms"),
+                label: Some("Primitive Buffer"),
                 size: required_size,
                 usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::STORAGE,
                 mapped_at_creation: false,
+            });
+
+            self.bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("Draw Data"),
+                layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: self.uniform_buffer.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: self.primitive_buffer.as_entire_binding(),
+                    },
+                ],
             });
         }
 

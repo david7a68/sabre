@@ -281,6 +281,7 @@ fn write_commands(
         frame.draw_buffer.upload_and_bind(
             device,
             queue,
+            &render_pipeline.draw_data_layout,
             &mut render_pass,
             DrawUniforms {
                 viewport_size: [target.texture.width(), target.texture.height()],
