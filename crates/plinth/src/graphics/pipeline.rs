@@ -6,6 +6,8 @@ use tracing::debug;
 use crate::graphics::shader_data::DrawUniforms;
 use crate::graphics::shader_data::GpuPrimitive;
 
+use super::shader_data::GpuClip;
+
 const SHADER_SOURCE: &str = include_str!("shader.wgsl");
 
 #[derive(Clone)]
@@ -40,7 +42,7 @@ impl RenderPipeline {
     }
 
     pub fn create_duffer(&self) -> DrawBuffer {
-        DrawBuffer::new(&self.device, &self.draw_data_layout, 1024)
+        DrawBuffer::new(&self.device, &self.draw_data_layout, 1024, 256)
     }
 
     pub fn bind_texture(
@@ -57,6 +59,7 @@ pub struct DrawBuffer {
     bind_group: wgpu::BindGroup,
     uniform_buffer: wgpu::Buffer,
     primitive_buffer: wgpu::Buffer,
+    clip_buffer: wgpu::Buffer,
 }
 
 impl DrawBuffer {
@@ -64,6 +67,7 @@ impl DrawBuffer {
         device: &wgpu::Device,
         bind_group_layout: &wgpu::BindGroupLayout,
         prim_capacity: usize,
+        clip_capacity: usize,
     ) -> Self {
         let uniform_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Uniform Buffer"),
@@ -75,6 +79,13 @@ impl DrawBuffer {
         let primitive_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Primitive Buffer"),
             size: (std::mem::size_of::<GpuPrimitive>() * prim_capacity) as u64,
+            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::STORAGE,
+            mapped_at_creation: false,
+        });
+
+        let clip_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("Clip Buffer"),
+            size: (std::mem::size_of::<GpuClip>() * clip_capacity) as u64,
             usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::STORAGE,
             mapped_at_creation: false,
         });
@@ -91,6 +102,10 @@ impl DrawBuffer {
                     binding: 1,
                     resource: primitive_buffer.as_entire_binding(),
                 },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: clip_buffer.as_entire_binding(),
+                },
             ],
         });
 
@@ -98,9 +113,11 @@ impl DrawBuffer {
             bind_group,
             uniform_buffer,
             primitive_buffer,
+            clip_buffer,
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn upload_and_bind(
         &mut self,
         device: &wgpu::Device,
@@ -109,18 +126,36 @@ impl DrawBuffer {
         render_pass: &mut wgpu::RenderPass,
         draw_info: DrawUniforms,
         primitives: &[GpuPrimitive],
+        clips: &[GpuClip],
     ) {
-        let required_size = std::mem::size_of_val(primitives) as u64;
-        if self.primitive_buffer.size() < required_size {
-            self.primitive_buffer.destroy();
+        let prim_size = std::mem::size_of_val(primitives) as u64;
+        let clip_size = std::mem::size_of_val(clips) as u64;
 
+        let mut buffers_changed = false;
+
+        if self.primitive_buffer.size() < prim_size {
+            self.primitive_buffer.destroy();
             self.primitive_buffer = device.create_buffer(&wgpu::BufferDescriptor {
                 label: Some("Primitive Buffer"),
-                size: required_size,
+                size: prim_size,
                 usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::STORAGE,
                 mapped_at_creation: false,
             });
+            buffers_changed = true;
+        }
 
+        if self.clip_buffer.size() < clip_size {
+            self.clip_buffer.destroy();
+            self.clip_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("Clip Buffer"),
+                size: clip_size,
+                usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::STORAGE,
+                mapped_at_creation: false,
+            });
+            buffers_changed = true;
+        }
+
+        if buffers_changed {
             self.bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
                 label: Some("Draw Data"),
                 layout,
@@ -133,12 +168,17 @@ impl DrawBuffer {
                         binding: 1,
                         resource: self.primitive_buffer.as_entire_binding(),
                     },
+                    wgpu::BindGroupEntry {
+                        binding: 2,
+                        resource: self.clip_buffer.as_entire_binding(),
+                    },
                 ],
             });
         }
 
         queue.write_buffer(&self.uniform_buffer, 0, bytemuck::bytes_of(&draw_info));
         queue.write_buffer(&self.primitive_buffer, 0, bytemuck::cast_slice(primitives));
+        queue.write_buffer(&self.clip_buffer, 0, bytemuck::cast_slice(clips));
 
         render_pass.set_bind_group(0, &self.bind_group, &[]);
     }
@@ -193,6 +233,16 @@ impl RenderPipelineCache {
                 },
                 wgpu::BindGroupLayoutEntry {
                     binding: 1,
+                    visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Storage { read_only: true },
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 2,
                     visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
                     ty: wgpu::BindingType::Buffer {
                         ty: wgpu::BufferBindingType::Storage { read_only: true },

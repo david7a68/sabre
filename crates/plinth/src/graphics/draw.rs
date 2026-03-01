@@ -12,6 +12,8 @@ use crate::graphics::texture::StorageId;
 use crate::graphics::texture::Texture;
 use crate::graphics::texture::TextureManager;
 
+use super::shader_data::GpuClip;
+
 const VERTICES_PER_PRIMITIVE: u32 = 6;
 
 #[derive(Debug)]
@@ -77,10 +79,17 @@ impl Canvas {
         self.storage.clear_color = clear_color.into();
         self.storage.commands.clear();
         self.storage.primitives.clear();
+        self.storage.clips.clear();
         self.storage.has_unready_textures = false;
 
         let white_pixel = self.texture_manager.white_pixel();
         let opaque_pixel = self.texture_manager.opaque_pixel();
+
+        self.storage.clips.push(GpuClip {
+            point: [0.0, 0.0],
+            extent: [f32::INFINITY, f32::INFINITY],
+            fade: [0.0; 4],
+        });
 
         self.storage.commands.push(DrawCommand::Draw {
             color_storage_id: white_pixel.storage_id(),
@@ -117,6 +126,7 @@ pub(crate) struct CanvasStorage {
     clear_color: Option<Color>,
     commands: Vec<DrawCommand>,
     primitives: Vec<GpuPrimitive>,
+    clips: Vec<GpuClip>,
 
     has_unready_textures: bool,
 }
@@ -132,6 +142,10 @@ impl CanvasStorage {
 
     pub(crate) fn primitives(&self) -> &[GpuPrimitive] {
         &self.primitives
+    }
+
+    pub(crate) fn clips(&self) -> &[GpuClip] {
+        &self.clips
     }
 
     pub(crate) fn push(&mut self, texture_manager: &TextureManager, primitive: Primitive) {

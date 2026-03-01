@@ -65,3 +65,12 @@ bitflags::bitflags! {
         const USE_GRADIENT_PAINT = 2;
     }
 }
+
+#[repr(C, align(16))]
+#[derive(Clone, Copy, Debug, Default, Pod, Zeroable)]
+pub(crate) struct GpuClip {
+    pub point: [f32; 2],
+    pub extent: [f32; 2],
+    // left, top, right, bottom
+    pub fade: [f32; 4],
+}

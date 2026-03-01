@@ -287,6 +287,7 @@ fn write_commands(
                 viewport_size: [target.texture.width(), target.texture.height()],
             },
             canvas.primitives(),
+            canvas.clips(),
         );
 
         let mut vertex_offset = 0;

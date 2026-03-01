@@ -27,6 +27,7 @@ struct VertexOutput {
 // Bind group 0: per-frame info
 @group(0) @binding(0) var<uniform> draw_info: DrawInfo;
 @group(0) @binding(1) var<storage, read> rects: array<Rect>;
+@group(0) @binding(2) var<storage, read> clips: array<Clip>;
 
 @vertex
 fn vs_main(
