@@ -21,7 +21,7 @@ pub(crate) struct GpuPrimitive {
     // top-left, top-right, bottom-left, bottom-right
     pub corner_radii: [f32; 4],
     pub control_flags: PrimitiveRenderFlags,
-    pub _padding0: u32,
+    pub clip_idx: u32,
     pub _padding1: u32,
     pub _padding2: u32,
 }

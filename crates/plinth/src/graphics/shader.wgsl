@@ -13,15 +13,28 @@ struct Rect {
     // top-left, top-right, bottom-left, bottom-right
     corner_radii: vec4f,
     control_flags: Bitflags,
-    _padding0: u32,
+    clip_idx: u32,
     _padding1: u32,
     _padding2: u32,
+}
+
+struct Clip {
+    point: vec2f,
+    extent: vec2f,
+    // left, top, right, bottom
+    fade: vec4f,
 }
 
 struct VertexOutput {
     @builtin(position) frag_coord: vec4<f32>,
     @location(0) @interpolate(flat) rect_index: u32,
     @location(1) uv: vec2f,
+
+    // Clip loaded once per vertex to avoid unnecessary storage buffer reads in
+    // the fragment shader.
+    @location(2) @interpolate(flat) clip_point: vec2f,
+    @location(3) @interpolate(flat) clip_extent: vec2f,
+    @location(4) @interpolate(flat) clip_fade: vec4f,
 };
 
 // Bind group 0: per-frame info
@@ -40,11 +53,16 @@ fn vs_main(
     let vertex_corner = CORNER[vertex_index];
     let vertex_position = rect.point + EXTENT_LOOKUP[vertex_corner] * rect.extent;
 
+    let clip = clips[rect.clip_idx];
+
     var out: VertexOutput;
 
     out.rect_index = rect_index;
     out.frag_coord = to_clip_coords(vertex_position);
     out.uv = EXTENT_LOOKUP[vertex_corner];
+    out.clip_point = clip.point;
+    out.clip_extent = clip.extent;
+    out.clip_fade = clip.fade;
 
     return out;
 }
@@ -58,6 +76,13 @@ fn vs_main(
 fn fs_main(
     in: VertexOutput
 ) -> @location(0) vec4f {
+
+    // Compute clipping early to skip expensive texture sampling for fully-clipped fragments
+    let clip_alpha = compute_clip_alpha(in.frag_coord.xy, in.clip_point, in.clip_extent, in.clip_fade); 
+    if (clip_alpha <= 0.0) {
+        discard;
+    }
+
     let rect = rects[in.rect_index];
 
     let rect_center = rect.point + rect.extent * 0.5;
@@ -82,7 +107,7 @@ fn fs_main(
     } else {
         // Sampled texture mode
         let sampled = as_sampled_paint(rect.background);
-        
+
         let color_uv = sampled.color_uvwh.xy + sampled.color_uvwh.zw * in.uv;
         let alpha_uv = sampled.alpha_uvwh.xy + sampled.alpha_uvwh.zw * in.uv;
 
@@ -101,12 +126,12 @@ fn fs_main(
         let inner_point = rect.point + vec2f(rect.border_width.x, rect.border_width.y);
         let inner_extent = rect.extent - vec2f(rect.border_width.x + rect.border_width.z, rect.border_width.y + rect.border_width.w);
         let inner_center = inner_point + inner_extent * 0.5;
-        
+
         let inner_corner_radius = corner_radius - max(
             max(rect.border_width.x, rect.border_width.y),
             max(rect.border_width.z, rect.border_width.w)
         );
-        
+
         let border_distance = distance_from_rect(
             in.frag_coord.xy,
             inner_center,
@@ -124,7 +149,8 @@ fn fs_main(
         }
     }
 
-    content_color.a *= edge_alpha;
+    content_color.a *= edge_alpha * clip_alpha;
+
     return content_color;
 }
 
@@ -177,6 +203,27 @@ fn distance_from_rect(point: vec2f, rect_center: vec2f, rect_half_extent: vec2f,
     return length(max(q, vec2f(0.0, 0.0))) + min(max(q.x, q.y), 0.0) - corner_radius;
 }
 
+/// Computes alpha multiplier for soft clipping with per-edge fade distances.
+/// Returns 1.0 when fully inside clip rect, 0.0 when outside, and smooth transition in fade regions.
+/// fade components: (left, top, right, bottom) fade distances in pixels
+fn compute_clip_alpha(point: vec2f, clip_point: vec2f, clip_extent: vec2f, fade: vec4f) -> f32 {
+    // Compute signed distances from each edge (negative = inside)
+    let left_dist = point.x - clip_point.x;
+    let top_dist = point.y - clip_point.y;
+    let right_dist = (clip_point.x + clip_extent.x) - point.x;
+    let bottom_dist = (clip_point.y + clip_extent.y) - point.y;
+
+    // For each edge: smoothstep from (fully outside) to (fully inside)
+    // When fade is 0, this becomes a hard clip (step function)
+    var alpha = 1.0;
+    alpha *= smoothstep(0.0, fade.x, left_dist);   // left edge
+    alpha *= smoothstep(0.0, fade.y, top_dist);    // top edge
+    alpha *= smoothstep(0.0, fade.z, right_dist);  // right edge
+    alpha *= smoothstep(0.0, fade.w, bottom_dist); // bottom edge
+
+    return alpha;
+}
+
 const USE_NEAREST_SAMPLING: u32 = 1;
 const USE_GRADIENT_PAINT: u32 = 2;
 
@@ -220,14 +267,14 @@ fn as_gradient_paint(paint: Paint) -> GradientPaint {
 fn sample_gradient(gradient: GradientPaint, uv: vec2f) -> vec4f {
     let gradient_dir = gradient.color_p2 - gradient.color_p1;
     let gradient_len_sq = dot(gradient_dir, gradient_dir);
-    
+
     var t: f32;
     if (gradient_len_sq < 0.0001) {
         t = 0.0;
     } else {
         t = clamp(dot(uv - gradient.color_p1, gradient_dir) / gradient_len_sq, 0.0, 1.0);
     }
-    
+
     return mix(gradient.color_a, gradient.color_b, t);
 }
 

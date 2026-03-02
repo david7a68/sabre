@@ -43,6 +43,37 @@ impl Primitive {
     }
 }
 
+#[derive(Clone, Copy, Debug)]
+pub struct ClipRect {
+    pub point: [f32; 2],
+    pub size: [f32; 2],
+    pub fade: [f32; 4],
+}
+
+impl ClipRect {
+    fn next(&self, next: &ClipRect) -> ClipRect {
+        let x1 = self.point[0].max(next.point[0]);
+        let y1 = self.point[1].max(next.point[1]);
+        let x2 = (self.point[0] + self.size[0]).min(next.point[0] + next.size[0]);
+        let y2 = (self.point[1] + self.size[1]).min(next.point[1] + next.size[1]);
+
+        if x2 < x1 || y2 < y1 {
+            // No intersection, return an empty rect
+            return ClipRect {
+                point: [0.0, 0.0],
+                size: [0.0, 0.0],
+                fade: [0.0; 4],
+            };
+        }
+
+        ClipRect {
+            point: [x1, y1],
+            size: [x2 - x1, y2 - y1],
+            fade: next.fade,
+        }
+    }
+}
+
 pub struct Canvas {
     storage: CanvasStorage,
     pub(super) texture_manager: TextureManager,
@@ -76,26 +107,14 @@ impl Canvas {
     }
 
     pub fn reset(&mut self, clear_color: impl Into<Option<Color>>) {
-        self.storage.clear_color = clear_color.into();
-        self.storage.commands.clear();
-        self.storage.primitives.clear();
-        self.storage.clips.clear();
-        self.storage.has_unready_textures = false;
-
         let white_pixel = self.texture_manager.white_pixel();
         let opaque_pixel = self.texture_manager.opaque_pixel();
 
-        self.storage.clips.push(GpuClip {
-            point: [0.0, 0.0],
-            extent: [f32::INFINITY, f32::INFINITY],
-            fade: [0.0; 4],
-        });
-
-        self.storage.commands.push(DrawCommand::Draw {
-            color_storage_id: white_pixel.storage_id(),
-            alpha_storage_id: opaque_pixel.storage_id(),
-            num_vertices: 0,
-        });
+        self.storage.reset(
+            clear_color,
+            white_pixel.storage_id(),
+            opaque_pixel.storage_id(),
+        );
     }
 
     pub fn load_texture(&mut self, path: impl AsRef<Path>) -> Result<Texture, TextureLoadError> {
@@ -128,27 +147,83 @@ pub(crate) struct CanvasStorage {
     primitives: Vec<GpuPrimitive>,
     clips: Vec<GpuClip>,
 
+    clip_stack: Vec<ClipEntry>,
+
     has_unready_textures: bool,
 }
 
 impl CanvasStorage {
-    pub(crate) fn clear_color(&self) -> Option<Color> {
+    pub fn clear_color(&self) -> Option<Color> {
         self.clear_color
     }
 
-    pub(crate) fn commands(&self) -> &[DrawCommand] {
+    pub fn commands(&self) -> &[DrawCommand] {
         &self.commands
     }
 
-    pub(crate) fn primitives(&self) -> &[GpuPrimitive] {
+    pub fn primitives(&self) -> &[GpuPrimitive] {
         &self.primitives
     }
 
-    pub(crate) fn clips(&self) -> &[GpuClip] {
+    pub fn clips(&self) -> &[GpuClip] {
         &self.clips
     }
 
-    pub(crate) fn push(&mut self, texture_manager: &TextureManager, primitive: Primitive) {
+    pub fn push_clip(&mut self, clip: ClipRect) {
+        let next = if let Some(prev_resolved) = self.clip_stack.last() {
+            prev_resolved.rect.next(&clip)
+        } else {
+            clip
+        };
+
+        self.clip_stack.push(ClipEntry {
+            rect: clip,
+            place: None,
+        });
+    }
+
+    pub fn pop_clip(&mut self) {
+        if self.clip_stack.len() > 1 {
+            self.clip_stack.pop();
+        }
+    }
+
+    pub fn reset(
+        &mut self,
+        clear_color: impl Into<Option<Color>>,
+        white: StorageId,
+        opaque: StorageId,
+    ) {
+        self.clear_color = clear_color.into();
+        self.has_unready_textures = false;
+
+        self.clips.clear();
+        self.clips.push(GpuClip {
+            point: [0.0, 0.0],
+            extent: [f32::MAX, f32::MAX],
+            fade: [0.0; 4],
+        });
+
+        self.clip_stack.clear();
+        self.clip_stack.push(ClipEntry {
+            rect: ClipRect {
+                point: [0.0, 0.0],
+                size: [f32::MAX, f32::MAX],
+                fade: [0.0; 4],
+            },
+            place: Some(0),
+        });
+
+        self.commands.clear();
+        self.primitives.clear();
+        self.commands.push(DrawCommand::Draw {
+            color_storage_id: white,
+            alpha_storage_id: opaque,
+            num_vertices: 0,
+        });
+    }
+
+    pub fn push(&mut self, texture_manager: &TextureManager, primitive: Primitive) {
         let Primitive {
             point,
             size,
@@ -207,6 +282,19 @@ impl CanvasStorage {
             }
         };
 
+        let current_clip = self.clip_stack.last_mut().unwrap();
+        let clip_idx = *current_clip.place.get_or_insert_with(|| {
+            let place = self.clips.len() as u32;
+
+            self.clips.push(GpuClip {
+                point: current_clip.rect.point,
+                extent: current_clip.rect.size,
+                fade: current_clip.rect.fade,
+            });
+
+            place
+        });
+
         self.primitives.push(GpuPrimitive {
             point,
             extent: size,
@@ -220,7 +308,7 @@ impl CanvasStorage {
             border_width,
             corner_radii,
             control_flags: flags,
-            _padding0: 0,
+            clip_idx,
             _padding1: 0,
             _padding2: 0,
         });
@@ -243,4 +331,9 @@ impl CanvasStorage {
             });
         }
     }
+}
+
+struct ClipEntry {
+    rect: ClipRect,
+    place: Option<u32>,
 }
