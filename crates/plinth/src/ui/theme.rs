@@ -1,6 +1,7 @@
 use std::borrow::Cow;
 use std::sync::OnceLock;
 
+use parley::FontFeatures;
 use smallvec::SmallVec;
 
 use crate::graphics::Color;
@@ -18,8 +19,7 @@ use super::style::StyleId;
 use super::style::StyleProperty;
 use super::style::StyleRegistry;
 
-static DEFAULT_FONT_FEATURES: OnceLock<parley::FontSettings<'static, parley::FontFeature>> =
-    OnceLock::new();
+static DEFAULT_FONT_FEATURES: OnceLock<FontFeatures<'static>> = OnceLock::new();
 
 #[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -150,10 +150,10 @@ impl Theme {
 
         match &style.font.get(state).family {
             FontStack::Source(cow) => {
-                builder.push_default(Prop::FontStack(parley::FontStack::Source(cow.clone())));
+                builder.push_default(Prop::FontFamily(parley::FontFamily::Source(cow.clone())));
             }
             FontStack::Single(font_family) => {
-                builder.push_default(Prop::FontStack(parley::FontStack::Single(
+                builder.push_default(Prop::FontFamily(parley::FontFamily::Single(
                     font_family.clone().into(),
                 )));
             }
@@ -162,10 +162,8 @@ impl Theme {
                     .iter()
                     .cloned()
                     .map(|f| f.into())
-                    .collect::<SmallVec<[parley::FontFamily; 4]>>();
-                builder.push_default(Prop::FontStack(parley::FontStack::List(Cow::Borrowed(
-                    &families,
-                ))));
+                    .collect::<SmallVec<[parley::FontFamilyName; 4]>>();
+                builder.push_default(Prop::FontFamily(families.as_slice().into()));
             }
         }
     }
@@ -186,17 +184,16 @@ impl Theme {
 
         match &style.font.get(state).family {
             FontStack::Source(cow) => {
-                styles.insert(Prop::FontStack(parley::FontStack::Source(cow.clone())));
+                styles.insert(Prop::FontFamily(parley::FontFamily::Source(cow.clone())));
             }
             FontStack::Single(font_family) => {
-                styles.insert(Prop::FontStack(parley::FontStack::Single(
+                styles.insert(Prop::FontFamily(parley::FontFamily::Single(
                     font_family.clone().into(),
                 )));
             }
             FontStack::List(cow) => {
-                let families: Vec<parley::FontFamily> =
-                    cow.iter().cloned().map(|f| f.into()).collect();
-                styles.insert(Prop::FontStack(parley::FontStack::List(families.into())));
+                let families = cow.iter().cloned().map(|f| f.into()).collect::<Vec<_>>();
+                styles.insert(Prop::FontFamily(parley::FontFamily::List(families.into())));
             }
         }
 
@@ -241,14 +238,18 @@ impl Default for Theme {
     }
 }
 
-fn default_font_features() -> parley::FontSettings<'static, parley::FontFeature> {
+fn default_font_features() -> parley::FontFeatures<'static> {
     DEFAULT_FONT_FEATURES
         .get_or_init(|| {
-            let list = Vec::leak(
-                parley::FontFeature::parse_list("kern, rlig, dlig, liga, clig, calt").collect(),
-            );
+            let mut list = Vec::new();
 
-            parley::FontSettings::List(Cow::Borrowed(list))
+            for feature in parley::FontFeature::parse_css_list(
+                "'kern', 'rlig', 'dlig', 'liga', 'clig', 'calt'",
+            ) {
+                list.push(feature.unwrap());
+            }
+
+            parley::FontFeatures::List(Cow::Borrowed(Vec::leak(list)))
         })
         .clone()
 }

@@ -134,16 +134,20 @@ impl Surface {
                 }
 
                 match output {
-                    Ok(output) => break Ok(output),
-                    Err(e) => match e {
-                        wgpu::SurfaceError::Timeout => break Err(RenderError::TimedOut),
-                        wgpu::SurfaceError::OutOfMemory => break Err(RenderError::OutOfMemory),
-                        wgpu::SurfaceError::Other => break Err(RenderError::Unknown),
-                        wgpu::SurfaceError::Outdated | wgpu::SurfaceError::Lost => {
-                            self.resize_if_necessary(device);
-                            output = self.handle.get_current_texture();
-                        }
-                    },
+                    wgpu::CurrentSurfaceTexture::Success(surface_texture) => {
+                        return Ok(surface_texture);
+                    }
+                    wgpu::CurrentSurfaceTexture::Suboptimal(_)
+                    | wgpu::CurrentSurfaceTexture::Outdated => {
+                        self.resize_if_necessary(device);
+                        output = self.handle.get_current_texture()
+                    }
+                    wgpu::CurrentSurfaceTexture::Timeout => break Err(RenderError::TimedOut),
+                    wgpu::CurrentSurfaceTexture::Occluded => break Err(RenderError::TimedOut),
+                    wgpu::CurrentSurfaceTexture::Lost => {
+                        unimplemented!("Surface lost handling not implemented yet")
+                    }
+                    wgpu::CurrentSurfaceTexture::Validation => break Err(RenderError::Unknown),
                 }
 
                 attempts += 1;

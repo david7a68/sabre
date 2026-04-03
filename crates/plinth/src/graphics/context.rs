@@ -50,8 +50,9 @@ impl GraphicsContext {
             flags |= wgpu::InstanceFlags::VALIDATION;
         }
 
-        let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
+        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
             backends: wgpu::Backends::DX12,
+            display: None,
             flags,
             memory_budget_thresholds: wgpu::MemoryBudgetThresholds::default(),
             backend_options: wgpu::BackendOptions {
@@ -59,6 +60,8 @@ impl GraphicsContext {
                     shader_compiler: wgpu::Dx12Compiler::Fxc,
                     presentation_system: wgpu::Dx12SwapchainKind::DxgiFromHwnd,
                     latency_waitable_object: wgpu::Dx12UseFrameLatencyWaitableObject::Wait,
+                    force_shader_model: wgpu::ForceShaderModelToken::default(),
+                    agility_sdk: None,
                 },
                 ..Default::default()
             },

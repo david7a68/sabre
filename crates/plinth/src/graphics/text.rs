@@ -92,7 +92,7 @@ pub enum FontFamily {
     UiSerif,
 }
 
-impl From<FontFamily> for parley::FontFamily<'static> {
+impl From<FontFamily> for parley::FontFamilyName<'static> {
     fn from(value: FontFamily) -> Self {
         match value {
             FontFamily::Named(name) => Self::Named(name),

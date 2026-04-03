@@ -7,17 +7,16 @@ use std::rc::Rc;
 use parley::GlyphRun;
 use parley::Layout;
 use parley::PositionedLayoutItem;
-use parley::swash::FontRef;
-use parley::swash::scale::Render;
-use parley::swash::scale::ScaleContext;
-use parley::swash::scale::Source;
-use parley::swash::scale::StrikeWith;
-use parley::swash::scale::image::Content;
-use parley::swash::scale::image::Image;
-use parley::swash::zeno::Format;
-use parley::swash::zeno::Vector;
-use swash as _;
-use tracing::instrument; // so that we can enable the "scale" feature
+use swash::FontRef;
+use swash::scale::Render;
+use swash::scale::ScaleContext;
+use swash::scale::Source;
+use swash::scale::StrikeWith;
+use swash::scale::image::Content;
+use swash::scale::image::Image;
+use swash::zeno::Format;
+use swash::zeno::Vector;
+use tracing::instrument;
 
 use crate::graphics::Color;
 use crate::graphics::Paint;
