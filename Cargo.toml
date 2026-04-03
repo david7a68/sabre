@@ -42,9 +42,6 @@ wgpu = { version = "29", default-features = false, features = [
 winit = "0.31.0-beta.2"
 windows-sys = "0.61"
 
-[profile.dev.build-override]
-opt-level = 2
-
 [profile.release]
 lto = "thin"
 panic = "abort"
