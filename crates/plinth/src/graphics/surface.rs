@@ -11,7 +11,7 @@ use crate::graphics::pipeline::RenderPipelineCache;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RenderError {
-    OutOfMemory,
+    Occluded,
     TimedOut,
     Unknown,
 }
@@ -143,7 +143,7 @@ impl Surface {
                         output = self.handle.get_current_texture()
                     }
                     wgpu::CurrentSurfaceTexture::Timeout => break Err(RenderError::TimedOut),
-                    wgpu::CurrentSurfaceTexture::Occluded => break Err(RenderError::TimedOut),
+                    wgpu::CurrentSurfaceTexture::Occluded => break Err(RenderError::Occluded),
                     wgpu::CurrentSurfaceTexture::Lost => {
                         unimplemented!("Surface lost handling not implemented yet")
                     }
