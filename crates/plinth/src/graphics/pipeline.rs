@@ -243,7 +243,7 @@ impl RenderPipelineCache {
                 },
                 wgpu::BindGroupLayoutEntry {
                     binding: 2,
-                    visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
+                    visibility: wgpu::ShaderStages::VERTEX,
                     ty: wgpu::BindingType::Buffer {
                         ty: wgpu::BufferBindingType::Storage { read_only: true },
                         has_dynamic_offset: false,

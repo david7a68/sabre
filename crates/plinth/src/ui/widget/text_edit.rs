@@ -42,7 +42,6 @@ impl<'a> TextEdit<'a> {
         // Apply styles early as defaults, so that users have opportunity to
         // override them before calling `finish()`.
         builder.apply_style(StyleClass::TextEdit, state_flags);
-        builder.clip_overflow();
 
         let min_height = {
             let style = builder.theme.get(StyleClass::TextEdit);

@@ -733,13 +733,12 @@ fn compute_clip_rects(
         current_clip.next(&ClipRect {
             point: [r.x, r.y],
             size: [r.width, r.height],
-            fade: [0.0; 4],
         })
     } else {
         current_clip
     };
     nodes[idx].result.effective_clip = effective;
-    for child_id in children[idx].clone() {
+    for child_id in children[idx].iter().copied() {
         compute_clip_rects(nodes, children, child_id, effective);
     }
 }

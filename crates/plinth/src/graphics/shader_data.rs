@@ -66,11 +66,9 @@ bitflags::bitflags! {
     }
 }
 
-#[repr(C, align(16))]
+#[repr(C)]
 #[derive(Clone, Copy, Debug, Default, Pod, Zeroable)]
 pub(crate) struct GpuClip {
     pub point: [f32; 2],
     pub extent: [f32; 2],
-    // left, top, right, bottom
-    pub fade: [f32; 4],
 }

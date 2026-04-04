@@ -21,8 +21,6 @@ struct Rect {
 struct Clip {
     point: vec2f,
     extent: vec2f,
-    // left, top, right, bottom
-    fade: vec4f,
 }
 
 struct VertexOutput {
@@ -34,7 +32,6 @@ struct VertexOutput {
     // the fragment shader.
     @location(2) @interpolate(flat) clip_point: vec2f,
     @location(3) @interpolate(flat) clip_extent: vec2f,
-    @location(4) @interpolate(flat) clip_fade: vec4f,
 };
 
 // Bind group 0: per-frame info
@@ -62,7 +59,6 @@ fn vs_main(
     out.uv = EXTENT_LOOKUP[vertex_corner];
     out.clip_point = clip.point;
     out.clip_extent = clip.extent;
-    out.clip_fade = clip.fade;
 
     return out;
 }
@@ -77,9 +73,8 @@ fn fs_main(
     in: VertexOutput
 ) -> @location(0) vec4f {
 
-    // Compute clipping early to skip expensive texture sampling for fully-clipped fragments
-    let clip_alpha = compute_clip_alpha(in.frag_coord.xy, in.clip_point, in.clip_extent, in.clip_fade); 
-    if (clip_alpha <= 0.0) {
+    // Discard early to skip expensive texture sampling for fully-clipped fragments
+    if (!inside_clip(in.frag_coord.xy, in.clip_point, in.clip_extent)) {
         discard;
     }
 
@@ -149,7 +144,7 @@ fn fs_main(
         }
     }
 
-    content_color.a *= edge_alpha * clip_alpha;
+    content_color.a *= edge_alpha;
 
     return content_color;
 }
@@ -203,25 +198,11 @@ fn distance_from_rect(point: vec2f, rect_center: vec2f, rect_half_extent: vec2f,
     return length(max(q, vec2f(0.0, 0.0))) + min(max(q.x, q.y), 0.0) - corner_radius;
 }
 
-/// Computes alpha multiplier for soft clipping with per-edge fade distances.
-/// Returns 1.0 when fully inside clip rect, 0.0 when outside, and smooth transition in fade regions.
-/// fade components: (left, top, right, bottom) fade distances in pixels
-fn compute_clip_alpha(point: vec2f, clip_point: vec2f, clip_extent: vec2f, fade: vec4f) -> f32 {
-    // Compute signed distances from each edge (negative = inside)
-    let left_dist = point.x - clip_point.x;
-    let top_dist = point.y - clip_point.y;
-    let right_dist = (clip_point.x + clip_extent.x) - point.x;
-    let bottom_dist = (clip_point.y + clip_extent.y) - point.y;
-
-    // For each edge: smoothstep from (fully outside) to (fully inside)
-    // When fade is 0, this becomes a hard clip (step function)
-    var alpha = 1.0;
-    alpha *= smoothstep(0.0, fade.x, left_dist);   // left edge
-    alpha *= smoothstep(0.0, fade.y, top_dist);    // top edge
-    alpha *= smoothstep(0.0, fade.z, right_dist);  // right edge
-    alpha *= smoothstep(0.0, fade.w, bottom_dist); // bottom edge
-
-    return alpha;
+fn inside_clip(point: vec2f, clip_point: vec2f, clip_extent: vec2f) -> bool {
+    return point.x >= clip_point.x
+        && point.y >= clip_point.y
+        && point.x <= clip_point.x + clip_extent.x
+        && point.y <= clip_point.y + clip_extent.y;
 }
 
 const USE_NEAREST_SAMPLING: u32 = 1;

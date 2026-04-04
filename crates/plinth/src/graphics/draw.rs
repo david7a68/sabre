@@ -49,7 +49,6 @@ impl Primitive {
 pub struct ClipRect {
     pub point: [f32; 2],
     pub size: [f32; 2],
-    pub fade: [f32; 4],
 }
 
 impl Default for ClipRect {
@@ -57,7 +56,6 @@ impl Default for ClipRect {
         Self {
             point: [0.0, 0.0],
             size: [f32::MAX, f32::MAX],
-            fade: [0.0; 4],
         }
     }
 }
@@ -70,25 +68,15 @@ impl ClipRect {
         let y2 = (self.point[1] + self.size[1]).min(next.point[1] + next.size[1]);
 
         if x2 < x1 || y2 < y1 {
-            // No intersection, return an empty rect
             return ClipRect {
                 point: [0.0, 0.0],
                 size: [0.0, 0.0],
-                fade: [0.0; 4],
             };
         }
-
-        let fade = [
-            if x1 == self.point[0] { self.fade[0] } else { next.fade[0] },
-            if y1 == self.point[1] { self.fade[1] } else { next.fade[1] },
-            if x2 == self.point[0] + self.size[0] { self.fade[2] } else { next.fade[2] },
-            if y2 == self.point[1] + self.size[1] { self.fade[3] } else { next.fade[3] },
-        ];
 
         ClipRect {
             point: [x1, y1],
             size: [x2 - x1, y2 - y1],
-            fade,
         }
     }
 }
@@ -177,23 +165,23 @@ pub(crate) struct CanvasStorage {
 }
 
 impl CanvasStorage {
-    pub fn clear_color(&self) -> Option<Color> {
+    pub(crate) fn clear_color(&self) -> Option<Color> {
         self.clear_color
     }
 
-    pub fn commands(&self) -> &[DrawCommand] {
+    pub(crate) fn commands(&self) -> &[DrawCommand] {
         &self.commands
     }
 
-    pub fn primitives(&self) -> &[GpuPrimitive] {
+    pub(crate) fn primitives(&self) -> &[GpuPrimitive] {
         &self.primitives
     }
 
-    pub fn clips(&self) -> &[GpuClip] {
+    pub(crate) fn clips(&self) -> &[GpuClip] {
         &self.clips
     }
 
-    pub fn reset(
+    pub(crate) fn reset(
         &mut self,
         clear_color: impl Into<Option<Color>>,
         white: StorageId,
@@ -206,7 +194,6 @@ impl CanvasStorage {
         self.clips.push(GpuClip {
             point: [0.0, 0.0],
             extent: [f32::MAX, f32::MAX],
-            fade: [0.0; 4],
         });
         self.last_clip_alloc = Some((ClipRect::default(), 0));
 
@@ -219,7 +206,7 @@ impl CanvasStorage {
         });
     }
 
-    pub fn push(&mut self, texture_manager: &TextureManager, primitive: Primitive) {
+    pub(crate) fn push(&mut self, texture_manager: &TextureManager, primitive: Primitive) {
         let Primitive {
             point,
             size,
@@ -286,7 +273,6 @@ impl CanvasStorage {
                 self.clips.push(GpuClip {
                     point: clip.point,
                     extent: clip.size,
-                    fade: clip.fade,
                 });
                 self.last_clip_alloc = Some((clip, idx));
                 idx

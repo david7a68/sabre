@@ -109,6 +109,16 @@ impl UiBuilder<'_> {
         self
     }
 
+    pub fn clip_children(&mut self) -> &mut Self {
+        self.context.ui_tree.atom_mut(self.index).clip_overflow = true;
+        self
+    }
+
+    pub fn set_clip_children(&mut self, clip: bool) -> &mut Self {
+        self.context.ui_tree.atom_mut(self.index).clip_overflow = clip;
+        self
+    }
+
     pub fn paint(
         &mut self,
         paint: Paint,
@@ -317,11 +327,6 @@ impl UiBuilder<'_> {
 
     pub fn with_child(&mut self, callback: impl FnOnce(&mut UiBuilder)) -> &mut Self {
         callback(&mut self.child());
-        self
-    }
-
-    pub fn clip_overflow(&mut self) -> &mut Self {
-        self.context.ui_tree.atom_mut(self.index).clip_overflow = true;
         self
     }
 
