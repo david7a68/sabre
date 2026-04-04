@@ -17,8 +17,8 @@ use crate::graphics::TextureLoadError;
 use crate::graphics::draw::CanvasStorage;
 use crate::graphics::draw::DrawCommand;
 use crate::graphics::glyph_cache::GlyphCache;
-use crate::graphics::pipeline::DrawUniforms;
 use crate::graphics::pipeline::RenderPipelineCache;
+use crate::graphics::shader_data::DrawUniforms;
 use crate::graphics::surface::RenderError;
 use crate::graphics::surface::Surface;
 use crate::graphics::texture::StorageId;
@@ -281,11 +281,13 @@ fn write_commands(
         frame.draw_buffer.upload_and_bind(
             device,
             queue,
+            &render_pipeline.draw_data_layout,
             &mut render_pass,
             DrawUniforms {
                 viewport_size: [target.texture.width(), target.texture.height()],
             },
             canvas.primitives(),
+            canvas.clips(),
         );
 
         let mut vertex_offset = 0;

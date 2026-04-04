@@ -1,11 +1,12 @@
 use std::collections::HashMap;
 use std::sync::Mutex;
 
-use bytemuck::Pod;
-use bytemuck::Zeroable;
 use tracing::debug;
 
-use crate::graphics::Color;
+use crate::graphics::shader_data::DrawUniforms;
+use crate::graphics::shader_data::GpuPrimitive;
+
+use super::shader_data::GpuClip;
 
 const SHADER_SOURCE: &str = include_str!("shader.wgsl");
 
@@ -41,7 +42,7 @@ impl RenderPipeline {
     }
 
     pub fn create_duffer(&self) -> DrawBuffer {
-        DrawBuffer::new(&self.device, &self.draw_data_layout, 1024)
+        DrawBuffer::new(&self.device, &self.draw_data_layout, 1024, 256)
     }
 
     pub fn bind_texture(
@@ -54,73 +55,11 @@ impl RenderPipeline {
     }
 }
 
-#[repr(C)]
-#[derive(Clone, Copy, Debug, Pod, Zeroable)]
-pub struct DrawUniforms {
-    pub viewport_size: [u32; 2],
-}
-
-#[repr(C, align(16))]
-#[derive(Clone, Copy, Debug, Default, Pod, Zeroable)]
-pub(crate) struct GpuPrimitive {
-    pub point: [f32; 2],
-    pub extent: [f32; 2],
-    pub background: GpuPaint,
-    pub border_color: GpuPaint,
-    // left, top, right, bottom
-    pub border_width: [f32; 4],
-    // top-left, top-right, bottom-left, bottom-right
-    pub corner_radii: [f32; 4],
-    pub control_flags: PrimitiveRenderFlags,
-    pub _padding0: u32,
-    pub _padding1: u32,
-    pub _padding2: u32,
-}
-
-/// A union type representing either a sampled texture paint or a gradient paint.
-/// The interpretation depends on the `USE_GRADIENT_PAINT` flag in `PrimitiveRenderFlags`.
-#[repr(C)]
-#[derive(Clone, Copy, Debug, Default, Pod, Zeroable)]
-pub struct GpuPaint {
-    pub a: [f32; 4],
-    pub b: [f32; 4],
-    pub c: [f32; 4],
-}
-
-impl GpuPaint {
-    /// Create a sampled texture paint.
-    pub fn sampled(color_tint: Color, color_uvwh: [f32; 4], alpha_uvwh: [f32; 4]) -> Self {
-        Self {
-            a: color_tint.into(),
-            b: color_uvwh,
-            c: alpha_uvwh,
-        }
-    }
-
-    /// Create a gradient paint.
-    /// `p1` and `p2` are normalized coordinates (0.0-1.0) within the rect.
-    pub fn gradient(color_a: Color, color_b: Color, p1: [f32; 2], p2: [f32; 2]) -> Self {
-        Self {
-            a: color_a.into(),
-            b: color_b.into(),
-            c: [p1[0], p1[1], p2[0], p2[1]],
-        }
-    }
-}
-
-bitflags::bitflags! {
-    #[derive(Clone, Copy, Debug, Default, Pod, Zeroable)]
-    #[repr(transparent)]
-    pub struct PrimitiveRenderFlags: u32 {
-        const USE_NEAREST_SAMPLING = 1;
-        const USE_GRADIENT_PAINT = 2;
-    }
-}
-
 pub struct DrawBuffer {
     bind_group: wgpu::BindGroup,
     uniform_buffer: wgpu::Buffer,
     primitive_buffer: wgpu::Buffer,
+    clip_buffer: wgpu::Buffer,
 }
 
 impl DrawBuffer {
@@ -128,6 +67,7 @@ impl DrawBuffer {
         device: &wgpu::Device,
         bind_group_layout: &wgpu::BindGroupLayout,
         prim_capacity: usize,
+        clip_capacity: usize,
     ) -> Self {
         let uniform_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Uniform Buffer"),
@@ -143,8 +83,15 @@ impl DrawBuffer {
             mapped_at_creation: false,
         });
 
+        let clip_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("Clip Buffer"),
+            size: (std::mem::size_of::<GpuClip>() * clip_capacity) as u64,
+            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::STORAGE,
+            mapped_at_creation: false,
+        });
+
         let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("Uniform Bindings"),
+            label: Some("Draw Data"),
             layout: bind_group_layout,
             entries: &[
                 wgpu::BindGroupEntry {
@@ -155,6 +102,10 @@ impl DrawBuffer {
                     binding: 1,
                     resource: primitive_buffer.as_entire_binding(),
                 },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: clip_buffer.as_entire_binding(),
+                },
             ],
         });
 
@@ -162,31 +113,72 @@ impl DrawBuffer {
             bind_group,
             uniform_buffer,
             primitive_buffer,
+            clip_buffer,
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn upload_and_bind(
         &mut self,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
+        layout: &wgpu::BindGroupLayout,
         render_pass: &mut wgpu::RenderPass,
         draw_info: DrawUniforms,
         primitives: &[GpuPrimitive],
+        clips: &[GpuClip],
     ) {
-        let required_size = std::mem::size_of_val(primitives) as u64;
-        if self.primitive_buffer.size() < required_size {
-            self.primitive_buffer.destroy();
+        let prim_size = std::mem::size_of_val(primitives) as u64;
+        let clip_size = std::mem::size_of_val(clips) as u64;
 
+        let mut buffers_changed = false;
+
+        if self.primitive_buffer.size() < prim_size {
+            self.primitive_buffer.destroy();
             self.primitive_buffer = device.create_buffer(&wgpu::BufferDescriptor {
-                label: Some("Draw Info Uniforms"),
-                size: required_size,
+                label: Some("Primitive Buffer"),
+                size: prim_size,
                 usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::STORAGE,
                 mapped_at_creation: false,
+            });
+            buffers_changed = true;
+        }
+
+        if self.clip_buffer.size() < clip_size {
+            self.clip_buffer.destroy();
+            self.clip_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("Clip Buffer"),
+                size: clip_size,
+                usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::STORAGE,
+                mapped_at_creation: false,
+            });
+            buffers_changed = true;
+        }
+
+        if buffers_changed {
+            self.bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("Draw Data"),
+                layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: self.uniform_buffer.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: self.primitive_buffer.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 2,
+                        resource: self.clip_buffer.as_entire_binding(),
+                    },
+                ],
             });
         }
 
         queue.write_buffer(&self.uniform_buffer, 0, bytemuck::bytes_of(&draw_info));
         queue.write_buffer(&self.primitive_buffer, 0, bytemuck::cast_slice(primitives));
+        queue.write_buffer(&self.clip_buffer, 0, bytemuck::cast_slice(clips));
 
         render_pass.set_bind_group(0, &self.bind_group, &[]);
     }
@@ -242,6 +234,16 @@ impl RenderPipelineCache {
                 wgpu::BindGroupLayoutEntry {
                     binding: 1,
                     visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Storage { read_only: true },
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 2,
+                    visibility: wgpu::ShaderStages::VERTEX,
                     ty: wgpu::BindingType::Buffer {
                         ty: wgpu::BufferBindingType::Storage { read_only: true },
                         has_dynamic_offset: false,

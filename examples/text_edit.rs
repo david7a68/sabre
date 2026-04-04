@@ -55,7 +55,10 @@ impl AppWindow {
 
         panel.label("TextEdit Widget Demo:");
 
-        let (text_result, interaction) = panel.text_edit(&self.text_content, 200.0).finish();
+        let (text_result, interaction) = panel
+            .text_edit(&self.text_content, 200.0)
+            .with_height(100.0)
+            .finish();
 
         let is_composing = if let Some(text_str) = text_result {
             self.text_content = text_str.to_string();

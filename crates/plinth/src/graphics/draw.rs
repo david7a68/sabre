@@ -5,12 +5,14 @@ use crate::graphics::color::Color;
 use crate::graphics::glyph_cache::GlyphCache;
 use crate::graphics::paint::GradientPaint;
 use crate::graphics::paint::Paint;
-use crate::graphics::pipeline::GpuPaint;
-use crate::graphics::pipeline::GpuPrimitive;
-use crate::graphics::pipeline::PrimitiveRenderFlags;
+use crate::graphics::shader_data::GpuPaint;
+use crate::graphics::shader_data::GpuPrimitive;
+use crate::graphics::shader_data::PrimitiveRenderFlags;
 use crate::graphics::texture::StorageId;
 use crate::graphics::texture::Texture;
 use crate::graphics::texture::TextureManager;
+
+use super::shader_data::GpuClip;
 
 const VERTICES_PER_PRIMITIVE: u32 = 6;
 
@@ -24,6 +26,7 @@ pub struct Primitive {
     pub border_width: [f32; 4],
     pub corner_radii: [f32; 4],
     pub use_nearest_sampling: bool,
+    pub clip: ClipRect,
 }
 
 impl Primitive {
@@ -37,6 +40,43 @@ impl Primitive {
             border_width: [0.0, 0.0, 0.0, 0.0],
             corner_radii: [0.0; 4],
             use_nearest_sampling: false,
+            clip: ClipRect::default(),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ClipRect {
+    pub point: [f32; 2],
+    pub size: [f32; 2],
+}
+
+impl Default for ClipRect {
+    fn default() -> Self {
+        Self {
+            point: [0.0, 0.0],
+            size: [f32::MAX, f32::MAX],
+        }
+    }
+}
+
+impl ClipRect {
+    pub(crate) fn next(&self, next: &ClipRect) -> ClipRect {
+        let x1 = self.point[0].max(next.point[0]);
+        let y1 = self.point[1].max(next.point[1]);
+        let x2 = (self.point[0] + self.size[0]).min(next.point[0] + next.size[0]);
+        let y2 = (self.point[1] + self.size[1]).min(next.point[1] + next.size[1]);
+
+        if x2 < x1 || y2 < y1 {
+            return ClipRect {
+                point: [0.0, 0.0],
+                size: [0.0, 0.0],
+            };
+        }
+
+        ClipRect {
+            point: [x1, y1],
+            size: [x2 - x1, y2 - y1],
         }
     }
 }
@@ -74,28 +114,28 @@ impl Canvas {
     }
 
     pub fn reset(&mut self, clear_color: impl Into<Option<Color>>) {
-        self.storage.clear_color = clear_color.into();
-        self.storage.commands.clear();
-        self.storage.primitives.clear();
-        self.storage.has_unready_textures = false;
-
         let white_pixel = self.texture_manager.white_pixel();
         let opaque_pixel = self.texture_manager.opaque_pixel();
 
-        self.storage.commands.push(DrawCommand::Draw {
-            color_storage_id: white_pixel.storage_id(),
-            alpha_storage_id: opaque_pixel.storage_id(),
-            num_vertices: 0,
-        });
+        self.storage.reset(
+            clear_color,
+            white_pixel.storage_id(),
+            opaque_pixel.storage_id(),
+        );
     }
 
     pub fn load_texture(&mut self, path: impl AsRef<Path>) -> Result<Texture, TextureLoadError> {
         self.texture_manager.load(path)
     }
 
-    pub fn draw_text_layout(&mut self, layout: &parley::Layout<Color>, origin: [f32; 2]) {
+    pub fn draw_text_layout(
+        &mut self,
+        layout: &parley::Layout<Color>,
+        origin: [f32; 2],
+        clip: ClipRect,
+    ) {
         self.glyph_cache
-            .draw(&mut self.storage, &self.texture_manager, layout, origin);
+            .draw(&mut self.storage, &self.texture_manager, layout, origin, clip);
     }
 
     pub fn draw(&mut self, primitive: Primitive) {
@@ -117,6 +157,9 @@ pub(crate) struct CanvasStorage {
     clear_color: Option<Color>,
     commands: Vec<DrawCommand>,
     primitives: Vec<GpuPrimitive>,
+    clips: Vec<GpuClip>,
+
+    last_clip_alloc: Option<(ClipRect, u32)>,
 
     has_unready_textures: bool,
 }
@@ -134,6 +177,35 @@ impl CanvasStorage {
         &self.primitives
     }
 
+    pub(crate) fn clips(&self) -> &[GpuClip] {
+        &self.clips
+    }
+
+    pub(crate) fn reset(
+        &mut self,
+        clear_color: impl Into<Option<Color>>,
+        white: StorageId,
+        opaque: StorageId,
+    ) {
+        self.clear_color = clear_color.into();
+        self.has_unready_textures = false;
+
+        self.clips.clear();
+        self.clips.push(GpuClip {
+            point: [0.0, 0.0],
+            extent: [f32::MAX, f32::MAX],
+        });
+        self.last_clip_alloc = Some((ClipRect::default(), 0));
+
+        self.commands.clear();
+        self.primitives.clear();
+        self.commands.push(DrawCommand::Draw {
+            color_storage_id: white,
+            alpha_storage_id: opaque,
+            num_vertices: 0,
+        });
+    }
+
     pub(crate) fn push(&mut self, texture_manager: &TextureManager, primitive: Primitive) {
         let Primitive {
             point,
@@ -143,6 +215,7 @@ impl CanvasStorage {
             border_width,
             corner_radii,
             use_nearest_sampling,
+            clip,
         } = primitive;
 
         let mut flags = PrimitiveRenderFlags::empty();
@@ -193,6 +266,19 @@ impl CanvasStorage {
             }
         };
 
+        let clip_idx = match self.last_clip_alloc {
+            Some((cached, idx)) if cached == clip => idx,
+            _ => {
+                let idx = self.clips.len() as u32;
+                self.clips.push(GpuClip {
+                    point: clip.point,
+                    extent: clip.size,
+                });
+                self.last_clip_alloc = Some((clip, idx));
+                idx
+            }
+        };
+
         self.primitives.push(GpuPrimitive {
             point,
             extent: size,
@@ -206,7 +292,7 @@ impl CanvasStorage {
             border_width,
             corner_radii,
             control_flags: flags,
-            _padding0: 0,
+            clip_idx,
             _padding1: 0,
             _padding2: 0,
         });
@@ -230,3 +316,4 @@ impl CanvasStorage {
         }
     }
 }
+

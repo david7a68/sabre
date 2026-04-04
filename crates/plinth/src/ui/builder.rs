@@ -83,6 +83,7 @@ impl UiBuilder<'_> {
             minor_align: style.child_minor_alignment.get(state),
             direction: style.child_direction.get(state),
             inter_child_padding: style.child_spacing.get(state),
+            clip_overflow: style.clip_children.get(state),
         };
 
         self
@@ -105,6 +106,16 @@ impl UiBuilder<'_> {
             }
         }
 
+        self
+    }
+
+    pub fn clip_children(&mut self) -> &mut Self {
+        self.context.ui_tree.atom_mut(self.index).clip_overflow = true;
+        self
+    }
+
+    pub fn set_clip_children(&mut self, clip: bool) -> &mut Self {
+        self.context.ui_tree.atom_mut(self.index).clip_overflow = clip;
         self
     }
 
