@@ -201,8 +201,8 @@ fn distance_from_rect(point: vec2f, rect_center: vec2f, rect_half_extent: vec2f,
 fn inside_clip(point: vec2f, clip_point: vec2f, clip_extent: vec2f) -> bool {
     return point.x >= clip_point.x
         && point.y >= clip_point.y
-        && point.x <= clip_point.x + clip_extent.x
-        && point.y <= clip_point.y + clip_extent.y;
+        && point.x < clip_point.x + clip_extent.x
+        && point.y < clip_point.y + clip_extent.y;
 }
 
 const USE_NEAREST_SAMPLING: u32 = 1;
