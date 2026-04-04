@@ -1,5 +1,7 @@
 use smallvec::SmallVec;
 
+use crate::graphics::ClipRect;
+
 pub use Size::*;
 
 /// Single-dimension size for UI elements.
@@ -86,6 +88,8 @@ pub(crate) struct Atom {
     pub minor_align: Alignment,
     pub direction: LayoutDirection,
     pub inter_child_padding: f32,
+
+    pub clip_overflow: bool,
 }
 
 #[derive(Debug, Default)]
@@ -94,6 +98,7 @@ pub(crate) struct LayoutNodeResult {
     pub y: f32,
     pub width: f32,
     pub height: f32,
+    pub effective_clip: ClipRect,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
@@ -195,6 +200,8 @@ impl<T> LayoutTree<T> {
 
         compute_major_axis_offsets::<HorizontalMode>(nodes, &self.children, node_id, 0.0);
         compute_minor_axis_offsets::<HorizontalMode>(nodes, &self.children, node_id, 0.0);
+
+        compute_clip_rects(nodes, &self.children, node_id, ClipRect::default());
     }
 }
 
@@ -711,5 +718,28 @@ impl LayoutDirectionExt for VerticalMode {
 
     fn minor_axis_padding_end(node: &LayoutNode) -> f32 {
         node.atom.inner_padding.right
+    }
+}
+
+fn compute_clip_rects(
+    nodes: &mut [LayoutNode],
+    children: &[NodeIndexArray],
+    node_id: UiElementId,
+    current_clip: ClipRect,
+) {
+    let idx = node_id.0 as usize;
+    let effective = if nodes[idx].atom.clip_overflow {
+        let r = &nodes[idx].result;
+        current_clip.next(&ClipRect {
+            point: [r.x, r.y],
+            size: [r.width, r.height],
+            fade: [0.0; 4],
+        })
+    } else {
+        current_clip
+    };
+    nodes[idx].result.effective_clip = effective;
+    for child_id in children[idx].clone() {
+        compute_clip_rects(nodes, children, child_id, effective);
     }
 }

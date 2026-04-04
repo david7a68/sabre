@@ -1,6 +1,7 @@
 pub use color::Color;
 pub use context::GraphicsContext;
 pub use draw::Canvas;
+pub use draw::ClipRect;
 pub use draw::Primitive;
 pub use paint::GradientPaint;
 pub use paint::Paint;

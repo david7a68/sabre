@@ -26,6 +26,7 @@ pub struct Primitive {
     pub border_width: [f32; 4],
     pub corner_radii: [f32; 4],
     pub use_nearest_sampling: bool,
+    pub clip: ClipRect,
 }
 
 impl Primitive {
@@ -39,19 +40,30 @@ impl Primitive {
             border_width: [0.0, 0.0, 0.0, 0.0],
             corner_radii: [0.0; 4],
             use_nearest_sampling: false,
+            clip: ClipRect::default(),
         }
     }
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct ClipRect {
     pub point: [f32; 2],
     pub size: [f32; 2],
     pub fade: [f32; 4],
 }
 
+impl Default for ClipRect {
+    fn default() -> Self {
+        Self {
+            point: [0.0, 0.0],
+            size: [f32::MAX, f32::MAX],
+            fade: [0.0; 4],
+        }
+    }
+}
+
 impl ClipRect {
-    fn next(&self, next: &ClipRect) -> ClipRect {
+    pub(crate) fn next(&self, next: &ClipRect) -> ClipRect {
         let x1 = self.point[0].max(next.point[0]);
         let y1 = self.point[1].max(next.point[1]);
         let x2 = (self.point[0] + self.size[0]).min(next.point[0] + next.size[0]);
@@ -66,10 +78,17 @@ impl ClipRect {
             };
         }
 
+        let fade = [
+            if x1 == self.point[0] { self.fade[0] } else { next.fade[0] },
+            if y1 == self.point[1] { self.fade[1] } else { next.fade[1] },
+            if x2 == self.point[0] + self.size[0] { self.fade[2] } else { next.fade[2] },
+            if y2 == self.point[1] + self.size[1] { self.fade[3] } else { next.fade[3] },
+        ];
+
         ClipRect {
             point: [x1, y1],
             size: [x2 - x1, y2 - y1],
-            fade: next.fade,
+            fade,
         }
     }
 }
@@ -121,9 +140,14 @@ impl Canvas {
         self.texture_manager.load(path)
     }
 
-    pub fn draw_text_layout(&mut self, layout: &parley::Layout<Color>, origin: [f32; 2]) {
+    pub fn draw_text_layout(
+        &mut self,
+        layout: &parley::Layout<Color>,
+        origin: [f32; 2],
+        clip: ClipRect,
+    ) {
         self.glyph_cache
-            .draw(&mut self.storage, &self.texture_manager, layout, origin);
+            .draw(&mut self.storage, &self.texture_manager, layout, origin, clip);
     }
 
     pub fn draw(&mut self, primitive: Primitive) {
@@ -147,7 +171,7 @@ pub(crate) struct CanvasStorage {
     primitives: Vec<GpuPrimitive>,
     clips: Vec<GpuClip>,
 
-    clip_stack: Vec<ClipEntry>,
+    last_clip_alloc: Option<(ClipRect, u32)>,
 
     has_unready_textures: bool,
 }
@@ -169,25 +193,6 @@ impl CanvasStorage {
         &self.clips
     }
 
-    pub fn push_clip(&mut self, clip: ClipRect) {
-        let next = if let Some(prev_resolved) = self.clip_stack.last() {
-            prev_resolved.rect.next(&clip)
-        } else {
-            clip
-        };
-
-        self.clip_stack.push(ClipEntry {
-            rect: clip,
-            place: None,
-        });
-    }
-
-    pub fn pop_clip(&mut self) {
-        if self.clip_stack.len() > 1 {
-            self.clip_stack.pop();
-        }
-    }
-
     pub fn reset(
         &mut self,
         clear_color: impl Into<Option<Color>>,
@@ -203,16 +208,7 @@ impl CanvasStorage {
             extent: [f32::MAX, f32::MAX],
             fade: [0.0; 4],
         });
-
-        self.clip_stack.clear();
-        self.clip_stack.push(ClipEntry {
-            rect: ClipRect {
-                point: [0.0, 0.0],
-                size: [f32::MAX, f32::MAX],
-                fade: [0.0; 4],
-            },
-            place: Some(0),
-        });
+        self.last_clip_alloc = Some((ClipRect::default(), 0));
 
         self.commands.clear();
         self.primitives.clear();
@@ -232,6 +228,7 @@ impl CanvasStorage {
             border_width,
             corner_radii,
             use_nearest_sampling,
+            clip,
         } = primitive;
 
         let mut flags = PrimitiveRenderFlags::empty();
@@ -282,18 +279,19 @@ impl CanvasStorage {
             }
         };
 
-        let current_clip = self.clip_stack.last_mut().unwrap();
-        let clip_idx = *current_clip.place.get_or_insert_with(|| {
-            let place = self.clips.len() as u32;
-
-            self.clips.push(GpuClip {
-                point: current_clip.rect.point,
-                extent: current_clip.rect.size,
-                fade: current_clip.rect.fade,
-            });
-
-            place
-        });
+        let clip_idx = match self.last_clip_alloc {
+            Some((cached, idx)) if cached == clip => idx,
+            _ => {
+                let idx = self.clips.len() as u32;
+                self.clips.push(GpuClip {
+                    point: clip.point,
+                    extent: clip.size,
+                    fade: clip.fade,
+                });
+                self.last_clip_alloc = Some((clip, idx));
+                idx
+            }
+        };
 
         self.primitives.push(GpuPrimitive {
             point,
@@ -333,7 +331,3 @@ impl CanvasStorage {
     }
 }
 
-struct ClipEntry {
-    rect: ClipRect,
-    place: Option<u32>,
-}

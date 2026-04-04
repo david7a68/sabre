@@ -86,6 +86,7 @@ macros::declare_style! {
         child_minor_alignment: ChildMinorAlignment(Alignment) = Alignment::Center,
         child_spacing: ChildSpacing(f32) = 4.0,
         child_direction: ChildDirection(LayoutDirection) = LayoutDirection::Horizontal,
+        clip_children: ClipChildren(bool) = false,
         width: Width(Size) = Size::Fit { min: 20.0, max: f32::MAX },
         height: Height(Size) = Size::Fit { min: 10.0, max: f32::MAX },
 

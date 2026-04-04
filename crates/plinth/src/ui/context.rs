@@ -5,6 +5,7 @@ use glamour::Rect;
 use glamour::Size2;
 
 use crate::graphics::Canvas;
+use crate::graphics::ClipRect;
 use crate::graphics::Color;
 use crate::graphics::GradientPaint;
 use crate::graphics::Paint;
@@ -182,6 +183,7 @@ impl UiContext {
                     canvas.draw(Primitive {
                         point: [layout.x, layout.y],
                         size: [layout.width, layout.height],
+                        clip: node.result.effective_clip,
                         paint: paint.clone(),
                         border: *border,
                         border_width: border_width.into_array(),
@@ -198,9 +200,14 @@ impl UiContext {
                 } => match text_layouts.get_mut(*text_layout_id) {
                     None => {}
                     Some(TextLayoutMut::Static(text_layout)) => {
-                        canvas.draw_text_layout(text_layout, [layout.x, layout.y]);
+                        canvas.draw_text_layout(
+                            text_layout,
+                            [layout.x, layout.y],
+                            node.result.effective_clip,
+                        );
                     }
                     Some(TextLayoutMut::Dynamic(text_layout)) => {
+                        let clip = node.result.effective_clip;
                         text_layout.editor.selection_geometry_with(|bbox, _| {
                             Self::draw_selection_rect(
                                 canvas,
@@ -208,11 +215,19 @@ impl UiContext {
                                 *selection_color,
                                 layout.x,
                                 layout.y,
+                                clip,
                             );
                         });
 
                         if let Some(rect) = text_layout.editor.cursor_geometry(*cursor_size) {
-                            Self::draw_cursor(canvas, &rect, *cursor_color, layout.x, layout.y);
+                            Self::draw_cursor(
+                                canvas,
+                                &rect,
+                                *cursor_color,
+                                layout.x,
+                                layout.y,
+                                clip,
+                            );
                         }
 
                         canvas.draw_text_layout(
@@ -220,6 +235,7 @@ impl UiContext {
                                 .editor
                                 .layout(&mut text_context.fonts, &mut text_context.layouts),
                             [layout.x, layout.y],
+                            clip,
                         );
                     }
                 },
@@ -265,6 +281,7 @@ impl UiContext {
         color: Color,
         x: f32,
         y: f32,
+        clip: ClipRect,
     ) {
         let y0 = (y + rect.y0 as f32).round();
         let y1 = (y + rect.y1 as f32).round();
@@ -272,6 +289,7 @@ impl UiContext {
         canvas.draw(Primitive {
             point: [x + rect.x0 as f32, y0],
             size: [(rect.x1 - rect.x0) as f32, y1 - y0],
+            clip,
             paint: Paint::solid(color),
             border: GradientPaint::default(),
             border_width: [0.0; 4],
@@ -286,6 +304,7 @@ impl UiContext {
         color: Color,
         x: f32,
         y: f32,
+        clip: ClipRect,
     ) {
         let y0 = (y + cursor_rect.y0 as f32).round();
         let y1 = (y + cursor_rect.y1 as f32).round();
@@ -293,6 +312,7 @@ impl UiContext {
         canvas.draw(Primitive {
             point: [x + cursor_rect.x0 as f32, y0],
             size: [2.0, y1 - y0], // 2px wide cursor
+            clip,
             paint: Paint::solid(color),
             border: GradientPaint::default(),
             border_width: [0.0; 4],

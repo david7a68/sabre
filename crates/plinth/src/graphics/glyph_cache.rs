@@ -18,6 +18,7 @@ use swash::zeno::Format;
 use swash::zeno::Vector;
 use tracing::instrument;
 
+use crate::graphics::ClipRect;
 use crate::graphics::Color;
 use crate::graphics::Paint;
 use crate::graphics::Primitive;
@@ -50,10 +51,11 @@ impl GlyphCache {
         textures: &TextureManager,
         layout: &Layout<Color>,
         origin: [f32; 2],
+        clip: ClipRect,
     ) {
         self.inner
             .borrow_mut()
-            .draw(canvas, textures, layout, origin);
+            .draw(canvas, textures, layout, origin, clip);
     }
 }
 
@@ -85,6 +87,7 @@ impl GlyphCacheInner {
         textures: &TextureManager,
         layout: &Layout<Color>,
         origin: [f32; 2],
+        clip: ClipRect,
     ) {
         for line in layout.lines() {
             for item in line.items() {
@@ -97,6 +100,7 @@ impl GlyphCacheInner {
                         textures,
                         &glyphs,
                         origin,
+                        clip,
                     ),
                     PositionedLayoutItem::InlineBox(_) => {}
                 }
@@ -132,6 +136,7 @@ impl SubpixelAlignment {
     }
 }
 
+#[expect(clippy::too_many_arguments)]
 fn draw_glyph_run(
     scaler_cx: &mut ScaleContext,
     temp_glyph: &mut Image,
@@ -140,6 +145,7 @@ fn draw_glyph_run(
     textures: &TextureManager,
     glyph_run: &GlyphRun<Color>,
     origin: [f32; 2],
+    clip: ClipRect,
 ) {
     let mut run_x = glyph_run.offset() + origin[0];
     let run_y = (glyph_run.baseline() + origin[1]).round();
@@ -254,6 +260,7 @@ fn draw_glyph_run(
                 border_width: [0.0; 4],
                 corner_radii: [0.0; 4],
                 use_nearest_sampling: true,
+                clip,
             },
         );
     }
