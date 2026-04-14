@@ -44,12 +44,14 @@ pub struct UiBuilder<'a> {
     pub text_context: &'a mut TextLayoutContext,
     pub text_layouts: &'a mut TextLayoutStorage,
 
-    pub(super) style_id: StyleId,
-    pub(super) state: StateFlags,
-    pub(super) num_child_widgets: usize,
     /// The z_layer of the node this builder represents. Propagated to children.
     /// Overlay children receive `parent.layer + 1`.
     pub(super) layer: u8,
+    pub(super) is_modal: bool,
+
+    pub(super) style_id: StyleId,
+    pub(super) state: StateFlags,
+    pub(super) num_child_widgets: usize,
 }
 
 impl UiBuilder<'_> {
@@ -231,6 +233,8 @@ impl UiBuilder<'_> {
             Atom {
                 width: width.into(),
                 height: height.into(),
+                z_layer: self.layer,
+                is_modal: self.is_modal,
                 ..Default::default()
             },
             (
@@ -288,6 +292,8 @@ impl UiBuilder<'_> {
                     max: size.max,
                 },
                 height: height.into(),
+                z_layer: self.layer,
+                is_modal: self.is_modal,
                 ..Default::default()
             },
             (
@@ -314,7 +320,11 @@ impl UiBuilder<'_> {
 
         let child_index = self.context.ui_tree.add(
             Some(self.index),
-            Atom::default(),
+            Atom {
+                z_layer: self.layer,
+                is_modal: self.is_modal,
+                ..Default::default()
+            },
             (LayoutContent::None, Some(child_id)),
         );
 
@@ -329,9 +339,11 @@ impl UiBuilder<'_> {
             text_context: self.text_context,
             text_layouts: self.text_layouts,
 
+            is_modal: self.is_modal,
+            layer: self.layer,
+
             id: child_id,
             index: child_index,
-            layer: self.layer,
             style_id: self.style_id,
             state: self.state,
             num_child_widgets: 0,
@@ -376,7 +388,11 @@ impl UiBuilder<'_> {
     /// dropdowns (anchor below-start), tooltips (anchor above-start), popovers.
     /// The child does not participate in this node's sizing or sibling alignment.
     /// It escapes ancestor clip rects and renders above all base-layer content.
-    pub fn overlay_child(&mut self, name: impl std::hash::Hash, pos: OverlayPosition) -> UiBuilder<'_> {
+    pub fn overlay_child(
+        &mut self,
+        name: impl std::hash::Hash,
+        pos: OverlayPosition,
+    ) -> UiBuilder<'_> {
         let child_layer = self.layer.saturating_add(1);
         self.overlay_child_inner(name, Position::OutOfFlow(pos), child_layer, false)
     }
@@ -387,7 +403,11 @@ impl UiBuilder<'_> {
     /// Use when the overlay must be dismissed before the user can interact with anything
     /// else: confirmation dialogs, error modals, blocking progress indicators.
     /// Same positioning semantics as [`overlay_child`](Self::overlay_child).
-    pub fn modal_child(&mut self, name: impl std::hash::Hash, pos: OverlayPosition) -> UiBuilder<'_> {
+    pub fn modal_child(
+        &mut self,
+        name: impl std::hash::Hash,
+        pos: OverlayPosition,
+    ) -> UiBuilder<'_> {
         let child_layer = self.layer.saturating_add(1);
         self.overlay_child_inner(name, Position::OutOfFlow(pos), child_layer, true)
     }
@@ -436,10 +456,12 @@ impl UiBuilder<'_> {
 
             id: child_id,
             index: child_index,
-            layer: child_layer,
             style_id: self.style_id,
             state: self.state,
             num_child_widgets: 0,
+
+            is_modal,
+            layer: child_layer,
         }
     }
 }
