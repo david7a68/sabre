@@ -5,6 +5,7 @@ pub use common_widgets::CommonWidgetsExt;
 pub use container::Container;
 pub use id::*;
 pub use layout::*;
+pub use text::TextOverflow;
 pub use theme::StyleClass;
 pub use theme::Theme;
 

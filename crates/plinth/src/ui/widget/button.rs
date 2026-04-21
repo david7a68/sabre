@@ -4,8 +4,8 @@ use crate::ui::style::StateFlags;
 
 use super::ClickBehavior;
 use super::Interaction;
-use super::impl_container;
 use super::macros::forward_properties;
+use super::macros::impl_container;
 
 pub struct Button<'a> {
     builder: UiBuilder<'a>,

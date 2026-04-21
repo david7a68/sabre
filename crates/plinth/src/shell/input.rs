@@ -36,6 +36,7 @@ impl MouseButtonState {
 #[derive(Clone, Debug, Default)]
 pub struct Input {
     pub pointer: Point2<Pixels>,
+    pub prev_pointer: Point2<Pixels>,
     pub mouse_state: MouseButtonState,
     pub window_size: WindowSize,
     pub keyboard_events: SmallVec<[KeyboardEvent; 4]>,

@@ -28,6 +28,7 @@ use super::style::CornerRadii;
 use super::style::StateFlags;
 use super::style::StyleId;
 use super::text::TextLayoutStorage;
+use super::text::TextOverflow;
 use super::theme::StyleClass;
 use super::theme::Theme;
 use super::widget::WidgetState;
@@ -52,6 +53,7 @@ pub struct UiBuilder<'a> {
     pub(super) style_id: StyleId,
     pub(super) state: StateFlags,
     pub(super) num_child_widgets: usize,
+    pub(super) text_overflow: TextOverflow,
 }
 
 impl UiBuilder<'_> {
@@ -202,6 +204,19 @@ impl UiBuilder<'_> {
         self
     }
 
+    pub fn text_overflow(&mut self, overflow: TextOverflow) -> &mut Self {
+        self.text_overflow = overflow;
+        self
+    }
+
+    pub fn clip_text(&mut self) -> &mut Self {
+        self.text_overflow(TextOverflow::Clip)
+    }
+
+    pub fn wrap_text(&mut self) -> &mut Self {
+        self.text_overflow(TextOverflow::Wrap)
+    }
+
     pub fn prev_state(&self) -> Option<&WidgetState> {
         self.context
             .widget_states
@@ -258,7 +273,8 @@ impl UiBuilder<'_> {
 
         let needs_rebuild = text_layout.style_id != self.style_id
             || text_layout.state != self.state
-            || text_layout.text_hash != text_hash;
+            || text_layout.text_hash != text_hash
+            || text_layout.prev_overflow != self.text_overflow;
 
         if needs_rebuild {
             let mut builder = self.text_context.layouts.ranged_builder(
@@ -276,6 +292,7 @@ impl UiBuilder<'_> {
             text_layout.style_id = self.style_id;
             text_layout.state = self.state;
             text_layout.text_hash = text_hash;
+            text_layout.raw_text = text.to_string();
             text_layout.needs_line_break = true;
         }
 
@@ -294,6 +311,7 @@ impl UiBuilder<'_> {
                 height: height.into(),
                 z_layer: self.layer,
                 is_modal: self.is_modal,
+                clip_overflow: matches!(self.text_overflow, TextOverflow::Clip),
                 ..Default::default()
             },
             (
@@ -301,6 +319,7 @@ impl UiBuilder<'_> {
                     layout: text_id,
                     cursor_size: 0.0,
                     alignment,
+                    overflow: self.text_overflow,
                     selection_color: Color::TRANSPARENT,
                     cursor_color: Color::TRANSPARENT,
                 },
@@ -347,6 +366,7 @@ impl UiBuilder<'_> {
             style_id: self.style_id,
             state: self.state,
             num_child_widgets: 0,
+            text_overflow: self.text_overflow,
         }
     }
 
@@ -462,6 +482,7 @@ impl UiBuilder<'_> {
 
             is_modal,
             layer: child_layer,
+            text_overflow: self.text_overflow,
         }
     }
 }

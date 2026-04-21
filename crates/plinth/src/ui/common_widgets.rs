@@ -3,6 +3,8 @@ use crate::graphics::Texture;
 use super::Size;
 use super::widget::Button;
 use super::widget::Container;
+use super::widget::Dropdown;
+use super::widget::DropdownItem;
 use super::widget::Frame;
 use super::widget::HorizontalSeparator;
 use super::widget::Image;
@@ -79,6 +81,23 @@ pub trait CommonWidgetsExt<'a>: Container<'a> {
         'a: 'this,
     {
         VerticalSeparator::new(self.builder_mut())
+    }
+
+    fn dropdown<D: DropdownItem>(
+        &mut self,
+        id: &str,
+        label: &str,
+        selected: Option<usize>,
+        items: impl IntoIterator<Item = D>,
+    ) -> Option<usize> {
+        let mut dropdown = Dropdown::new(self.builder_mut(), id, label);
+
+        for item in items.into_iter() {
+            dropdown.item(item);
+        }
+
+        let (selected_idx, _) = dropdown.finish();
+        selected_idx.or(selected)
     }
 }
 

@@ -134,8 +134,13 @@ impl Canvas {
         origin: [f32; 2],
         clip: ClipRect,
     ) {
-        self.glyph_cache
-            .draw(&mut self.storage, &self.texture_manager, layout, origin, clip);
+        self.glyph_cache.draw(
+            &mut self.storage,
+            &self.texture_manager,
+            layout,
+            origin,
+            clip,
+        );
     }
 
     pub fn draw(&mut self, primitive: Primitive) {
@@ -316,4 +321,3 @@ impl CanvasStorage {
         }
     }
 }
-

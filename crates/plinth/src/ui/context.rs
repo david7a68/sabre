@@ -28,6 +28,7 @@ use super::style::CornerRadii;
 use super::text::TextLayoutId;
 use super::text::TextLayoutMut;
 use super::text::TextLayoutStorage;
+use super::text::TextOverflow;
 use super::widget::WidgetState;
 
 #[derive(Default)]
@@ -123,6 +124,7 @@ impl UiContext {
 
             layer: 0,
             is_modal: false,
+            text_overflow: TextOverflow::Clip,
         }
     }
 
@@ -131,13 +133,7 @@ impl UiContext {
             .widget_states
             .entry(widget_id)
             .or_insert_with(|| WidgetContainer {
-                state: WidgetState {
-                    placement: Default::default(),
-                    was_active: false,
-                    text_layout: None,
-                    layer: 0,
-                    is_modal: false,
-                },
+                state: WidgetState::default(),
                 frame_last_used: self.frame_counter,
             });
 
@@ -189,14 +185,17 @@ impl UiContext {
         canvas: &mut Canvas,
     ) {
         self.ui_tree.compute_layout(|(content, _), max_width| {
-            let (layout_id, alignment) = match content {
+            let (layout_id, alignment, overflow) = match content {
                 LayoutContent::Text {
-                    layout, alignment, ..
-                } => (layout, alignment),
+                    layout,
+                    alignment,
+                    overflow,
+                    ..
+                } => (layout, alignment, overflow),
                 _ => return None,
             };
 
-            text_layouts.break_lines(text_context, *layout_id, max_width, *alignment)
+            text_layouts.break_lines(text_context, *layout_id, max_width, *alignment, *overflow)
         });
 
         for (node, (content, widget_id)) in self.ui_tree.iter_nodes_by_layer() {
@@ -227,6 +226,7 @@ impl UiContext {
                 LayoutContent::Text {
                     layout: text_layout_id,
                     alignment: _,
+                    overflow: _,
                     cursor_size,
                     selection_color,
                     cursor_color,
@@ -374,6 +374,7 @@ pub(super) enum LayoutContent {
     Text {
         layout: TextLayoutId,
         alignment: TextAlignment,
+        overflow: TextOverflow,
         cursor_size: f32,
         selection_color: Color,
         cursor_color: Color,

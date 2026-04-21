@@ -23,8 +23,10 @@ pub struct StaticTextLayout {
     pub style_id: StyleId,
     pub state: StateFlags,
     pub text_hash: u64,
+    pub raw_text: String,
     pub prev_width: f32,
     pub prev_alignment: Option<TextAlignment>,
+    pub prev_overflow: TextOverflow,
 
     // Track if line breaking and alignment need to be recomputed
     pub needs_line_break: bool,
@@ -44,6 +46,13 @@ pub enum TextLayoutId {
     Static(StaticTextLayoutId),
     Dynamic(DynamicTextLayoutId),
     LargeDynamic(LargeDynamicTextLayoutId),
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum TextOverflow {
+    #[default]
+    Clip,
+    Wrap,
 }
 
 pub enum TextLayoutMut<'a> {
@@ -80,8 +89,10 @@ impl TextLayoutStorage {
                     style_id: Default::default(),
                     state: Default::default(),
                     text_hash: 0,
+                    raw_text: String::new(),
                     prev_width: 0.0,
                     prev_alignment: None,
+                    prev_overflow: TextOverflow::Clip,
                     needs_line_break: true,
                 };
                 let id = self.static_layouts.insert(layout);
@@ -131,6 +142,7 @@ impl TextLayoutStorage {
         layout_id: TextLayoutId,
         max_width: f32,
         alignment: TextAlignment,
+        overflow: TextOverflow,
     ) -> Option<f32> {
         match layout_id {
             TextLayoutId::Static(id) => {
@@ -138,17 +150,39 @@ impl TextLayoutStorage {
 
                 let width_changed = text.prev_width != max_width;
                 let alignment_changed = text.prev_alignment != Some(alignment);
+                let overflow_changed = text.prev_overflow != overflow;
 
-                if text.needs_line_break || width_changed {
-                    text.layout.break_all_lines(Some(max_width));
+                if overflow_changed {
+                    let raw_text = text.raw_text.clone();
+                    let builder =
+                        context
+                            .layouts
+                            .ranged_builder(&mut context.fonts, &raw_text, 1.0, false);
+
+                    text.layout = parley::Layout::new();
+                    builder.build_into(&mut text.layout, &raw_text);
+                    text.needs_line_break = true;
                 }
 
-                if text.needs_line_break || width_changed || alignment_changed {
+                if text.needs_line_break || width_changed {
+                    match overflow {
+                        TextOverflow::Clip => {
+                            // Keep text on a single line while still producing drawable line data.
+                            text.layout.break_all_lines(None);
+                        }
+                        TextOverflow::Wrap => {
+                            text.layout.break_all_lines(Some(max_width));
+                        }
+                    }
+                }
+
+                if text.needs_line_break || width_changed || alignment_changed || overflow_changed {
                     text.layout
                         .align(Some(max_width), alignment.into(), Default::default());
                     text.needs_line_break = false;
                     text.prev_width = max_width;
                     text.prev_alignment = Some(alignment);
+                    text.prev_overflow = overflow;
                 }
 
                 Some(text.layout.height())
