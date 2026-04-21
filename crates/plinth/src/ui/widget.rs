@@ -1,7 +1,10 @@
 use std::hash::Hash;
 
+use bytemuck::NoUninit;
+use bytemuck::Pod;
 use glamour::Contains;
 use glamour::Rect;
+use std::mem::size_of;
 
 use crate::ui::Pixels;
 use crate::ui::text::TextLayoutId;
@@ -12,15 +15,19 @@ use super::UiBuilder;
 use super::style::StateFlags;
 
 mod button;
+mod dropdown;
 mod frame;
 mod horizontal_separator;
 mod image;
 mod label;
+pub(crate) mod macros;
 mod surface;
 mod text_edit;
 mod vertical_separator;
 
 pub use button::Button;
+pub use dropdown::Dropdown;
+pub use dropdown::DropdownItem;
 pub use frame::Frame;
 pub use horizontal_separator::HorizontalSeparator;
 pub use image::Image;
@@ -28,8 +35,6 @@ pub use label::Label;
 pub use surface::Surface;
 pub use text_edit::TextEdit;
 pub use vertical_separator::VerticalSeparator;
-
-use macros::*;
 
 #[derive(Clone, Copy, Debug)]
 pub struct Interaction {
@@ -127,7 +132,12 @@ impl Interaction {
 
         let (was_active, is_hovered) = builder
             .prev_state()
-            .map(|s| (s.was_active, !layer_blocked && s.placement.contains(&builder.input.pointer)))
+            .map(|s| {
+                (
+                    s.was_active,
+                    !layer_blocked && s.placement.contains(&builder.input.pointer),
+                )
+            })
             .unwrap_or_default();
 
         let is_left_down = builder.input.mouse_state.is_left_down();
@@ -161,146 +171,139 @@ impl Interaction {
     }
 }
 
+#[repr(C, align(8))]
 #[derive(Default)]
 pub struct WidgetState {
     pub placement: Rect<Pixels>,
-    /// Whether the widget was being actively pressed last frame
-    pub was_active: bool,
+
+    // Placed immediately after placement to ensure that it is 8-byte aligned
+    // for safe storage of any Pod type up to 8 bytes in size.
+    custom_data: [u8; 8],
 
     pub text_layout: Option<TextLayoutId>,
 
+    /// Whether the widget was being actively pressed last frame
+    pub was_active: bool,
     /// The z_layer of the node this widget occupied last frame. Used to determine
     /// hit-test priority when multiple layers are present.
     pub layer: u8,
     /// Whether this widget's overlay was modal last frame (blocks input to lower layers).
     pub is_modal: bool,
+    /// Whether this widget has custom data that should be preserved across frames.
+    has_custom_data: bool,
 }
 
-mod macros {
-    /// Macro to forward builder property methods from a widget struct to its
-    /// internal UiBuilder.
+impl WidgetState {
+    /// Copy a [`Pod`] value previously stored with [`write_custom`].
     ///
-    /// Each method is forwarded in two forms: `property` takes `&mut self` and
-    /// returns `&mut Self` for chaining, and `with_property` takes `self` by
-    /// value and returns `Self` for builder-style use.
-    ///
-    /// Supported properties:
-    ///
-    /// - color (with_color)
-    /// - width (with_width)
-    /// - height (with_height)
-    /// - size (with_size)
-    /// - padding (with_padding)
-    macro_rules! forward_properties {
-        ($($method:ident),+) => {
-            $crate::ui::widget::macros::forward_properties!(@impl $($method),+);
-        };
-        (@impl color $(, $method:ident)*) => {
-            pub fn color(&mut self, color: impl Into<$crate::graphics::Color>) -> &mut Self {
-                self.builder.color(color.into());
-                self
-            }
-
-            pub fn with_color(mut self, color: impl Into<$crate::graphics::Color>) -> Self {
-                self.color(color);
-                self
-            }
-
-            $crate::ui::widget::macros::forward_properties!(@impl $($method),*);
-        };
-        (@impl width $(, $method:ident)*) => {
-            pub fn width(&mut self, width: impl Into<$crate::ui::Size>) -> &mut Self {
-                self.builder.width(width);
-                self
-            }
-
-            pub fn with_width(mut self, width: impl Into<$crate::ui::Size>) -> Self {
-                self.width(width);
-                self
-            }
-
-            $crate::ui::widget::macros::forward_properties!(@impl $($method),*);
-        };
-        (@impl height $(, $method:ident)*) => {
-            pub fn height(&mut self, height: impl Into<$crate::ui::Size>) -> &mut Self {
-                self.builder.height(height);
-                self
-            }
-
-            pub fn with_height(mut self, height: impl Into<$crate::ui::Size>) -> Self {
-                self.height(height);
-                self
-            }
-
-            $crate::ui::widget::macros::forward_properties!(@impl $($method),*);
-        };
-        (@impl size $(, $method:ident)*) => {
-            pub fn size(&mut self, width: impl Into<$crate::ui::Size>, height: impl Into<$crate::ui::Size>) -> &mut Self {
-                self.builder.size(width, height);
-                self
-            }
-
-            pub fn with_size(mut self, width: impl Into<$crate::ui::Size>, height: impl Into<$crate::ui::Size>) -> Self {
-                self.size(width, height);
-                self
-            }
-
-            $crate::ui::widget::macros::forward_properties!(@impl $($method),*);
-        };
-        (@impl padding $(, $method:ident)*) => {
-            pub fn padding(&mut self, padding: $crate::ui::Padding) -> &mut Self {
-                self.builder.padding(padding);
-                self
-            }
-
-            pub fn with_padding(mut self, padding: $crate::ui::Padding) -> Self {
-                self.padding(padding);
-                self
-            }
-
-            $crate::ui::widget::macros::forward_properties!(@impl $($method),*);
-        };
-        (@impl ) => {};
+    /// Returns `None` if no custom data has been written or `size_of::<T>() > 8`.
+    pub fn custom_data<T: Pod>(&self) -> Option<T> {
+        self.custom_data_ref().copied()
     }
 
-    pub(crate) use forward_properties;
-
-    macro_rules! impl_container {
-        ($type:ident < $($lt:lifetime),+>) => {
-            impl <$($lt),+> $crate::ui::widget::Container<$($lt),+> for $type <$($lt),+> {
-                fn builder_mut(&mut self) -> &mut UiBuilder<$($lt),+> {
-                    &mut self.builder
-                }
-            }
-
-            impl <$($lt),+> $type <$($lt),+> {
-                pub fn child_direction(&mut self, direction: $crate::ui::LayoutDirection) -> &mut Self {
-                    use $crate::ui::widget::Container;
-
-                    self.builder_mut().child_direction(direction);
-                    self
-                }
-
-                pub fn with_child_direction(mut self, direction: $crate::ui::LayoutDirection) -> Self {
-
-                    self.child_direction(direction);
-                    self
-                }
-
-                pub fn child_alignment(&mut self, major: $crate::ui::Alignment, minor: $crate::ui::Alignment) -> &mut Self {
-                    use $crate::ui::widget::Container;
-
-                    self.builder_mut().child_alignment(major, minor);
-                    self
-                }
-
-                pub fn with_child_alignment(mut self, major: $crate::ui::Alignment, minor: $crate::ui::Alignment) -> Self {
-                    self.child_alignment(major, minor);
-                    self
-                }
-            }
-        };
+    /// Store a [`NoUninit`] value in `custom_data`. Panics if `size_of::<T>() > 8`.
+    pub fn set_custom_data<T: NoUninit>(&mut self, value: T) {
+        let bytes = bytemuck::bytes_of(&value);
+        let n = bytes.len();
+        assert!(n <= 8, "custom_data holds at most 8 bytes, but T is {n}");
+        self.custom_data[..n].copy_from_slice(bytes);
+        self.has_custom_data = true;
     }
 
-    pub(crate) use impl_container;
+    /// Return a reference to a [`Pod`] value previously stored with [`write_custom`].
+    ///
+    /// Returns `None` if no custom data has been written or `size_of::<T>() > 8`.
+    /// The aligned cast is safe because `custom_data` is guaranteed 8-byte aligned
+    /// by `#[repr(C, align(8))]` and its fixed offset of 16 within the struct.
+    pub fn custom_data_ref<T: Pod>(&self) -> Option<&T> {
+        if !self.has_custom_data || size_of::<T>() > 8 {
+            return None;
+        }
+        Some(bytemuck::from_bytes(&self.custom_data[..size_of::<T>()]))
+    }
+
+    /// Return a mutable reference to a [`Pod`] value previously stored with [`write_custom`].
+    ///
+    /// Returns `None` if no custom data has been written or `size_of::<T>() > 8`.
+    pub fn custom_data_mut<T: Pod>(&mut self) -> Option<&mut T> {
+        if !self.has_custom_data || size_of::<T>() > 8 {
+            return None;
+        }
+        Some(bytemuck::from_bytes_mut(
+            &mut self.custom_data[..size_of::<T>()],
+        ))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn custom_data_field_is_8byte_aligned() {
+        let state = WidgetState::default();
+        let addr = std::ptr::addr_of!(state.custom_data) as usize;
+        assert_eq!(
+            addr % 8,
+            0,
+            "custom_data must be 8-byte aligned for Pod casts"
+        );
+    }
+
+    #[test]
+    fn custom_data_no_write_returns_none() {
+        let state = WidgetState::default();
+        assert_eq!(state.custom_data::<u64>(), None);
+        assert_eq!(state.custom_data_ref::<u64>(), None);
+    }
+
+    #[test]
+    fn custom_data_u64_roundtrip() {
+        let mut state = WidgetState::default();
+        state.set_custom_data(0xDEAD_BEEF_DEAD_BEEFu64);
+        assert_eq!(state.custom_data::<u64>(), Some(0xDEAD_BEEF_DEAD_BEEFu64));
+        assert_eq!(
+            state.custom_data_ref::<u64>(),
+            Some(&0xDEAD_BEEF_DEAD_BEEFu64)
+        );
+    }
+
+    #[test]
+    fn custom_data_f64_roundtrip() {
+        let mut state = WidgetState::default();
+        state.set_custom_data(std::f64::consts::PI);
+        assert_eq!(state.custom_data::<f64>(), Some(std::f64::consts::PI));
+        assert_eq!(state.custom_data_ref::<f64>(), Some(&std::f64::consts::PI));
+    }
+
+    #[test]
+    fn custom_data_i64_roundtrip() {
+        let mut state = WidgetState::default();
+        state.set_custom_data(i64::MIN);
+        assert_eq!(state.custom_data::<i64>(), Some(i64::MIN));
+        assert_eq!(state.custom_data_ref::<i64>(), Some(&i64::MIN));
+    }
+
+    #[test]
+    fn custom_data_u32_roundtrip() {
+        let mut state = WidgetState::default();
+        state.set_custom_data(0xDEAD_BEEFu32);
+        assert_eq!(state.custom_data::<u32>(), Some(0xDEAD_BEEFu32));
+    }
+
+    #[test]
+    fn custom_data_overwrite() {
+        let mut state = WidgetState::default();
+        state.set_custom_data(1u64);
+        state.set_custom_data(0xDEADu64);
+        assert_eq!(state.custom_data::<u64>(), Some(0xDEADu64));
+    }
+
+    #[test]
+    fn custom_data_mut_ref() {
+        let mut state = WidgetState::default();
+        state.set_custom_data(42u64);
+        *state.custom_data_mut::<u64>().unwrap() = 100;
+        assert_eq!(state.custom_data::<u64>(), Some(100u64));
+    }
 }
