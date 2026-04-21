@@ -77,9 +77,7 @@ impl UiContext {
         self.input_block_layer = self
             .widget_states
             .values()
-            .filter(|wc| {
-                wc.state.is_modal && wc.frame_last_used == self.frame_counter.saturating_sub(1)
-            })
+            .filter(|wc| wc.state.is_modal)
             .map(|wc| wc.state.layer)
             .max();
 

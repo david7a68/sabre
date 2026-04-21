@@ -2,7 +2,6 @@ use glamour::Contains;
 use winit::keyboard::KeyCode;
 use winit::keyboard::PhysicalKey;
 
-use crate::ui::Atom;
 use crate::ui::AxisAnchor;
 use crate::ui::LayoutDirection;
 use crate::ui::OverlayPosition;
@@ -10,7 +9,9 @@ use crate::ui::Position;
 use crate::ui::Size;
 use crate::ui::StyleClass;
 use crate::ui::UiBuilder;
+use crate::ui::WidgetId;
 use crate::ui::context::LayoutContent;
+use crate::ui::layout::Atom;
 use crate::ui::style::CornerRadii;
 use crate::ui::style::StateFlags;
 
@@ -19,8 +20,8 @@ use super::Interaction;
 
 pub struct Dropdown<'a> {
     builder: Option<UiBuilder<'a>>,
+    root_id: WidgetId,
     interaction: Interaction,
-    is_open: bool,
     num_items: u32,
     highlighted_index: Option<u32>,
     keyboard_active: bool,
@@ -34,8 +35,13 @@ impl<'a> Dropdown<'a> {
         root.child_direction(LayoutDirection::Vertical);
         root.child_spacing(0.0);
 
-        let overlay_id = root.id.then((id, "overlay"));
-        let was_open = root.context.focused_widget == Some(overlay_id);
+        let root_id = root.id;
+        // Read open state from root's own custom_data — this persists across frames
+        // because root is always rendered, and we write back the correct value below.
+        let was_open = root.prev_state()
+            .and_then(|s| s.custom_data::<u32>())
+            .map(|v| v != 0)
+            .unwrap_or(false);
 
         let mut button = root.named_child((id, "trigger"));
         let pointer_over_trigger = button
@@ -76,58 +82,38 @@ impl<'a> Dropdown<'a> {
                     bottom_right: 0.0,
                 },
             );
-        } else if was_open {
-            // Clear focus when closing the dropdown to avoid keeping focus on a
-            // now-nonexistent widget.
-            root.context.focused_widget = None;
         }
 
         let mut dismiss_activated = false;
         let mut overlay_hovered = false;
 
         let mut overlay = if is_open {
-            let dismiss_layer = root.layer.saturating_add(2);
-            let dismiss_id = root.id.then((id, "dismiss"));
-            let dismiss_index = root.context.ui_tree.add(
-                Some(root.index),
-                Atom {
-                    width: Size::Fixed(root.input.window_size.width),
-                    height: Size::Fixed(root.input.window_size.height),
-                    position: Position::Absolute { x: 0.0, y: 0.0 },
-                    z_layer: dismiss_layer,
-                    is_modal: true,
-                    ..Default::default()
-                },
-                (LayoutContent::None, Some(dismiss_id)),
-            );
-
-            root.num_child_widgets += 1;
-
-            let dismiss_builder = UiBuilder {
-                theme: root.theme,
-                input: root.input,
-                context: root.context,
-                clipboard: root.clipboard,
-                format_buffer: root.format_buffer,
-                text_context: root.text_context,
-                text_layouts: root.text_layouts,
-                id: dismiss_id,
-                index: dismiss_index,
-                style_id: root.style_id,
-                state: root.state,
-                num_child_widgets: 0,
-                is_modal: true,
-                layer: dismiss_layer,
-                text_overflow: root.text_overflow,
+            // Dismiss layer: full-screen modal that catches clicks outside the overlay.
+            // Scoped so the borrow of root ends before the overlay builder is created.
+            dismiss_activated = {
+                let window_w = root.input.window_size.width;
+                let window_h = root.input.window_size.height;
+                let mut dismiss = root.modal_offset_child(
+                    (id, "dismiss"),
+                    Position::Absolute { x: 0.0, y: 0.0 },
+                    2,
+                );
+                dismiss.size(window_w, window_h);
+                let (i, _) = Interaction::compute(
+                    &dismiss,
+                    ClickBehavior::OnPress,
+                    StateFlags::HOVERED | StateFlags::PRESSED,
+                );
+                i.is_activated
             };
 
-            let (dismiss_interaction, _) = Interaction::compute(
-                &dismiss_builder,
-                ClickBehavior::OnPress,
-                StateFlags::HOVERED | StateFlags::PRESSED,
-            );
-            dismiss_activated = dismiss_interaction.is_activated;
+            // Mark open in root's custom_data before root is moved. finish() overwrites
+            // this with 0 when close_requested, so next frame sees was_open = false.
+            root.context.state_mut(root_id).set_custom_data(1u32);
 
+            // Overlay panel. Must be constructed via struct literal so its fields are
+            // moved out of root, giving the builder the outer 'a lifetime rather than
+            // a lifetime tied to a reborrow of the local `root`.
             let child_layer = root.layer.saturating_add(2);
             let child_id = root.id.then((id, "overlay"));
             let child_index = root.context.ui_tree.add(
@@ -148,7 +134,6 @@ impl<'a> Dropdown<'a> {
                 },
                 (LayoutContent::None, Some(child_id)),
             );
-
             root.num_child_widgets += 1;
 
             Some(UiBuilder {
@@ -169,6 +154,7 @@ impl<'a> Dropdown<'a> {
                 text_overflow: root.text_overflow,
             })
         } else {
+            root.context.state_mut(root_id).set_custom_data(0u32);
             None
         };
 
@@ -190,7 +176,8 @@ impl<'a> Dropdown<'a> {
             overlay.child_direction(LayoutDirection::Vertical);
         }
 
-        let (highlighted_index, keyboard_active) = overlay.as_ref()
+        let (highlighted_index, keyboard_active) = overlay
+            .as_ref()
             .and_then(|o| o.prev_state())
             .and_then(|s| s.custom_data::<[u32; 2]>())
             .map(|[idx, flag]| (Some(idx), flag != 0))
@@ -198,16 +185,13 @@ impl<'a> Dropdown<'a> {
 
         Self {
             builder: overlay,
+            root_id,
             interaction,
-            is_open,
             num_items: 0,
             highlighted_index,
             keyboard_active,
             selected_index: None,
-            close_requested: dismiss_activated
-                && !overlay_hovered
-                && !interaction.is_hovered
-                && !pointer_over_trigger,
+            close_requested: dismiss_activated && !overlay_hovered && !pointer_over_trigger,
         }
     }
 
@@ -251,27 +235,24 @@ impl<'a> Dropdown<'a> {
     }
 
     pub fn finish(mut self) -> (Option<usize>, Interaction) {
-        if !self.is_open {
+        if self.builder.is_none() {
             return (self.selected_index.map(|i| i as usize), self.interaction);
         }
 
         self.handle_keyboard_input();
 
         if let (Some(builder), Some(idx)) = (self.builder.as_mut(), self.highlighted_index) {
-            builder.context.state_mut(builder.id).set_custom_data([idx, self.keyboard_active as u32]);
+            builder
+                .context
+                .state_mut(builder.id)
+                .set_custom_data([idx, self.keyboard_active as u32]);
         }
 
         if self.close_requested {
             if let Some(builder) = self.builder.as_mut() {
-                builder.release_focus();
+                builder.context.state_mut(self.root_id).set_custom_data(0u32);
             }
-
-            self.is_open = false;
             return (self.selected_index.map(|i| i as usize), self.interaction);
-        }
-
-        if let Some(builder) = self.builder.as_mut() {
-            builder.request_focus();
         }
 
         (self.selected_index.map(|i| i as usize), self.interaction)
@@ -301,11 +282,9 @@ impl<'a> Dropdown<'a> {
             self.close_requested = true;
         }
 
-        if item_state.contains(StateFlags::HOVERED) {
-            if !self.keyboard_active || mouse_moved {
-                self.highlighted_index = Some(item_index);
-                self.keyboard_active = false;
-            }
+        if item_state.contains(StateFlags::HOVERED) && (!self.keyboard_active || mouse_moved) {
+            self.highlighted_index = Some(item_index);
+            self.keyboard_active = false;
         }
 
         let mut effective_state = item_state;
@@ -316,7 +295,11 @@ impl<'a> Dropdown<'a> {
             effective_state |= StateFlags::HOVERED;
         }
 
-        let button_padding = item.theme().get(StyleClass::Button).padding.get(effective_state);
+        let button_padding = item
+            .theme()
+            .get(StyleClass::Button)
+            .padding
+            .get(effective_state);
 
         item.apply_style(StyleClass::DropdownItem, effective_state);
         item.set_clip_children(true);
