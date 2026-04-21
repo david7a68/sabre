@@ -413,8 +413,7 @@ impl UiBuilder<'_> {
         name: impl std::hash::Hash,
         pos: OverlayPosition,
     ) -> UiBuilder<'_> {
-        let child_layer = self.layer.saturating_add(1);
-        self.overlay_child_inner(name, Position::OutOfFlow(pos), child_layer, false)
+        self.overlay_offset_child(name, pos, 1)
     }
 
     /// Creates an out-of-flow child that additionally blocks pointer and keyboard input
@@ -428,8 +427,7 @@ impl UiBuilder<'_> {
         name: impl std::hash::Hash,
         pos: OverlayPosition,
     ) -> UiBuilder<'_> {
-        let child_layer = self.layer.saturating_add(1);
-        self.overlay_child_inner(name, Position::OutOfFlow(pos), child_layer, true)
+        self.modal_offset_child(name, Position::OutOfFlow(pos), 1)
     }
 
     /// Creates an out-of-flow child at an explicit screen-space position.
@@ -441,6 +439,31 @@ impl UiBuilder<'_> {
     pub fn absolute_child(&mut self, name: impl std::hash::Hash, x: f32, y: f32) -> UiBuilder<'_> {
         let child_layer = self.layer.saturating_add(1);
         self.overlay_child_inner(name, Position::Absolute { x, y }, child_layer, false)
+    }
+
+    /// Like [`overlay_child`](Self::overlay_child) but with an explicit layer offset.
+    /// The child's z_layer is `self.layer.saturating_add(layer_offset)`.
+    pub fn overlay_offset_child(
+        &mut self,
+        name: impl std::hash::Hash,
+        pos: OverlayPosition,
+        layer_offset: u8,
+    ) -> UiBuilder<'_> {
+        let child_layer = self.layer.saturating_add(layer_offset);
+        self.overlay_child_inner(name, Position::OutOfFlow(pos), child_layer, false)
+    }
+
+    /// Like [`modal_child`](Self::modal_child) but with an explicit layer offset and
+    /// accepting any `Position` (including `Position::Absolute`).
+    /// The child's z_layer is `self.layer.saturating_add(layer_offset)`.
+    pub fn modal_offset_child(
+        &mut self,
+        name: impl std::hash::Hash,
+        pos: Position,
+        layer_offset: u8,
+    ) -> UiBuilder<'_> {
+        let child_layer = self.layer.saturating_add(layer_offset);
+        self.overlay_child_inner(name, pos, child_layer, true)
     }
 
     fn overlay_child_inner(
