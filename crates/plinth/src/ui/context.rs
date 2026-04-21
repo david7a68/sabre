@@ -1,5 +1,6 @@
 use std::time::Duration;
 
+use glamour::Contains;
 use glamour::Point2;
 use glamour::Rect;
 use glamour::Size2;
@@ -38,6 +39,15 @@ pub(crate) struct UiContext {
 
     pub(super) frame_counter: u64,
     pub(super) focused_widget: Option<WidgetId>,
+
+    /// The highest z_layer that contains any widget whose previous-frame placement
+    /// contains the current pointer position. Computed at the start of each frame.
+    /// Used by `Interaction::compute` to suppress hover on lower layers.
+    pub(super) active_pointer_layer: u8,
+
+    /// If any modal overlay was visible last frame, this is its z_layer.
+    /// All widgets on layers below this value are input-blocked regardless of pointer position.
+    pub(super) input_block_layer: Option<u8>,
 }
 
 impl UiContext {
@@ -53,6 +63,24 @@ impl UiContext {
         time_delta: Duration,
     ) -> UiBuilder<'a> {
         self.ui_tree.clear();
+
+        // Compute input routing state from previous frame's widget_states.
+        self.active_pointer_layer = self
+            .widget_states
+            .values()
+            .filter(|wc| wc.state.placement.contains(&input.pointer))
+            .map(|wc| wc.state.layer)
+            .max()
+            .unwrap_or(0);
+
+        self.input_block_layer = self
+            .widget_states
+            .values()
+            .filter(|wc| {
+                wc.state.is_modal && wc.frame_last_used == self.frame_counter.saturating_sub(1)
+            })
+            .map(|wc| wc.state.layer)
+            .max();
 
         // Set up the root node.
         let id = WidgetId::new("root");
@@ -92,6 +120,9 @@ impl UiContext {
             style_id: theme.get_id(StyleClass::Surface),
             state: Default::default(),
             num_child_widgets: 0,
+
+            layer: 0,
+            is_modal: false,
         }
     }
 
@@ -104,6 +135,8 @@ impl UiContext {
                     placement: Default::default(),
                     was_active: false,
                     text_layout: None,
+                    layer: 0,
+                    is_modal: false,
                 },
                 frame_last_used: self.frame_counter,
             });
@@ -166,7 +199,7 @@ impl UiContext {
             text_layouts.break_lines(text_context, *layout_id, max_width, *alignment)
         });
 
-        for (node, (content, widget_id)) in self.ui_tree.iter_nodes() {
+        for (node, (content, widget_id)) in self.ui_tree.iter_nodes_by_layer() {
             let layout = &node.result;
             if layout.width == 0.0 || layout.height == 0.0 {
                 continue;
@@ -255,6 +288,8 @@ impl UiContext {
                         height: node.result.height,
                     },
                 };
+                container.state.layer = node.atom.z_layer;
+                container.state.is_modal = node.atom.is_modal;
             }
         }
 

@@ -15,7 +15,9 @@ use super::Alignment;
 use super::Atom;
 use super::Flex;
 use super::LayoutDirection;
+use super::OverlayPosition;
 use super::Padding;
+use super::Position;
 use super::Size;
 use super::UiElementId;
 use super::WidgetId;
@@ -41,6 +43,11 @@ pub struct UiBuilder<'a> {
     pub format_buffer: &'a mut String,
     pub text_context: &'a mut TextLayoutContext,
     pub text_layouts: &'a mut TextLayoutStorage,
+
+    /// The z_layer of the node this builder represents. Propagated to children.
+    /// Overlay children receive `parent.layer + 1`.
+    pub(super) layer: u8,
+    pub(super) is_modal: bool,
 
     pub(super) style_id: StyleId,
     pub(super) state: StateFlags,
@@ -75,6 +82,10 @@ impl UiBuilder<'_> {
         self.state = state;
 
         let atom = self.context.ui_tree.atom_mut(self.index);
+        // Preserve overlay fields set by the overlay builder API before applying the style.
+        let position = atom.position;
+        let z_layer = atom.z_layer;
+        let is_modal = atom.is_modal;
         *atom = Atom {
             width: style.width.get(state),
             height: style.height.get(state),
@@ -84,6 +95,9 @@ impl UiBuilder<'_> {
             direction: style.child_direction.get(state),
             inter_child_padding: style.child_spacing.get(state),
             clip_overflow: style.clip_children.get(state),
+            position,
+            z_layer,
+            is_modal,
         };
 
         self
@@ -219,6 +233,8 @@ impl UiBuilder<'_> {
             Atom {
                 width: width.into(),
                 height: height.into(),
+                z_layer: self.layer,
+                is_modal: self.is_modal,
                 ..Default::default()
             },
             (
@@ -276,6 +292,8 @@ impl UiBuilder<'_> {
                     max: size.max,
                 },
                 height: height.into(),
+                z_layer: self.layer,
+                is_modal: self.is_modal,
                 ..Default::default()
             },
             (
@@ -302,7 +320,11 @@ impl UiBuilder<'_> {
 
         let child_index = self.context.ui_tree.add(
             Some(self.index),
-            Atom::default(),
+            Atom {
+                z_layer: self.layer,
+                is_modal: self.is_modal,
+                ..Default::default()
+            },
             (LayoutContent::None, Some(child_id)),
         );
 
@@ -316,6 +338,9 @@ impl UiBuilder<'_> {
             format_buffer: self.format_buffer,
             text_context: self.text_context,
             text_layouts: self.text_layouts,
+
+            is_modal: self.is_modal,
+            layer: self.layer,
 
             id: child_id,
             index: child_index,
@@ -353,6 +378,90 @@ impl UiBuilder<'_> {
     pub fn release_focus(&mut self) {
         if self.context.focused_widget == Some(self.id) {
             self.context.focused_widget = None;
+        }
+    }
+
+    /// Creates an out-of-flow child positioned relative to this node's layout result
+    /// using `OverlayPosition` anchor semantics.
+    ///
+    /// Use for non-modal overlays logically owned by the calling widget:
+    /// dropdowns (anchor below-start), tooltips (anchor above-start), popovers.
+    /// The child does not participate in this node's sizing or sibling alignment.
+    /// It escapes ancestor clip rects and renders above all base-layer content.
+    pub fn overlay_child(
+        &mut self,
+        name: impl std::hash::Hash,
+        pos: OverlayPosition,
+    ) -> UiBuilder<'_> {
+        let child_layer = self.layer.saturating_add(1);
+        self.overlay_child_inner(name, Position::OutOfFlow(pos), child_layer, false)
+    }
+
+    /// Creates an out-of-flow child that additionally blocks pointer and keyboard input
+    /// from reaching any widget on a lower z_layer, regardless of pointer position.
+    ///
+    /// Use when the overlay must be dismissed before the user can interact with anything
+    /// else: confirmation dialogs, error modals, blocking progress indicators.
+    /// Same positioning semantics as [`overlay_child`](Self::overlay_child).
+    pub fn modal_child(
+        &mut self,
+        name: impl std::hash::Hash,
+        pos: OverlayPosition,
+    ) -> UiBuilder<'_> {
+        let child_layer = self.layer.saturating_add(1);
+        self.overlay_child_inner(name, Position::OutOfFlow(pos), child_layer, true)
+    }
+
+    /// Creates an out-of-flow child at an explicit screen-space position.
+    ///
+    /// Use for overlays that track their own position across frames, such as
+    /// draggable or resizable panels. The caller reads the persisted `(x, y)` from
+    /// the widget's `WidgetState` (updated each frame by drag interactions) and
+    /// passes it here. Provides no anchor computation — the caller owns positioning.
+    pub fn absolute_child(&mut self, name: impl std::hash::Hash, x: f32, y: f32) -> UiBuilder<'_> {
+        let child_layer = self.layer.saturating_add(1);
+        self.overlay_child_inner(name, Position::Absolute { x, y }, child_layer, false)
+    }
+
+    fn overlay_child_inner(
+        &mut self,
+        name: impl std::hash::Hash,
+        position: Position,
+        child_layer: u8,
+        is_modal: bool,
+    ) -> UiBuilder<'_> {
+        let child_id = self.id.then(name);
+
+        let child_index = self.context.ui_tree.add(
+            Some(self.index),
+            Atom {
+                position,
+                z_layer: child_layer,
+                is_modal,
+                ..Default::default()
+            },
+            (super::context::LayoutContent::None, Some(child_id)),
+        );
+
+        self.num_child_widgets += 1;
+        UiBuilder {
+            theme: self.theme,
+            input: self.input,
+            context: self.context,
+
+            clipboard: self.clipboard,
+            format_buffer: self.format_buffer,
+            text_context: self.text_context,
+            text_layouts: self.text_layouts,
+
+            id: child_id,
+            index: child_index,
+            style_id: self.style_id,
+            state: self.state,
+            num_child_widgets: 0,
+
+            is_modal,
+            layer: child_layer,
         }
     }
 }

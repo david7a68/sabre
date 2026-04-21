@@ -116,9 +116,18 @@ impl Interaction {
         interest: StateFlags,
     ) -> (Self, StateFlags) {
         let was_focused = builder.is_focused();
+
+        // Layer-aware hit testing: a widget can only be hovered if no higher layer
+        // has a widget under the pointer, and no modal overlay blocks this layer.
+        let layer_blocked = builder.context.active_pointer_layer > builder.layer
+            || builder
+                .context
+                .input_block_layer
+                .is_some_and(|bl| builder.layer < bl);
+
         let (was_active, is_hovered) = builder
             .prev_state()
-            .map(|s| (s.was_active, s.placement.contains(&builder.input.pointer)))
+            .map(|s| (s.was_active, !layer_blocked && s.placement.contains(&builder.input.pointer)))
             .unwrap_or_default();
 
         let is_left_down = builder.input.mouse_state.is_left_down();
@@ -159,6 +168,12 @@ pub struct WidgetState {
     pub was_active: bool,
 
     pub text_layout: Option<TextLayoutId>,
+
+    /// The z_layer of the node this widget occupied last frame. Used to determine
+    /// hit-test priority when multiple layers are present.
+    pub layer: u8,
+    /// Whether this widget's overlay was modal last frame (blocks input to lower layers).
+    pub is_modal: bool,
 }
 
 mod macros {
