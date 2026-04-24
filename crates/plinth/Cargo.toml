@@ -12,7 +12,6 @@ profile = ["dep:tracing-tracy"]
 [dependencies]
 arboard = { workspace = true }
 bitflags = { workspace = true }
-bitfields = { workspace = true }
 bytemuck = { workspace = true }
 color = { workspace = true }
 glamour = { workspace = true }

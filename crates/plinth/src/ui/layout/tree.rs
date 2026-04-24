@@ -156,7 +156,11 @@ impl<T> LayoutTree<T> {
         self.children.clear();
         self.content.clear();
         self.out_of_flow_nodes.clear();
-        self.layer_buckets.clear();
+        // Clear each bucket in place so spilled inner SmallVec allocations
+        // are reused next frame; truncating the outer vec would drop them.
+        for bucket in &mut self.layer_buckets {
+            bucket.clear();
+        }
     }
 
     pub fn compute_layout(&mut self, measure_text: impl FnMut(&mut T, f32) -> Option<f32>) {

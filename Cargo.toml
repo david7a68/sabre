@@ -18,7 +18,6 @@ plinth = { path = "crates/plinth" }
 # External dependencies
 arboard = { version = "3", default-features = false }
 bitflags = { version = "2", features = ["bytemuck"] }
-bitfields = "1"
 bytemuck = "1"
 color = "0.3"
 glamour = "0.18"

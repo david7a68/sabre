@@ -36,11 +36,28 @@ impl AppLifecycleHandler for DropdownDemo {
     }
 }
 
-#[derive(Default)]
 struct AppWindow {
     selected_color: Option<usize>,
     selected_size: Option<usize>,
     selected_style: Option<usize>,
+    // Cached trigger labels — updated only when the selection changes to avoid
+    // allocating a new String every frame.
+    color_label: String,
+    size_label: String,
+    style_label: String,
+}
+
+impl Default for AppWindow {
+    fn default() -> Self {
+        Self {
+            selected_color: None,
+            selected_size: None,
+            selected_style: None,
+            color_label: "Selected: Click to select".into(),
+            size_label: "Selected: Click to select".into(),
+            style_label: "Selected: Click to select".into(),
+        }
+    }
 }
 
 impl AppWindow {
@@ -63,57 +80,32 @@ impl AppWindow {
 
         panel.label("Select a color:");
         let items = ["Red", "Green", "Blue", "Yellow", "Purple"];
-
-        self.selected_color = panel.dropdown(
-            "color_dropdown",
-            // how to avoid this new string on every frame?
-            format!(
-                "Selected: {}",
-                self.selected_color.map(|i| items[i]).unwrap_or("None")
-            )
-            .as_str(),
-            self.selected_color,
-            items,
-        );
+        let prev = self.selected_color;
+        self.selected_color = panel.dropdown("color_dropdown", &self.color_label, self.selected_color, items);
+        if self.selected_color != prev {
+            self.color_label = format!("Selected: {}", self.selected_color.map(|i| items[i]).unwrap_or("Click to select"));
+        }
 
         panel.label("Select a size:");
-
-        let sizes = [
-            "Small (8px)",
-            "Medium (12px)",
-            "Large (16px)",
-            "Extra Large (20px)",
-        ];
-        self.selected_size = panel.dropdown(
-            "size_dropdown",
-            // how to avoid this new string on every frame?
-            format!(
-                "Selected: {}",
-                self.selected_size
-                    .map(|i| sizes[i])
-                    .unwrap_or("Click to select")
-            )
-            .as_str(),
-            self.selected_size,
-            sizes,
-        );
+        let sizes = ["Small (8px)", "Medium (12px)", "Large (16px)", "Extra Large (20px)"];
+        let prev = self.selected_size;
+        self.selected_size = panel.dropdown("size_dropdown", &self.size_label, self.selected_size, sizes);
+        if self.selected_size != prev {
+            self.size_label = format!("Selected: {}", self.selected_size.map(|i| sizes[i]).unwrap_or("Click to select"));
+        }
 
         panel.label("Select a style (custom items):");
-
         let style_items = ["Bold", "Italic", "Underline"];
+        let prev = self.selected_style;
         self.selected_style = panel.dropdown(
             "style_dropdown",
-            // how to avoid this new string on every frame?
-            format!(
-                "Selected: {}",
-                self.selected_style
-                    .map(|i| style_items[i])
-                    .unwrap_or("Click to select")
-            )
-            .as_str(),
+            &self.style_label,
             self.selected_style,
-            style_items.iter().map(|size| size as &dyn DropdownItem),
+            style_items.iter().map(|s| s as &dyn DropdownItem),
         );
+        if self.selected_style != prev {
+            self.style_label = format!("Selected: {}", self.selected_style.map(|i| style_items[i]).unwrap_or("Click to select"));
+        }
 
         panel.label("");
         panel.label("Keyboard navigation:");

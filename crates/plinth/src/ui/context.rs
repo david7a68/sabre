@@ -20,8 +20,10 @@ use crate::ui::theme::Theme;
 use super::Atom;
 use super::IdMap;
 use super::LayoutTree;
+use super::Position;
 use super::StyleClass;
 use super::UiBuilder;
+use super::UiElementId;
 use super::WidgetId;
 use super::style::BorderWidths;
 use super::style::CornerRadii;
@@ -47,7 +49,11 @@ pub(crate) struct UiContext {
     pub(super) active_pointer_layer: u8,
 
     /// If any modal overlay was visible last frame, this is its z_layer.
-    /// All widgets on layers below this value are input-blocked regardless of pointer position.
+    /// Widgets on layers *strictly below* (not equal to) this value are input-blocked
+    /// regardless of pointer position. Strict-less-than is intentional: the modal
+    /// overlay's own interactive children sit at the same z_layer and must still
+    /// receive input. Code that consumes this field must use `layer < input_block_layer`,
+    /// never `layer <= input_block_layer`.
     pub(super) input_block_layer: Option<u8>,
 }
 
@@ -65,21 +71,20 @@ impl UiContext {
     ) -> UiBuilder<'a> {
         self.ui_tree.clear();
 
-        // Compute input routing state from previous frame's widget_states.
-        self.active_pointer_layer = self
-            .widget_states
-            .values()
-            .filter(|wc| wc.state.placement.contains(&input.pointer))
-            .map(|wc| wc.state.layer)
-            .max()
-            .unwrap_or(0);
-
-        self.input_block_layer = self
-            .widget_states
-            .values()
-            .filter(|wc| wc.state.is_modal)
-            .map(|wc| wc.state.layer)
-            .max();
+        // Single pass over previous-frame widget states to compute both layer gates.
+        let mut active_pointer_layer = 0u8;
+        let mut input_block_layer: Option<u8> = None;
+        for wc in self.widget_states.values() {
+            let s = &wc.state;
+            if s.placement.contains(&input.pointer) && s.layer > active_pointer_layer {
+                active_pointer_layer = s.layer;
+            }
+            if s.is_modal && input_block_layer.is_none_or(|cur| s.layer > cur) {
+                input_block_layer = Some(s.layer);
+            }
+        }
+        self.active_pointer_layer = active_pointer_layer;
+        self.input_block_layer = input_block_layer;
 
         // Set up the root node.
         let id = WidgetId::new("root");
@@ -174,6 +179,32 @@ impl UiContext {
         state.text_layout = Some(TextLayoutId::Dynamic(layout_id));
 
         (TextLayoutId::Dynamic(layout_id), layout)
+    }
+
+    /// Insert an out-of-flow overlay node into the layout tree and return its index.
+    ///
+    /// Extracted so callers that need to move ownership of a parent `UiBuilder` (e.g.
+    /// the dropdown's overlay panel) can call this on `&mut context` directly, avoiding
+    /// the need to duplicate the `Atom` setup that `overlay_child_inner` would otherwise
+    /// provide via `&mut self`.
+    pub(super) fn add_overlay_node(
+        &mut self,
+        parent: UiElementId,
+        id: WidgetId,
+        position: Position,
+        child_layer: u8,
+        is_modal: bool,
+    ) -> UiElementId {
+        self.ui_tree.add(
+            Some(parent),
+            Atom {
+                position,
+                z_layer: child_layer,
+                is_modal,
+                ..Default::default()
+            },
+            (LayoutContent::None, Some(id)),
+        )
     }
 
     pub fn finish(

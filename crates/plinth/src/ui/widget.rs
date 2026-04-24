@@ -124,6 +124,8 @@ impl Interaction {
 
         // Layer-aware hit testing: a widget can only be hovered if no higher layer
         // has a widget under the pointer, and no modal overlay blocks this layer.
+        // input_block_layer uses strict-less-than so that the modal overlay's own
+        // children (which live at the same z_layer) are NOT blocked.
         let layer_blocked = builder.context.active_pointer_layer > builder.layer
             || builder
                 .context
@@ -189,12 +191,12 @@ pub struct WidgetState {
     pub layer: u8,
     /// Whether this widget's overlay was modal last frame (blocks input to lower layers).
     pub is_modal: bool,
-    /// Whether this widget has custom data that should be preserved across frames.
-    has_custom_data: bool,
+
+    custom_data_size: u8,
 }
 
 impl WidgetState {
-    /// Copy a [`Pod`] value previously stored with [`write_custom`].
+    /// Copy a [Pod] value previously stored with [set_custom_data].
     ///
     /// Returns `None` if no custom data has been written or `size_of::<T>() > 8`.
     pub fn custom_data<T: Pod>(&self) -> Option<T> {
@@ -207,26 +209,27 @@ impl WidgetState {
         let n = bytes.len();
         assert!(n <= 8, "custom_data holds at most 8 bytes, but T is {n}");
         self.custom_data[..n].copy_from_slice(bytes);
-        self.has_custom_data = true;
+        self.custom_data_size = n as u8;
     }
 
-    /// Return a reference to a [`Pod`] value previously stored with [`write_custom`].
+    /// Return a reference to a [Pod] value previously stored with
+    /// [set_custom_data].
     ///
-    /// Returns `None` if no custom data has been written or `size_of::<T>() > 8`.
-    /// The aligned cast is safe because `custom_data` is guaranteed 8-byte aligned
-    /// by `#[repr(C, align(8))]` and its fixed offset of 16 within the struct.
+    /// Returns `None` if no custom data has been written or if `size_of::<T>()`
+    /// does not exactly match the size of the stored value.
     pub fn custom_data_ref<T: Pod>(&self) -> Option<&T> {
-        if !self.has_custom_data || size_of::<T>() > 8 {
+        if self.custom_data_size == 0 || size_of::<T>() != self.custom_data_size as usize {
             return None;
         }
         Some(bytemuck::from_bytes(&self.custom_data[..size_of::<T>()]))
     }
 
-    /// Return a mutable reference to a [`Pod`] value previously stored with [`write_custom`].
+    /// Return a mutable reference to a [Pod] value previously stored with [set_custom_data].
     ///
-    /// Returns `None` if no custom data has been written or `size_of::<T>() > 8`.
+    /// Returns `None` if no custom data has been written or if `size_of::<T>()` does
+    /// not exactly match the size of the stored value.
     pub fn custom_data_mut<T: Pod>(&mut self) -> Option<&mut T> {
-        if !self.has_custom_data || size_of::<T>() > 8 {
+        if self.custom_data_size == 0 || size_of::<T>() != self.custom_data_size as usize {
             return None;
         }
         Some(bytemuck::from_bytes_mut(
@@ -289,6 +292,18 @@ mod tests {
         let mut state = WidgetState::default();
         state.set_custom_data(0xDEAD_BEEFu32);
         assert_eq!(state.custom_data::<u32>(), Some(0xDEAD_BEEFu32));
+    }
+
+    #[test]
+    fn custom_data_size_mismatch_returns_none() {
+        let mut state = WidgetState::default();
+        state.set_custom_data(42u32);
+        // Reads with mismatched sizes must return None.
+        assert_eq!(state.custom_data::<u64>(), None);
+        assert_eq!(state.custom_data::<[u32; 2]>(), None);
+        assert_eq!(state.custom_data::<u8>(), None);
+        // Same-size read still works.
+        assert_eq!(state.custom_data::<u32>(), Some(42u32));
     }
 
     #[test]

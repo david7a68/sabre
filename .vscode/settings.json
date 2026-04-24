@@ -1,6 +1,3 @@
 {
-    "rust-analyzer.imports.granularity.group": "item",
-    "chat.tools.terminal.autoApprove": {
-        "cargo fmt": true
-    }
+    "rust-analyzer.imports.granularity.group": "item"
 }

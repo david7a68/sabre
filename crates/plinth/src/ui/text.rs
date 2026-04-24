@@ -152,19 +152,7 @@ impl TextLayoutStorage {
                 let alignment_changed = text.prev_alignment != Some(alignment);
                 let overflow_changed = text.prev_overflow != overflow;
 
-                if overflow_changed {
-                    let raw_text = text.raw_text.clone();
-                    let builder =
-                        context
-                            .layouts
-                            .ranged_builder(&mut context.fonts, &raw_text, 1.0, false);
-
-                    text.layout = parley::Layout::new();
-                    builder.build_into(&mut text.layout, &raw_text);
-                    text.needs_line_break = true;
-                }
-
-                if text.needs_line_break || width_changed {
+                if text.needs_line_break || width_changed || overflow_changed {
                     match overflow {
                         TextOverflow::Clip => {
                             // Keep text on a single line while still producing drawable line data.
