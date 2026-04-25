@@ -273,8 +273,7 @@ impl UiBuilder<'_> {
 
         let needs_rebuild = text_layout.style_id != self.style_id
             || text_layout.state != self.state
-            || text_layout.text_hash != text_hash
-            || text_layout.prev_overflow != self.text_overflow;
+            || text_layout.text_hash != text_hash;
 
         if needs_rebuild {
             let mut builder = self.text_context.layouts.ranged_builder(

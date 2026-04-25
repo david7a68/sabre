@@ -305,7 +305,7 @@ impl<'a> Dropdown<'a> {
         let (item_interaction, item_state) = Interaction::compute(
             &item,
             ClickBehavior::OnPress,
-            StateFlags::HOVERED | StateFlags::PRESSED | StateFlags::SELECTED,
+            StateFlags::HOVERED | StateFlags::PRESSED,
         );
 
         if item_interaction.is_activated {
