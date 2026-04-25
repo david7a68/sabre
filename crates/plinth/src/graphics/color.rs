@@ -1,7 +1,7 @@
 use bytemuck::Pod;
 use bytemuck::Zeroable;
 
-// All colors are in linear sRGB space.
+// All colors are stored in linear sRGB space.
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Pod, Zeroable)]
 pub struct Color {
@@ -12,63 +12,24 @@ pub struct Color {
 }
 
 impl Color {
-    pub const TRANSPARENT: Self = Self {
-        r: 0.0,
-        g: 0.0,
-        b: 0.0,
-        a: 0.0,
-    };
+    pub const TRANSPARENT: Self = Self::linear(0.0, 0.0, 0.0, 0.0);
+    pub const BLACK: Self = Self::linear(0.0, 0.0, 0.0, 1.0);
+    pub const LIGHT_GRAY: Self = Self::linear(0.8, 0.8, 0.8, 1.0);
+    pub const DARK_GRAY: Self = Self::linear(0.2, 0.2, 0.2, 1.0);
+    pub const WHITE: Self = Self::linear(1.0, 1.0, 1.0, 1.0);
+    pub const RED: Self = Self::linear(1.0, 0.0, 0.0, 1.0);
+    pub const BLUE: Self = Self::linear(0.0, 0.0, 1.0, 1.0);
+    pub const GREEN: Self = Self::linear(0.0, 1.0, 0.0, 1.0);
 
-    pub const BLACK: Self = Self {
-        r: 0.0,
-        g: 0.0,
-        b: 0.0,
-        a: 1.0,
-    };
+    /// Construct a color directly from linear sRGB components without any
+    /// gamma conversion. Use this when the inputs are already linear.
+    pub const fn linear(r: f32, g: f32, b: f32, a: f32) -> Self {
+        Self { r, g, b, a }
+    }
 
-    pub const LIGHT_GRAY: Self = Self {
-        r: 0.8,
-        g: 0.8,
-        b: 0.8,
-        a: 1.0,
-    };
-
-    pub const DARK_GRAY: Self = Self {
-        r: 0.2,
-        g: 0.2,
-        b: 0.2,
-        a: 1.0,
-    };
-
-    pub const WHITE: Self = Self {
-        r: 1.0,
-        g: 1.0,
-        b: 1.0,
-        a: 1.0,
-    };
-
-    pub const RED: Self = Self {
-        r: 1.0,
-        g: 0.0,
-        b: 0.0,
-        a: 1.0,
-    };
-
-    pub const BLUE: Self = Self {
-        r: 0.0,
-        g: 0.0,
-        b: 1.0,
-        a: 1.0,
-    };
-
-    pub const GREEN: Self = Self {
-        r: 0.0,
-        g: 1.0,
-        b: 0.0,
-        a: 1.0,
-    };
-
-    pub fn srgb(r: f32, g: f32, b: f32, a: f32) -> Self {
+    /// Construct a color from non-linear (gamma-encoded) sRGB components,
+    /// converting them into the linear sRGB representation used internally.
+    pub fn srgb_nonlinear(r: f32, g: f32, b: f32, a: f32) -> Self {
         let srgb =
             color::AlphaColor::<color::Srgb>::new([r, g, b, a]).convert::<color::LinearSrgb>();
 
@@ -78,6 +39,18 @@ impl Color {
             b: srgb.components[2],
             a: srgb.components[3],
         }
+    }
+
+    /// Return a copy of this color with the alpha channel replaced.
+    pub const fn with_alpha(mut self, a: f32) -> Self {
+        self.a = a;
+        self
+    }
+
+    /// Return a copy of this color with the alpha channel multiplied by `factor`.
+    pub const fn mul_alpha(mut self, factor: f32) -> Self {
+        self.a *= factor;
+        self
     }
 }
 

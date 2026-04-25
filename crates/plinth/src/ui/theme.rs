@@ -392,11 +392,11 @@ fn default_theme() -> Theme {
                 ),
                 (
                     StateFlags::HOVERED,
-                    StyleProperty::Background(Paint::solid(Color::srgb(0.92, 0.92, 0.92, 1.0))),
+                    StyleProperty::Background(Paint::solid(Color::srgb_nonlinear(0.92, 0.92, 0.92, 1.0))),
                 ),
                 (
                     StateFlags::PRESSED,
-                    StyleProperty::Background(Paint::solid(Color::srgb(0.86, 0.86, 0.86, 1.0))),
+                    StyleProperty::Background(Paint::solid(Color::srgb_nonlinear(0.86, 0.86, 0.86, 1.0))),
                 ),
                 (
                     StateFlags::empty(),
