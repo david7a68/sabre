@@ -1,17 +1,12 @@
 use std::path::Path;
 use std::path::PathBuf;
 
-use slotmap::SlotMap;
-
 use crate::graphics::GraphicsContext;
 use crate::graphics::Texture;
 use crate::graphics::TextureLoadError;
 use crate::ui::UiBuilder;
 
-use super::Input;
 use super::WindowConfig;
-use super::window::Viewport;
-use super::window::ViewportId;
 use super::winit::DeferredCommand;
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -76,7 +71,6 @@ impl FolderDialog {
 pub struct Context<'a> {
     pub(super) window: &'a dyn winit::window::Window,
     pub(super) graphics: &'a mut GraphicsContext,
-    pub(super) viewports: &'a mut SlotMap<ViewportId, Viewport>,
     pub(super) deferred_commands: &'a mut Vec<DeferredCommand>,
 }
 
@@ -86,13 +80,8 @@ impl Context<'_> {
         config: WindowConfig,
         handler: impl FnMut(Context, UiBuilder) + 'static,
     ) {
-        let id = self.viewports.insert(Viewport {
-            input: Input::default(),
-            config,
-        });
-
         self.deferred_commands.push(DeferredCommand::Create {
-            id,
+            config,
             handler: Box::new(handler),
         });
     }
