@@ -25,7 +25,7 @@ struct DropdownDemo {}
 
 impl AppLifecycleHandler for DropdownDemo {
     fn resume(&mut self, runtime: &mut AppContext) {
-        runtime.create_viewport(
+        runtime.create_window(
             WindowConfig {
                 title: "Dropdown Example".into(),
                 width: 600,

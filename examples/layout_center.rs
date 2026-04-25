@@ -34,7 +34,7 @@ struct App {}
 
 impl AppLifecycleHandler for App {
     fn resume(&mut self, runtime: &mut AppContext) {
-        runtime.create_viewport(
+        runtime.create_window(
             WindowConfig {
                 title: "Sabre App".into(),
                 width: 800,

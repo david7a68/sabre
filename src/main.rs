@@ -129,7 +129,7 @@ impl AppLifecycleHandler for SabreApp {
     fn resume(&mut self, runtime: &mut AppContext) {
         info!("Starting up Sabre application...");
 
-        runtime.create_viewport(
+        runtime.create_window(
             WindowConfig {
                 title: "Sabre App".into(),
                 width: 800,

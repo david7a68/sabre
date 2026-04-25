@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 use std::time::Duration;
 
-use slotmap::SlotMap;
 use smallvec::SmallVec;
 use winit::event_loop::ControlFlow;
 use winit::event_loop::EventLoop;
@@ -11,15 +10,12 @@ use crate::graphics::Color;
 use crate::graphics::GraphicsContext;
 use crate::graphics::TextLayoutContext;
 use crate::shell::Clipboard;
-use crate::shell::Input;
 use crate::shell::WindowConfig;
 use crate::ui::Theme;
 use crate::ui::UiBuilder;
 use crate::ui::text::TextLayoutStorage;
 
 use super::frame::Context;
-use super::window::Viewport;
-use super::window::ViewportId;
 use super::winit::DeferredCommand;
 use super::winit::WinitApp;
 use super::winit::WinitWindow;
@@ -43,7 +39,6 @@ impl AppContextBuilder {
 
         let runtime = WinitApp {
             runtime: AppContext {
-                viewports: SlotMap::with_key(),
                 clipboard: Clipboard::new(),
                 deferred_commands: Vec::new(),
                 theme,
@@ -69,7 +64,6 @@ pub trait AppLifecycleHandler: 'static {
 }
 
 pub struct AppContext {
-    pub(super) viewports: SlotMap<ViewportId, Viewport>,
     pub(super) clipboard: Clipboard,
     pub(super) deferred_commands: Vec<DeferredCommand>,
 
@@ -82,18 +76,13 @@ pub struct AppContext {
 }
 
 impl AppContext {
-    pub fn create_viewport(
+    pub fn create_window(
         &mut self,
         config: WindowConfig,
         handler: impl FnMut(Context, UiBuilder) + 'static,
     ) {
-        let id = self.viewports.insert(Viewport {
-            input: Input::default(),
-            config,
-        });
-
         self.deferred_commands.push(DeferredCommand::Create {
-            id,
+            config,
             handler: Box::new(handler),
         });
     }
@@ -113,12 +102,8 @@ impl AppContext {
         let mut outputs = SmallVec::with_capacity(windows.size_hint().0);
 
         for window in windows {
-            let Some(viewport) = self.viewports.get_mut(window.viewport) else {
-                continue;
-            };
-
             // borrow input for this frame
-            let mut input = std::mem::take(&mut viewport.input);
+            let mut input = std::mem::take(&mut window.input);
 
             let ui_builder = window.ui_context.begin_frame(
                 &mut self.clipboard,
@@ -133,19 +118,14 @@ impl AppContext {
             let context = Context {
                 window: window.window.as_ref(),
                 graphics,
-                viewports: &mut self.viewports,
                 deferred_commands: &mut self.deferred_commands,
             };
 
             (window.handler)(context, ui_builder);
 
-            // Restore input allocs for next frame; use branch to avoid unwrap.
-            // This should never fail.
-            if let Some(viewport) = self.viewports.get_mut(window.viewport) {
-                input.prev_pointer = input.pointer;
-                viewport.input = input;
-                viewport.input.keyboard_events.clear();
-            }
+            input.prev_pointer = input.pointer;
+            window.input = input;
+            window.input.keyboard_events.clear();
 
             window.canvas.reset(Color::BLACK);
             window.ui_context.finish(

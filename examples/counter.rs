@@ -24,7 +24,7 @@ struct Demo {}
 
 impl AppLifecycleHandler for Demo {
     fn resume(&mut self, runtime: &mut AppContext) {
-        runtime.create_viewport(
+        runtime.create_window(
             WindowConfig {
                 title: "Counter".into(),
                 width: 400,
