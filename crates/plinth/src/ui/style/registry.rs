@@ -197,7 +197,7 @@ mod tests {
 
     // Helper to create colors from 0-255 RGB values
     fn rgb(r: u8, g: u8, b: u8) -> Color {
-        Color::srgb(r as f32 / 255.0, g as f32 / 255.0, b as f32 / 255.0, 1.0)
+        Color::srgb_nonlinear(r as f32 / 255.0, g as f32 / 255.0, b as f32 / 255.0, 1.0)
     }
 
     // ==================== Registration Tests ====================

@@ -34,16 +34,16 @@ mod tests {
                 vec![
                     (
                         StateFlags::NORMAL,
-                        StyleProperty::Background(Paint::solid(Color::srgb(0.2, 0.2, 0.2, 1.0))),
+                        StyleProperty::Background(Paint::solid(Color::srgb_nonlinear(0.2, 0.2, 0.2, 1.0))),
                     ),
                     (StateFlags::NORMAL, StyleProperty::TextColor(Color::WHITE)),
                     (
                         StateFlags::HOVERED,
-                        StyleProperty::Background(Paint::solid(Color::srgb(0.3, 0.3, 0.3, 1.0))),
+                        StyleProperty::Background(Paint::solid(Color::srgb_nonlinear(0.3, 0.3, 0.3, 1.0))),
                     ),
                     (
                         StateFlags::PRESSED,
-                        StyleProperty::Background(Paint::solid(Color::srgb(0.1, 0.1, 0.1, 1.0))),
+                        StyleProperty::Background(Paint::solid(Color::srgb_nonlinear(0.1, 0.1, 0.1, 1.0))),
                     ),
                 ],
             )
@@ -56,11 +56,11 @@ mod tests {
                 vec![
                     (
                         StateFlags::NORMAL,
-                        StyleProperty::Background(Paint::solid(Color::srgb(0.0, 0.4, 0.8, 1.0))),
+                        StyleProperty::Background(Paint::solid(Color::srgb_nonlinear(0.0, 0.4, 0.8, 1.0))),
                     ),
                     (
                         StateFlags::HOVERED,
-                        StyleProperty::Background(Paint::solid(Color::srgb(0.0, 0.5, 1.0, 1.0))),
+                        StyleProperty::Background(Paint::solid(Color::srgb_nonlinear(0.0, 0.5, 1.0, 1.0))),
                     ),
                 ],
             )
@@ -74,13 +74,13 @@ mod tests {
         let primary_text: Color = registry.resolve::<TextColor>(button_primary, StateFlags::NORMAL);
 
         // Base button colors
-        assert_eq!(base_normal, Paint::solid(Color::srgb(0.2, 0.2, 0.2, 1.0)));
-        assert_eq!(base_hovered, Paint::solid(Color::srgb(0.3, 0.3, 0.3, 1.0)));
+        assert_eq!(base_normal, Paint::solid(Color::srgb_nonlinear(0.2, 0.2, 0.2, 1.0)));
+        assert_eq!(base_hovered, Paint::solid(Color::srgb_nonlinear(0.3, 0.3, 0.3, 1.0)));
 
         // Primary inherits text color, overrides background
         assert_eq!(
             primary_normal,
-            Paint::solid(Color::srgb(0.0, 0.4, 0.8, 1.0))
+            Paint::solid(Color::srgb_nonlinear(0.0, 0.4, 0.8, 1.0))
         );
         assert_eq!(primary_text, Color::WHITE); // Inherited from base
     }

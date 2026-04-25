@@ -65,7 +65,7 @@ fn main() {
     theme.set_base_style([
         (
             StateFlags::NORMAL,
-            StyleProperty::Background(Paint::solid(Color::srgb(0.1, 0.2, 0.3, 1.0))),
+            StyleProperty::Background(Paint::solid(Color::srgb_nonlinear(0.1, 0.2, 0.3, 1.0))),
         ),
         (StateFlags::NORMAL, StyleProperty::FontSize(32)),
     ]);
@@ -152,7 +152,7 @@ impl ViewportState {
     }
 
     fn update(&mut self, _context: Context, mut ui: UiBuilder) {
-        ui.color(Color::srgb(0.1, 0.2, 0.3, 1.0))
+        ui.color(Color::srgb_nonlinear(0.1, 0.2, 0.3, 1.0))
             .child_alignment(Alignment::Center, Alignment::Center);
 
         let mut menu = ui.child();
