@@ -1,6 +1,5 @@
 mod app_context;
 mod clipboard;
-mod double_click_tracker;
 mod frame;
 mod input;
 mod window;
