@@ -1,8 +1,6 @@
 #![allow(unused_crate_dependencies)]
 
-use plinth::shell::AppContext;
 use plinth::shell::AppContextBuilder;
-use plinth::shell::AppLifecycleHandler;
 use plinth::shell::Context;
 use plinth::shell::WindowConfig;
 use plinth::ui::Alignment;
@@ -14,22 +12,18 @@ use plinth::ui::UiBuilder;
 fn main() {
     tracing_subscriber::fmt().pretty().init();
 
-    AppContextBuilder::default().run(TextEditDemo {});
-}
-
-struct TextEditDemo {}
-
-impl AppLifecycleHandler for TextEditDemo {
-    fn resume(&mut self, runtime: &mut AppContext) {
-        runtime.create_viewport(
-            WindowConfig {
-                title: "TextEdit Example".into(),
-                width: 800,
-                height: 600,
-            },
-            AppWindow::default().into_handler(),
-        );
-    }
+    AppContextBuilder::default()
+        .on_resume(|runtime| {
+            runtime.create_viewport(
+                WindowConfig {
+                    title: "TextEdit Example".into(),
+                    width: 800,
+                    height: 600,
+                },
+                AppWindow::default().into_handler(),
+            );
+        })
+        .run();
 }
 
 #[derive(Default)]

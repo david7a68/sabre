@@ -8,7 +8,6 @@ mod winit;
 
 pub use app_context::AppContext;
 pub use app_context::AppContextBuilder;
-pub use app_context::AppLifecycleHandler;
 pub use clipboard::Clipboard;
 pub use frame::Context;
 pub use frame::FileDialog;

@@ -1,8 +1,6 @@
 #![allow(unused_crate_dependencies)]
 
-use plinth::shell::AppContext;
 use plinth::shell::AppContextBuilder;
-use plinth::shell::AppLifecycleHandler;
 use plinth::shell::Context;
 use plinth::shell::FileDialog;
 use plinth::shell::FolderDialog;
@@ -15,22 +13,18 @@ use plinth::ui::UiBuilder;
 
 fn main() {
     tracing_subscriber::fmt().pretty().init();
-    AppContextBuilder::default().run(Demo {});
-}
-
-struct Demo {}
-
-impl AppLifecycleHandler for Demo {
-    fn resume(&mut self, runtime: &mut AppContext) {
-        runtime.create_viewport(
-            WindowConfig {
-                title: "File Picker".into(),
-                width: 400,
-                height: 300,
-            },
-            AppWindow::default().into_handler(),
-        );
-    }
+    AppContextBuilder::default()
+        .on_resume(|runtime| {
+            runtime.create_viewport(
+                WindowConfig {
+                    title: "File Picker".into(),
+                    width: 400,
+                    height: 300,
+                },
+                AppWindow::default().into_handler(),
+            );
+        })
+        .run();
 }
 
 #[derive(Default)]

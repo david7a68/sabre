@@ -3,9 +3,7 @@
 
 #![allow(unused_crate_dependencies)]
 
-use plinth::shell::AppContext;
 use plinth::shell::AppContextBuilder;
-use plinth::shell::AppLifecycleHandler;
 use plinth::shell::Context;
 use plinth::shell::WindowConfig;
 use plinth::ui::Alignment;
@@ -18,22 +16,18 @@ use plinth::ui::widget::DropdownItem;
 fn main() {
     tracing_subscriber::fmt().pretty().init();
 
-    AppContextBuilder::default().run(DropdownDemo {});
-}
-
-struct DropdownDemo {}
-
-impl AppLifecycleHandler for DropdownDemo {
-    fn resume(&mut self, runtime: &mut AppContext) {
-        runtime.create_viewport(
-            WindowConfig {
-                title: "Dropdown Example".into(),
-                width: 600,
-                height: 500,
-            },
-            AppWindow::default().into_handler(),
-        );
-    }
+    AppContextBuilder::default()
+        .on_resume(|runtime| {
+            runtime.create_viewport(
+                WindowConfig {
+                    title: "Dropdown Example".into(),
+                    width: 600,
+                    height: 500,
+                },
+                AppWindow::default().into_handler(),
+            );
+        })
+        .run();
 }
 
 struct AppWindow {
