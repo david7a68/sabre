@@ -13,13 +13,13 @@ use winit::window::WindowId;
 use crate::graphics::Canvas;
 use crate::graphics::GraphicsContext;
 use crate::shell::KeyboardEvent;
-use crate::shell::double_click_tracker::DoubleClickTracker;
 use crate::ui::UiBuilder;
 use crate::ui::context::UiContext;
 
 use super::app_context::AppContext;
 use super::app_context::AppLifecycleHandler;
 use super::frame::Context;
+use super::input::DoubleClickTracker;
 use super::window::ViewportId;
 
 pub(super) struct WinitWindow {
