@@ -208,6 +208,7 @@ impl WidgetState {
         let bytes = bytemuck::bytes_of(&value);
         let n = bytes.len();
         assert!(n <= 8, "custom_data holds at most 8 bytes, but T is {n}");
+        self.custom_data.fill(0);
         self.custom_data[..n].copy_from_slice(bytes);
         self.custom_data_size = n as u8;
     }
@@ -235,6 +236,21 @@ impl WidgetState {
         Some(bytemuck::from_bytes_mut(
             &mut self.custom_data[..size_of::<T>()],
         ))
+    }
+
+    pub fn has_custom_data(&self) -> bool {
+        self.custom_data_size != 0
+    }
+
+    pub fn custom_data_bytes(&self) -> Option<[u8; 8]> {
+        if self.custom_data_size == 0 {
+            None
+        } else {
+            let data = &self.custom_data[..self.custom_data_size as usize];
+            let mut padded = [0u8; 8];
+            padded[..data.len()].copy_from_slice(data);
+            Some(padded)
+        }
     }
 }
 
@@ -320,5 +336,16 @@ mod tests {
         state.set_custom_data(42u64);
         *state.custom_data_mut::<u64>().unwrap() = 100;
         assert_eq!(state.custom_data::<u64>(), Some(100u64));
+    }
+
+    #[test]
+    fn custom_data_bytes_zero_padded_after_smaller_overwrite() {
+        let mut state = WidgetState::default();
+        state.set_custom_data(0x1122_3344_5566_7788u64);
+        state.set_custom_data(0xAABB_CCDDu32);
+
+        let mut expected = [0u8; 8];
+        expected[..4].copy_from_slice(&0xAABB_CCDDu32.to_ne_bytes());
+        assert_eq!(state.custom_data_bytes(), Some(expected));
     }
 }

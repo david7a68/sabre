@@ -1,6 +1,7 @@
 mod app_context;
 mod clipboard;
 mod frame;
+mod headless;
 mod input;
 mod window;
 mod winit;
@@ -12,6 +13,10 @@ pub use clipboard::Clipboard;
 pub use frame::Context;
 pub use frame::FileDialog;
 pub use frame::FolderDialog;
+pub use crate::ui::context::FrameLayoutNodeSnapshot;
+pub use crate::ui::context::FrameSnapshot;
+pub use crate::ui::context::FrameWidgetSnapshot;
+pub use headless::HeadlessRunner;
 pub use input::ElementState;
 pub use input::Input;
 pub use input::KeyboardEvent;

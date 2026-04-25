@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::time::Duration;
 
 use glamour::Contains;
@@ -32,6 +33,44 @@ use super::text::TextLayoutMut;
 use super::text::TextLayoutStorage;
 use super::text::TextOverflow;
 use super::widget::WidgetState;
+use super::Pixels;
+
+/// Per-widget data captured at the end of a frame for headless inspection.
+#[derive(Clone, Debug)]
+pub struct FrameWidgetSnapshot {
+    pub id: WidgetId,
+    pub placement: Rect<Pixels>,
+    pub was_active: bool,
+    pub has_text_layout: bool,
+    pub layer: u8,
+    pub is_modal: bool,
+    pub has_custom_data: bool,
+    pub custom_data: [u8; 8],
+}
+
+/// Per-layout-node data captured at the end of a frame, in z-layer order.
+#[derive(Clone, Debug)]
+pub struct FrameLayoutNodeSnapshot {
+    pub widget_id: Option<WidgetId>,
+    pub z_layer: u8,
+    pub is_modal: bool,
+    pub rect: Rect<Pixels>,
+    pub effective_clip: ClipRect,
+}
+
+/// Read-only snapshot of UI state at the end of a frame.
+///
+/// `widgets` is keyed by `WidgetId` (BTreeMap → deterministic iteration order);
+/// `layout_nodes` is in `iter_nodes_by_layer` order (ascending z-layer).
+#[derive(Clone, Debug)]
+pub struct FrameSnapshot {
+    pub frame_counter: u64,
+    pub focused_widget: Option<WidgetId>,
+    pub active_pointer_layer: u8,
+    pub input_block_layer: Option<u8>,
+    pub widgets: BTreeMap<WidgetId, FrameWidgetSnapshot>,
+    pub layout_nodes: Vec<FrameLayoutNodeSnapshot>,
+}
 
 #[derive(Default)]
 pub(crate) struct UiContext {
@@ -213,6 +252,15 @@ impl UiContext {
         text_layouts: &mut TextLayoutStorage,
         canvas: &mut Canvas,
     ) {
+        self.finish_layout(text_context, text_layouts);
+        self.draw_to_canvas(text_context, text_layouts, canvas);
+    }
+
+    pub(crate) fn finish_layout(
+        &mut self,
+        text_context: &mut TextLayoutContext,
+        text_layouts: &mut TextLayoutStorage,
+    ) {
         self.ui_tree.compute_layout(|(content, _), max_width| {
             let (layout_id, alignment, overflow) = match content {
                 LayoutContent::Text {
@@ -227,7 +275,55 @@ impl UiContext {
             text_layouts.break_lines(text_context, *layout_id, max_width, *alignment, *overflow)
         });
 
-        for (node, (content, widget_id)) in self.ui_tree.iter_nodes_by_layer() {
+        for (node, (_, widget_id)) in self.ui_tree.iter_nodes_by_layer() {
+            let layout = &node.result;
+            if layout.width == 0.0 || layout.height == 0.0 {
+                continue;
+            }
+
+            if let Some(widget_id) = widget_id {
+                let container = self.widget_states.entry(*widget_id).or_default();
+
+                container.frame_last_used = self.frame_counter;
+                container.state.placement = Rect {
+                    origin: Point2 {
+                        x: node.result.x,
+                        y: node.result.y,
+                    },
+                    size: Size2 {
+                        width: node.result.width,
+                        height: node.result.height,
+                    },
+                };
+                container.state.layer = node.atom.z_layer;
+                container.state.is_modal = node.atom.is_modal;
+            }
+        }
+
+        let removed = self
+            .widget_states
+            .extract_if(|_, container| container.frame_last_used < self.frame_counter);
+
+        for (_, element) in removed {
+            if let Some(text_layout_id) = element.state.text_layout {
+                text_layouts.remove(text_layout_id);
+            }
+        }
+
+        if self.widget_states.len() * 2 < self.widget_states.capacity() {
+            self.widget_states.shrink_to_fit();
+        }
+
+        self.frame_counter += 1;
+    }
+
+    pub(crate) fn draw_to_canvas(
+        &self,
+        text_context: &mut TextLayoutContext,
+        text_layouts: &mut TextLayoutStorage,
+        canvas: &mut Canvas,
+    ) {
+        for (node, (content, _)) in self.ui_tree.iter_nodes_by_layer() {
             let layout = &node.result;
             if layout.width == 0.0 || layout.height == 0.0 {
                 continue;
@@ -302,12 +398,38 @@ impl UiContext {
                     }
                 },
             }
+        }
+    }
 
-            if let Some(widget_id) = widget_id {
-                let container = self.widget_states.entry(*widget_id).or_default();
+    pub(crate) fn snapshot(&self) -> FrameSnapshot {
+        let widgets = self
+            .widget_states
+            .iter()
+            .map(|(id, container)| {
+                (
+                    *id,
+                    FrameWidgetSnapshot {
+                        id: *id,
+                        placement: container.state.placement,
+                        was_active: container.state.was_active,
+                        has_text_layout: container.state.text_layout.is_some(),
+                        layer: container.state.layer,
+                        is_modal: container.state.is_modal,
+                        has_custom_data: container.state.has_custom_data(),
+                        custom_data: container.state.custom_data_bytes().unwrap_or([0; 8]),
+                    },
+                )
+            })
+            .collect();
 
-                container.frame_last_used = self.frame_counter;
-                container.state.placement = Rect {
+        let layout_nodes = self
+            .ui_tree
+            .iter_nodes_by_layer()
+            .map(|(node, (_, widget_id))| FrameLayoutNodeSnapshot {
+                widget_id: *widget_id,
+                z_layer: node.atom.z_layer,
+                is_modal: node.atom.is_modal,
+                rect: Rect {
                     origin: Point2 {
                         x: node.result.x,
                         y: node.result.y,
@@ -316,27 +438,19 @@ impl UiContext {
                         width: node.result.width,
                         height: node.result.height,
                     },
-                };
-                container.state.layer = node.atom.z_layer;
-                container.state.is_modal = node.atom.is_modal;
-            }
+                },
+                effective_clip: node.result.effective_clip,
+            })
+            .collect();
+
+        FrameSnapshot {
+            frame_counter: self.frame_counter,
+            focused_widget: self.focused_widget,
+            active_pointer_layer: self.active_pointer_layer,
+            input_block_layer: self.input_block_layer,
+            widgets,
+            layout_nodes,
         }
-
-        let removed = self
-            .widget_states
-            .extract_if(|_, container| container.frame_last_used < self.frame_counter);
-
-        for (_, element) in removed {
-            if let Some(text_layout_id) = element.state.text_layout {
-                text_layouts.remove(text_layout_id);
-            }
-        }
-
-        if self.widget_states.len() * 2 < self.widget_states.capacity() {
-            self.widget_states.shrink_to_fit();
-        }
-
-        self.frame_counter += 1;
     }
 
     fn draw_selection_rect(
