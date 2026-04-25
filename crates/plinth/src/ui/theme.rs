@@ -6,6 +6,7 @@ use smallvec::SmallVec;
 
 use crate::graphics::Color;
 use crate::graphics::FontStack;
+use crate::graphics::GradientPaint;
 use crate::graphics::Paint;
 
 use super::Size;
@@ -31,11 +32,13 @@ pub enum StyleClass {
     Image,
     HorizontalSeparator,
     VerticalSeparator,
+    DropdownMenu,
+    DropdownItem,
 }
 
 impl StyleClass {
     /// Number of style class variants. Update when adding new variants.
-    pub const COUNT: usize = 7;
+    pub const COUNT: usize = 9;
 }
 
 pub struct Theme {
@@ -339,6 +342,81 @@ fn default_theme() -> Theme {
                 ),
                 (StateFlags::empty(), StyleProperty::Width(1.0.into())),
                 (StateFlags::empty(), StyleProperty::Height(Size::Grow)),
+            ],
+        )
+        .unwrap();
+
+    theme
+        .set_style_class(
+            StyleClass::DropdownMenu,
+            None,
+            [
+                (
+                    StateFlags::empty(),
+                    StyleProperty::Background(Paint::solid(Color::WHITE)),
+                ),
+                (
+                    StateFlags::empty(),
+                    StyleProperty::Border(GradientPaint::solid(Color::BLACK)),
+                ),
+                (
+                    StateFlags::empty(),
+                    StyleProperty::BorderWidths(BorderWidths {
+                        left: 1.0,
+                        right: 1.0,
+                        top: 0.0,
+                        bottom: 1.0,
+                    }),
+                ),
+                (
+                    StateFlags::empty(),
+                    StyleProperty::CornerRadii(CornerRadii::default()),
+                ),
+                (
+                    StateFlags::empty(),
+                    StyleProperty::Padding(crate::ui::Padding::equal(1.0)),
+                ),
+                (StateFlags::empty(), StyleProperty::ChildSpacing(0.0)),
+            ],
+        )
+        .unwrap();
+
+    theme
+        .set_style_class(
+            StyleClass::DropdownItem,
+            Some(theme.get_id(StyleClass::Label)),
+            [
+                (
+                    StateFlags::empty(),
+                    StyleProperty::Background(Paint::solid(Color::TRANSPARENT)),
+                ),
+                (
+                    StateFlags::HOVERED,
+                    StyleProperty::Background(Paint::solid(Color::srgb(0.92, 0.92, 0.92, 1.0))),
+                ),
+                (
+                    StateFlags::PRESSED,
+                    StyleProperty::Background(Paint::solid(Color::srgb(0.86, 0.86, 0.86, 1.0))),
+                ),
+                (
+                    StateFlags::empty(),
+                    StyleProperty::BorderWidths(BorderWidths {
+                        left: 0.0,
+                        right: 0.0,
+                        top: 0.0,
+                        bottom: 0.0,
+                    }),
+                ),
+                (
+                    StateFlags::empty(),
+                    StyleProperty::Padding(crate::ui::Padding {
+                        left: 1.0,
+                        right: 1.0,
+                        top: 0.0,
+                        bottom: 0.0,
+                    }),
+                ),
+                (StateFlags::empty(), StyleProperty::Width(Size::Grow)),
             ],
         )
         .unwrap();

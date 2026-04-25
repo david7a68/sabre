@@ -189,6 +189,7 @@ impl<'a> TextEdit<'a> {
                 LayoutContent::Text {
                     layout: text_layout_id,
                     alignment: style.text_align.get(self.state_flags),
+                    overflow: crate::ui::TextOverflow::Clip,
                     cursor_size,
                     selection_color,
                     cursor_color,

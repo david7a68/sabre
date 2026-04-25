@@ -118,7 +118,7 @@ impl AppContext {
             };
 
             // borrow input for this frame
-            let input = std::mem::take(&mut viewport.input);
+            let mut input = std::mem::take(&mut viewport.input);
 
             let ui_builder = window.ui_context.begin_frame(
                 &mut self.clipboard,
@@ -142,6 +142,7 @@ impl AppContext {
             // Restore input allocs for next frame; use branch to avoid unwrap.
             // This should never fail.
             if let Some(viewport) = self.viewports.get_mut(window.viewport) {
+                input.prev_pointer = input.pointer;
                 viewport.input = input;
                 viewport.input.keyboard_events.clear();
             }

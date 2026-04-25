@@ -28,6 +28,7 @@ use super::style::CornerRadii;
 use super::style::StateFlags;
 use super::style::StyleId;
 use super::text::TextLayoutStorage;
+use super::text::TextOverflow;
 use super::theme::StyleClass;
 use super::theme::Theme;
 use super::widget::WidgetState;
@@ -52,6 +53,7 @@ pub struct UiBuilder<'a> {
     pub(super) style_id: StyleId,
     pub(super) state: StateFlags,
     pub(super) num_child_widgets: usize,
+    pub(super) text_overflow: TextOverflow,
 }
 
 impl UiBuilder<'_> {
@@ -202,6 +204,19 @@ impl UiBuilder<'_> {
         self
     }
 
+    pub fn text_overflow(&mut self, overflow: TextOverflow) -> &mut Self {
+        self.text_overflow = overflow;
+        self
+    }
+
+    pub fn clip_text(&mut self) -> &mut Self {
+        self.text_overflow(TextOverflow::Clip)
+    }
+
+    pub fn wrap_text(&mut self) -> &mut Self {
+        self.text_overflow(TextOverflow::Wrap)
+    }
+
     pub fn prev_state(&self) -> Option<&WidgetState> {
         self.context
             .widget_states
@@ -276,6 +291,7 @@ impl UiBuilder<'_> {
             text_layout.style_id = self.style_id;
             text_layout.state = self.state;
             text_layout.text_hash = text_hash;
+            text_layout.raw_text = text.to_string();
             text_layout.needs_line_break = true;
         }
 
@@ -294,6 +310,7 @@ impl UiBuilder<'_> {
                 height: height.into(),
                 z_layer: self.layer,
                 is_modal: self.is_modal,
+                clip_overflow: matches!(self.text_overflow, TextOverflow::Clip),
                 ..Default::default()
             },
             (
@@ -301,6 +318,7 @@ impl UiBuilder<'_> {
                     layout: text_id,
                     cursor_size: 0.0,
                     alignment,
+                    overflow: self.text_overflow,
                     selection_color: Color::TRANSPARENT,
                     cursor_color: Color::TRANSPARENT,
                 },
@@ -347,6 +365,7 @@ impl UiBuilder<'_> {
             style_id: self.style_id,
             state: self.state,
             num_child_widgets: 0,
+            text_overflow: self.text_overflow,
         }
     }
 
@@ -393,8 +412,7 @@ impl UiBuilder<'_> {
         name: impl std::hash::Hash,
         pos: OverlayPosition,
     ) -> UiBuilder<'_> {
-        let child_layer = self.layer.saturating_add(1);
-        self.overlay_child_inner(name, Position::OutOfFlow(pos), child_layer, false)
+        self.overlay_offset_child(name, pos, 1)
     }
 
     /// Creates an out-of-flow child that additionally blocks pointer and keyboard input
@@ -408,8 +426,7 @@ impl UiBuilder<'_> {
         name: impl std::hash::Hash,
         pos: OverlayPosition,
     ) -> UiBuilder<'_> {
-        let child_layer = self.layer.saturating_add(1);
-        self.overlay_child_inner(name, Position::OutOfFlow(pos), child_layer, true)
+        self.modal_offset_child(name, Position::OutOfFlow(pos), 1)
     }
 
     /// Creates an out-of-flow child at an explicit screen-space position.
@@ -421,6 +438,31 @@ impl UiBuilder<'_> {
     pub fn absolute_child(&mut self, name: impl std::hash::Hash, x: f32, y: f32) -> UiBuilder<'_> {
         let child_layer = self.layer.saturating_add(1);
         self.overlay_child_inner(name, Position::Absolute { x, y }, child_layer, false)
+    }
+
+    /// Like [`overlay_child`](Self::overlay_child) but with an explicit layer offset.
+    /// The child's z_layer is `self.layer.saturating_add(layer_offset)`.
+    pub fn overlay_offset_child(
+        &mut self,
+        name: impl std::hash::Hash,
+        pos: OverlayPosition,
+        layer_offset: u8,
+    ) -> UiBuilder<'_> {
+        let child_layer = self.layer.saturating_add(layer_offset);
+        self.overlay_child_inner(name, Position::OutOfFlow(pos), child_layer, false)
+    }
+
+    /// Like [`modal_child`](Self::modal_child) but with an explicit layer offset and
+    /// accepting any `Position` (including `Position::Absolute`).
+    /// The child's z_layer is `self.layer.saturating_add(layer_offset)`.
+    pub fn modal_offset_child(
+        &mut self,
+        name: impl std::hash::Hash,
+        pos: Position,
+        layer_offset: u8,
+    ) -> UiBuilder<'_> {
+        let child_layer = self.layer.saturating_add(layer_offset);
+        self.overlay_child_inner(name, pos, child_layer, true)
     }
 
     fn overlay_child_inner(
@@ -462,6 +504,7 @@ impl UiBuilder<'_> {
 
             is_modal,
             layer: child_layer,
+            text_overflow: self.text_overflow,
         }
     }
 }

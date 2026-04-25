@@ -2,8 +2,8 @@ use crate::ui::StyleClass;
 use crate::ui::UiBuilder;
 use crate::ui::style::StateFlags;
 
-use super::impl_container;
 use super::macros::forward_properties;
+use super::macros::impl_container;
 
 pub struct Surface<'a> {
     builder: UiBuilder<'a>,
