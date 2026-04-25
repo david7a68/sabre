@@ -27,6 +27,8 @@ use super::winit::WinitWindow;
 #[derive(Default)]
 pub struct AppContextBuilder {
     theme: Option<Theme>,
+    on_resume: Option<Box<dyn FnMut(&mut AppContext)>>,
+    on_suspend: Option<Box<dyn FnMut(&mut AppContext)>>,
 }
 
 impl AppContextBuilder {
@@ -35,7 +37,23 @@ impl AppContextBuilder {
         self
     }
 
-    pub fn run(self, handler: impl AppLifecycleHandler) {
+    pub fn on_resume<F>(mut self, f: F) -> Self
+    where
+        F: FnMut(&mut AppContext) + 'static,
+    {
+        self.on_resume = Some(Box::new(f));
+        self
+    }
+
+    pub fn on_suspend<F>(mut self, f: F) -> Self
+    where
+        F: FnMut(&mut AppContext) + 'static,
+    {
+        self.on_suspend = Some(Box::new(f));
+        self
+    }
+
+    pub fn run(self) {
         let event_loop = EventLoop::builder().with_dpi_aware(true).build().unwrap();
         event_loop.set_control_flow(ControlFlow::Wait);
 
@@ -53,19 +71,12 @@ impl AppContextBuilder {
                 format_buffer: String::with_capacity(2048),
             },
             windows: HashMap::new(),
-            user_handler: handler,
+            on_resume: self.on_resume,
+            on_suspend: self.on_suspend,
         };
 
         event_loop.run_app(runtime).unwrap();
     }
-}
-
-pub trait AppLifecycleHandler: 'static {
-    fn suspend(&mut self, runtime: &mut AppContext) {
-        let _ = runtime;
-    }
-
-    fn resume(&mut self, runtime: &mut AppContext);
 }
 
 pub struct AppContext {

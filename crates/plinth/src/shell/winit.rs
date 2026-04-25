@@ -17,7 +17,6 @@ use crate::ui::UiBuilder;
 use crate::ui::context::UiContext;
 
 use super::app_context::AppContext;
-use super::app_context::AppLifecycleHandler;
 use super::frame::Context;
 use super::input::DoubleClickTracker;
 use super::window::ViewportId;
@@ -39,14 +38,15 @@ pub(super) enum DeferredCommand {
     },
 }
 
-pub(super) struct WinitApp<App> {
+pub(super) struct WinitApp {
     pub runtime: AppContext,
     pub windows: HashMap<WindowId, WinitWindow>,
 
-    pub user_handler: App,
+    pub on_resume: Option<Box<dyn FnMut(&mut AppContext)>>,
+    pub on_suspend: Option<Box<dyn FnMut(&mut AppContext)>>,
 }
 
-impl<App> WinitApp<App> {
+impl WinitApp {
     fn handle_deferred_commands(&mut self, event_loop: &dyn ActiveEventLoop) {
         for command in self.runtime.deferred_commands.drain(..) {
             match command {
@@ -92,14 +92,23 @@ impl<App> WinitApp<App> {
     }
 }
 
-impl<App: AppLifecycleHandler> ApplicationHandler for WinitApp<App> {
+impl ApplicationHandler for WinitApp {
     fn can_create_surfaces(&mut self, event_loop: &dyn ActiveEventLoop) {
-        self.user_handler.resume(&mut self.runtime);
+        if let Some(on_resume) = self.on_resume.as_mut() {
+            on_resume(&mut self.runtime);
+        }
         self.handle_deferred_commands(event_loop);
 
         self.runtime.repaint(self.windows.values_mut().inspect(|w| {
             w.window.set_visible(true);
         }));
+    }
+
+    fn destroy_surfaces(&mut self, event_loop: &dyn ActiveEventLoop) {
+        let _ = event_loop;
+        if let Some(on_suspend) = self.on_suspend.as_mut() {
+            on_suspend(&mut self.runtime);
+        }
     }
 
     fn window_event(

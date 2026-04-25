@@ -1,8 +1,6 @@
 use plinth::graphics::Color;
 use plinth::graphics::Paint;
-use plinth::shell::AppContext;
 use plinth::shell::AppContextBuilder;
-use plinth::shell::AppLifecycleHandler;
 use plinth::shell::Context;
 use plinth::shell::WindowConfig;
 use plinth::ui::Alignment;
@@ -119,25 +117,19 @@ fn main() {
 
     AppContextBuilder::default()
         .with_theme(theme)
-        .run(SabreApp {});
-}
+        .on_resume(|runtime| {
+            info!("Starting up Sabre application...");
 
-#[derive(Default)]
-struct SabreApp {}
-
-impl AppLifecycleHandler for SabreApp {
-    fn resume(&mut self, runtime: &mut AppContext) {
-        info!("Starting up Sabre application...");
-
-        runtime.create_viewport(
-            WindowConfig {
-                title: "Sabre App".into(),
-                width: 800,
-                height: 600,
-            },
-            ViewportState::new().into_handler(),
-        );
-    }
+            runtime.create_viewport(
+                WindowConfig {
+                    title: "Sabre App".into(),
+                    width: 800,
+                    height: 600,
+                },
+                ViewportState::new().into_handler(),
+            );
+        })
+        .run();
 }
 
 struct ViewportState {}
