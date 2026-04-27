@@ -11,6 +11,8 @@ use crate::graphics::pipeline::RenderPipeline;
 use crate::graphics::pipeline::RenderPipelineCache;
 use crate::graphics::texture::StorageId;
 
+type BindGroupCache = HashMap<(StorageId, StorageId), wgpu::BindGroup>;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RenderError {
     Occluded,
@@ -27,7 +29,7 @@ pub(crate) struct Surface {
     render_pipeline: RenderPipeline,
     frame: Frame,
 
-    bind_groups: HashMap<(StorageId, StorageId), wgpu::BindGroup>,
+    bind_groups: BindGroupCache,
     cached_storage_version: u64,
 }
 
@@ -130,15 +132,7 @@ impl Surface {
         &mut self,
         device: &wgpu::Device,
         storage_version: u64,
-    ) -> Result<
-        (
-            wgpu::SurfaceTexture,
-            &mut Frame,
-            &RenderPipeline,
-            &mut HashMap<(StorageId, StorageId), wgpu::BindGroup>,
-        ),
-        RenderError,
-    > {
+    ) -> Result<(wgpu::SurfaceTexture, &mut Frame, &RenderPipeline, &mut BindGroupCache), RenderError> {
         let output = tracing::info_span!("get_current_texture").in_scope(|| {
             let mut attempts = 0;
 
