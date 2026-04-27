@@ -667,7 +667,6 @@ impl Drop for FormattedTextureManager {
             } else {
                 warn!(storage = ?id, format = ?self.format, "Dropping texture atlas storage");
             }
-            storage.texture.destroy();
         }
     }
 }
@@ -679,7 +678,6 @@ impl FormattedTextureManager {
         self.storage.retain(|id, storage| {
             if storage.refcount == 0 {
                 warn!(storage = ?id, format = ?self.format, "Dropping texture atlas storage");
-                storage.texture.destroy();
                 storage_version.set(storage_version.get() + 1);
                 return false;
             }
