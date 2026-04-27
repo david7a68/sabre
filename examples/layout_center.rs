@@ -34,7 +34,7 @@ struct App {}
 
 impl AppLifecycleHandler for App {
     fn resume(&mut self, runtime: &mut AppContext) {
-        runtime.create_viewport(
+        runtime.create_window(
             WindowConfig {
                 title: "Sabre App".into(),
                 width: 800,
@@ -54,7 +54,7 @@ impl AppWindow {
     }
 
     fn update(&mut self, _context: Context, mut ui: UiBuilder) {
-        ui.color(Color::srgb(0.1, 0.2, 0.3, 1.0))
+        ui.color(Color::srgb_nonlinear(0.1, 0.2, 0.3, 1.0))
             .child_alignment(Alignment::Center, Alignment::Center)
             .with_child(|ui| {
                 ui.child_direction(LayoutDirection::Vertical)

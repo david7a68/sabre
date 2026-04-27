@@ -103,7 +103,7 @@ macros::declare_style! {
         underline_offset: UnderlineOffset(f32) = 0.0,
 
         // text editing styles
-        selection_color: SelectionColor(Color) = Color::srgb(0.2, 0.4, 0.8, 0.3),
+        selection_color: SelectionColor(Color) = Color::srgb_nonlinear(0.2, 0.4, 0.8, 0.3),
         selection_text_color: SelectionTextColor(Color) = Color::WHITE,
         cursor_color: CursorColor(Color) = Color::BLACK,
     }

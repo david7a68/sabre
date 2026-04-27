@@ -12,29 +12,31 @@ use winit::window::WindowId;
 
 use crate::graphics::Canvas;
 use crate::graphics::GraphicsContext;
+use crate::shell::Input;
 use crate::shell::KeyboardEvent;
-use crate::shell::double_click_tracker::DoubleClickTracker;
+use crate::shell::WindowConfig;
 use crate::ui::UiBuilder;
 use crate::ui::context::UiContext;
 
 use super::app_context::AppContext;
 use super::app_context::AppLifecycleHandler;
 use super::frame::Context;
-use super::window::ViewportId;
+use super::input::DoubleClickTracker;
 
 pub(super) struct WinitWindow {
     pub window: Arc<dyn Window>,
     pub double_click_tracker: DoubleClickTracker,
 
     pub canvas: Canvas,
-    pub viewport: ViewportId,
     pub ui_context: UiContext,
+    pub input: Input,
+    pub config: WindowConfig,
     pub handler: Box<dyn FnMut(Context, UiBuilder)>,
 }
 
 pub(super) enum DeferredCommand {
     Create {
-        id: ViewportId,
+        config: WindowConfig,
         handler: Box<dyn FnMut(Context, UiBuilder)>,
     },
 }
@@ -50,7 +52,7 @@ impl<App> WinitApp<App> {
     fn handle_deferred_commands(&mut self, event_loop: &dyn ActiveEventLoop) {
         for command in self.runtime.deferred_commands.drain(..) {
             match command {
-                DeferredCommand::Create { id, handler } => {
+                DeferredCommand::Create { config, handler } => {
                     let window = Arc::<dyn Window>::from(
                         event_loop
                             .create_window(
@@ -75,7 +77,8 @@ impl<App> WinitApp<App> {
                             canvas: graphics.create_canvas(),
                             handler,
                             ui_context: UiContext::default(),
-                            viewport: id,
+                            input: Input::default(),
+                            config,
                             double_click_tracker: DoubleClickTracker::load_parameters(
                                 window.scale_factor(),
                             ),
@@ -86,7 +89,7 @@ impl<App> WinitApp<App> {
             }
         }
 
-        if self.runtime.viewports.is_empty() {
+        if self.windows.is_empty() {
             event_loop.exit();
         }
     }
@@ -111,9 +114,8 @@ impl<App: AppLifecycleHandler> ApplicationHandler for WinitApp<App> {
         match event {
             WindowEvent::PointerMoved { position, .. } => {
                 let window = self.windows.get_mut(&window_id).unwrap();
-                let viewport = self.runtime.viewports.get_mut(window.viewport).unwrap();
 
-                viewport.input.pointer = glamour::Point2 {
+                window.input.pointer = glamour::Point2 {
                     x: position.x as f32,
                     y: position.y as f32,
                 };
@@ -122,7 +124,6 @@ impl<App: AppLifecycleHandler> ApplicationHandler for WinitApp<App> {
             }
             WindowEvent::PointerButton { state, button, .. } => {
                 let window = self.windows.get_mut(&window_id).unwrap();
-                let viewport = self.runtime.viewports.get_mut(window.viewport).unwrap();
 
                 let ButtonSource::Mouse(button) = button else {
                     return;
@@ -131,26 +132,26 @@ impl<App: AppLifecycleHandler> ApplicationHandler for WinitApp<App> {
                 let click_count =
                     window
                         .double_click_tracker
-                        .on_click(button, state, viewport.input.pointer);
+                        .on_click(button, state, window.input.pointer);
 
                 match (button, state) {
                     (winit::event::MouseButton::Left, winit::event::ElementState::Pressed) => {
-                        viewport.input.mouse_state.left_click_count = click_count;
+                        window.input.mouse_state.left_click_count = click_count;
                     }
                     (winit::event::MouseButton::Left, winit::event::ElementState::Released) => {
-                        viewport.input.mouse_state.left_click_count = click_count;
+                        window.input.mouse_state.left_click_count = click_count;
                     }
                     (winit::event::MouseButton::Right, winit::event::ElementState::Pressed) => {
-                        viewport.input.mouse_state.right_click_count = click_count;
+                        window.input.mouse_state.right_click_count = click_count;
                     }
                     (winit::event::MouseButton::Right, winit::event::ElementState::Released) => {
-                        viewport.input.mouse_state.right_click_count = click_count;
+                        window.input.mouse_state.right_click_count = click_count;
                     }
                     (winit::event::MouseButton::Middle, winit::event::ElementState::Pressed) => {
-                        viewport.input.mouse_state.middle_click_count = click_count;
+                        window.input.mouse_state.middle_click_count = click_count;
                     }
                     (winit::event::MouseButton::Middle, winit::event::ElementState::Released) => {
-                        viewport.input.mouse_state.middle_click_count = click_count;
+                        window.input.mouse_state.middle_click_count = click_count;
                     }
                     _ => {
                         return;
@@ -160,10 +161,9 @@ impl<App: AppLifecycleHandler> ApplicationHandler for WinitApp<App> {
                 window.window.request_redraw();
             }
             WindowEvent::KeyboardInput { event, .. } => {
-                let window = self.windows.get(&window_id).unwrap();
-                let viewport = self.runtime.viewports.get_mut(window.viewport).unwrap();
+                let window = self.windows.get_mut(&window_id).unwrap();
 
-                viewport.input.keyboard_events.push(KeyboardEvent {
+                window.input.keyboard_events.push(KeyboardEvent {
                     key: event.physical_key,
                     text: event.text,
                     location: event.location,
@@ -174,25 +174,21 @@ impl<App: AppLifecycleHandler> ApplicationHandler for WinitApp<App> {
                 window.window.request_redraw();
             }
             WindowEvent::ModifiersChanged(modifiers) => {
-                let window = self.windows.get(&window_id).unwrap();
-                let viewport = self.runtime.viewports.get_mut(window.viewport).unwrap();
+                let window = self.windows.get_mut(&window_id).unwrap();
 
-                viewport.input.modifiers = modifiers.state();
+                window.input.modifiers = modifiers.state();
             }
             WindowEvent::SurfaceResized(physical_size) => {
-                let window = self.windows.get(&window_id).unwrap();
-                let viewport = self.runtime.viewports.get_mut(window.viewport).unwrap();
+                let window = self.windows.get_mut(&window_id).unwrap();
 
-                viewport.config.width = physical_size.width;
-                viewport.config.height = physical_size.height;
+                window.config.width = physical_size.width;
+                window.config.height = physical_size.height;
 
-                viewport.input.window_size.width = physical_size.width as f32;
-                viewport.input.window_size.height = physical_size.height as f32;
+                window.input.window_size.width = physical_size.width as f32;
+                window.input.window_size.height = physical_size.height as f32;
             }
             WindowEvent::CloseRequested => {
-                let window = self.windows.remove(&window_id).unwrap();
-
-                self.runtime.viewports.remove(window.viewport);
+                self.windows.remove(&window_id);
 
                 let graphics = self.runtime.graphics.as_mut().unwrap();
                 graphics.destroy_surface(window_id);
@@ -205,9 +201,7 @@ impl<App: AppLifecycleHandler> ApplicationHandler for WinitApp<App> {
             WindowEvent::Focused(is_focused) if is_focused => {
                 let window = self.windows.get_mut(&window_id).unwrap();
                 window.double_click_tracker.on_activate();
-
-                let viewport = self.runtime.viewports.get_mut(window.viewport).unwrap();
-                viewport.input.focus_changed();
+                window.input.focus_changed();
                 window.window.request_redraw();
             }
             WindowEvent::ScaleFactorChanged { scale_factor, .. } => {

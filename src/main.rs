@@ -65,7 +65,7 @@ fn main() {
     theme.set_base_style([
         (
             StateFlags::NORMAL,
-            StyleProperty::Background(Paint::solid(Color::srgb(0.1, 0.2, 0.3, 1.0))),
+            StyleProperty::Background(Paint::solid(Color::srgb_nonlinear(0.1, 0.2, 0.3, 1.0))),
         ),
         (StateFlags::NORMAL, StyleProperty::FontSize(32)),
     ]);
@@ -129,7 +129,7 @@ impl AppLifecycleHandler for SabreApp {
     fn resume(&mut self, runtime: &mut AppContext) {
         info!("Starting up Sabre application...");
 
-        runtime.create_viewport(
+        runtime.create_window(
             WindowConfig {
                 title: "Sabre App".into(),
                 width: 800,
@@ -152,7 +152,7 @@ impl ViewportState {
     }
 
     fn update(&mut self, _context: Context, mut ui: UiBuilder) {
-        ui.color(Color::srgb(0.1, 0.2, 0.3, 1.0))
+        ui.color(Color::srgb_nonlinear(0.1, 0.2, 0.3, 1.0))
             .child_alignment(Alignment::Center, Alignment::Center);
 
         let mut menu = ui.child();

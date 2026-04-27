@@ -21,7 +21,7 @@ struct TextEditDemo {}
 
 impl AppLifecycleHandler for TextEditDemo {
     fn resume(&mut self, runtime: &mut AppContext) {
-        runtime.create_viewport(
+        runtime.create_window(
             WindowConfig {
                 title: "TextEdit Example".into(),
                 width: 800,
