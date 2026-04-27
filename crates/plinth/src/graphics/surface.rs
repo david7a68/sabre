@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use tracing::instrument;
@@ -8,6 +9,9 @@ use winit::window::WindowId;
 use crate::graphics::pipeline::DrawBuffer;
 use crate::graphics::pipeline::RenderPipeline;
 use crate::graphics::pipeline::RenderPipelineCache;
+use crate::graphics::texture::StorageId;
+
+type BindGroupCache = HashMap<(StorageId, StorageId), wgpu::BindGroup>;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RenderError {
@@ -23,7 +27,10 @@ pub(crate) struct Surface {
 
     frame_counter: u64,
     render_pipeline: RenderPipeline,
-    frames_in_flight: [Frame; 2],
+    frame: Frame,
+
+    bind_groups: BindGroupCache,
+    cached_storage_version: u64,
 }
 
 impl Surface {
@@ -78,7 +85,7 @@ impl Surface {
 
         let render_pipeline = pipeline_cache.get(format);
 
-        let frames_in_flight = [Frame::new(&render_pipeline), Frame::new(&render_pipeline)];
+        let frame = Frame::new(&render_pipeline);
 
         Self {
             window,
@@ -86,7 +93,9 @@ impl Surface {
             handle: surface,
             frame_counter: 0,
             render_pipeline,
-            frames_in_flight,
+            frame,
+            bind_groups: HashMap::new(),
+            cached_storage_version: 0,
         }
     }
 
@@ -122,7 +131,8 @@ impl Surface {
     pub fn next_frame(
         &mut self,
         device: &wgpu::Device,
-    ) -> Result<(wgpu::SurfaceTexture, &mut Frame, &RenderPipeline), RenderError> {
+        storage_version: u64,
+    ) -> Result<(wgpu::SurfaceTexture, &mut Frame, &RenderPipeline, &mut BindGroupCache), RenderError> {
         let output = tracing::info_span!("get_current_texture").in_scope(|| {
             let mut attempts = 0;
 
@@ -154,10 +164,19 @@ impl Surface {
             }
         })?;
 
-        let frame = &mut self.frames_in_flight[self.frame_counter as usize % 2];
+        if storage_version != self.cached_storage_version {
+            self.bind_groups.clear();
+            self.cached_storage_version = storage_version;
+        }
+
         self.frame_counter += 1;
 
-        Ok((output, frame, &self.render_pipeline))
+        Ok((
+            output,
+            &mut self.frame,
+            &self.render_pipeline,
+            &mut self.bind_groups,
+        ))
     }
 }
 
@@ -168,7 +187,7 @@ pub struct Frame {
 impl Frame {
     fn new(render_pipeline: &RenderPipeline) -> Self {
         Self {
-            draw_buffer: render_pipeline.create_duffer(),
+            draw_buffer: render_pipeline.create_draw_buffer(),
         }
     }
 }

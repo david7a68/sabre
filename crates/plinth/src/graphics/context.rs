@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
 
@@ -21,7 +20,6 @@ use crate::graphics::pipeline::RenderPipelineCache;
 use crate::graphics::shader_data::DrawUniforms;
 use crate::graphics::surface::RenderError;
 use crate::graphics::surface::Surface;
-use crate::graphics::texture::StorageId;
 use crate::graphics::texture::TextureManager;
 
 pub struct GraphicsContext {
@@ -238,7 +236,8 @@ fn write_commands(
     surface: &mut Surface,
     canvas: &CanvasStorage,
 ) -> Result<(wgpu::SurfaceTexture, wgpu::CommandBuffer), RenderError> {
-    let (target, frame, render_pipeline) = surface.next_frame(device)?;
+    let (target, frame, render_pipeline, bind_groups) =
+        surface.next_frame(device, textures.storage_version())?;
 
     let mut encoder =
         device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
@@ -291,7 +290,6 @@ fn write_commands(
         );
 
         let mut vertex_offset = 0;
-        let mut bind_groups = HashMap::<(StorageId, StorageId), wgpu::BindGroup>::new();
 
         for command in canvas.commands() {
             match command {

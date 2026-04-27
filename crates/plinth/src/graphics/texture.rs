@@ -200,6 +200,10 @@ impl TextureManager {
         self.inner.storage_view(storage)
     }
 
+    pub(crate) fn storage_version(&self) -> u64 {
+        self.inner.storage_version.get()
+    }
+
     #[instrument(skip(self, data))]
     pub fn load_from_memory(&self, data: &[u8], width: u16, format: TextureFormat) -> Texture {
         self.inner.from_memory(data, width, format)
@@ -227,6 +231,8 @@ struct TextureManagerInner {
     rgba_textures: RefCell<FormattedTextureManager>,
     srgba_textures: RefCell<FormattedTextureManager>,
     alpha_textures: RefCell<FormattedTextureManager>,
+
+    storage_version: Cell<u64>,
 
     queue: wgpu::Queue,
     device: wgpu::Device,
@@ -261,6 +267,7 @@ impl TextureManagerInner {
             rgba_textures: RefCell::new(rgba_textures),
             srgba_textures: RefCell::new(srgba_textures),
             alpha_textures: RefCell::new(alpha_textures),
+            storage_version: Cell::new(0),
             queue,
             device,
             ready_sender,
@@ -341,7 +348,9 @@ impl TextureManagerInner {
                     TextureFormat::R8Unorm => &self.alpha_textures,
                 };
 
-                storage.borrow_mut().release(usage.storage, usage.atlas_id);
+                storage
+                    .borrow_mut()
+                    .release(usage.storage, usage.atlas_id, &self.storage_version);
             }
         }
     }
@@ -361,7 +370,9 @@ impl TextureManagerInner {
                     TextureFormat::R8Unorm => &self.alpha_textures,
                 };
 
-                storage.borrow_mut().release(usage.storage, usage.atlas_id);
+                storage
+                    .borrow_mut()
+                    .release(usage.storage, usage.atlas_id, &self.storage_version);
             }
         }
     }
@@ -397,7 +408,8 @@ impl TextureManagerInner {
         }
         .borrow_mut();
 
-        let (texture, usage, rectangle) = manager.allocate(width, height, &self.device);
+        let (texture, usage, rectangle) =
+            manager.allocate(width, height, &self.device, &self.storage_version);
 
         let uvwh = usage.uvwh;
         let storage_id = usage.storage;
@@ -485,7 +497,8 @@ impl TextureManagerInner {
             .try_into()
             .expect("Max texture dimension of 65535 exceeded.");
 
-        let (texture, usage, rectangle) = manager.allocate(width, height, &self.device);
+        let (texture, usage, rectangle) =
+            manager.allocate(width, height, &self.device, &self.storage_version);
 
         let uvwh = usage.uvwh;
         let storage_id = usage.storage;
@@ -589,9 +602,15 @@ impl TextureManagerInner {
     }
 
     fn end_frame(self: &Rc<Self>) {
-        self.rgba_textures.borrow_mut().end_frame();
-        self.srgba_textures.borrow_mut().end_frame();
-        self.alpha_textures.borrow_mut().end_frame();
+        self.rgba_textures
+            .borrow_mut()
+            .end_frame(&self.storage_version);
+        self.srgba_textures
+            .borrow_mut()
+            .end_frame(&self.storage_version);
+        self.alpha_textures
+            .borrow_mut()
+            .end_frame(&self.storage_version);
     }
 }
 
@@ -639,14 +658,14 @@ impl Drop for FormattedTextureManager {
     fn drop(&mut self) {
         info!(format = ?self.format, "Dropping texture manager");
 
-        self.end_frame();
-
-        for storage in self.storage.values() {
+        for (id, storage) in &self.storage {
             if storage.refcount > 0 {
                 warn!(
                     refcount = storage.refcount,
                     "Texture storage not released before drop"
                 );
+            } else {
+                warn!(storage = ?id, format = ?self.format, "Dropping texture atlas storage");
             }
         }
     }
@@ -655,11 +674,11 @@ impl Drop for FormattedTextureManager {
 impl FormattedTextureManager {
     /// Call once per frame to clean up resources and perform any necessary
     /// housekeeping.
-    fn end_frame(&mut self) {
+    fn end_frame(&mut self, storage_version: &Cell<u64>) {
         self.storage.retain(|id, storage| {
             if storage.refcount == 0 {
                 warn!(storage = ?id, format = ?self.format, "Dropping texture atlas storage");
-                storage.texture.destroy();
+                storage_version.set(storage_version.get() + 1);
                 return false;
             }
 
@@ -668,18 +687,27 @@ impl FormattedTextureManager {
     }
 
     /// Release a reference for the given texture.
-    fn release(&mut self, storage_id: RawStorageId, node: AllocId) {
+    fn release(
+        &mut self,
+        storage_id: RawStorageId,
+        node: AllocId,
+        storage_version: &Cell<u64>,
+    ) {
         let storage = self.storage.get_mut(storage_id).unwrap();
         storage.atlas.deallocate(node);
         storage.refcount -= 1;
+        if storage.refcount == 0 {
+            storage_version.set(storage_version.get() + 1);
+        }
     }
 
-    #[instrument(skip(self, device))]
+    #[instrument(skip(self, device, storage_version))]
     fn allocate(
         &mut self,
         width: u16,
         height: u16,
         device: &wgpu::Device,
+        storage_version: &Cell<u64>,
     ) -> (wgpu::Texture, TextureUsage, Box2D<i32>) {
         let alloc_size = size2(width.into(), height.into());
 
@@ -734,6 +762,7 @@ impl FormattedTextureManager {
 
             let allocation = storage.atlas.allocate(alloc_size).unwrap();
             let storage_id = self.storage.insert(storage);
+            storage_version.set(storage_version.get() + 1);
 
             (storage_id, texture, atlas_size, allocation)
         };

@@ -41,7 +41,7 @@ impl RenderPipeline {
         })
     }
 
-    pub fn create_duffer(&self) -> DrawBuffer {
+    pub fn create_draw_buffer(&self) -> DrawBuffer {
         DrawBuffer::new(&self.device, &self.draw_data_layout, 1024, 256)
     }
 
