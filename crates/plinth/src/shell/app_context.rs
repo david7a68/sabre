@@ -8,12 +8,11 @@ use winit::platform::windows::EventLoopBuilderExtWindows;
 
 use crate::graphics::Color;
 use crate::graphics::GraphicsContext;
-use crate::graphics::TextLayoutContext;
 use crate::shell::Clipboard;
 use crate::shell::WindowConfig;
 use crate::ui::Theme;
 use crate::ui::UiBuilder;
-use crate::ui::text::TextLayoutStorage;
+use crate::ui::text::TextServices;
 
 use super::frame::Context;
 use super::winit::DeferredCommand;
@@ -43,8 +42,7 @@ impl AppContextBuilder {
                 deferred_commands: Vec::new(),
                 theme,
                 graphics: None,
-                text_system: TextLayoutContext::default(),
-                text_layouts: TextLayoutStorage::default(),
+                text_services: TextServices::default(),
                 format_buffer: String::with_capacity(2048),
             },
             windows: HashMap::new(),
@@ -70,8 +68,7 @@ pub struct AppContext {
     pub(super) theme: Theme,
 
     pub(super) graphics: Option<GraphicsContext>,
-    pub(super) text_system: TextLayoutContext,
-    pub(super) text_layouts: TextLayoutStorage,
+    pub(super) text_services: TextServices,
     pub(super) format_buffer: String,
 }
 
@@ -107,8 +104,7 @@ impl AppContext {
 
             let ui_builder = window.ui_context.begin_frame(
                 &mut self.clipboard,
-                &mut self.text_system,
-                &mut self.text_layouts,
+                self.text_services.clone(),
                 &mut self.format_buffer,
                 &self.theme,
                 &input,
@@ -128,11 +124,7 @@ impl AppContext {
             window.input.keyboard_events.clear();
 
             window.canvas.reset(Color::BLACK);
-            window.ui_context.finish(
-                &mut self.text_system,
-                &mut self.text_layouts,
-                &mut window.canvas,
-            );
+            window.ui_context.finish(&mut window.canvas);
 
             if window.canvas.has_unready_textures() {
                 window.window.request_redraw();

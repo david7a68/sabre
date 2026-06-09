@@ -1,6 +1,7 @@
 use crate::graphics::Texture;
 
 use super::Size;
+use super::text::EditableText;
 use super::widget::Button;
 use super::widget::Container;
 use super::widget::Dropdown;
@@ -55,11 +56,15 @@ pub trait CommonWidgetsExt<'a>: Container<'a> {
         Button::new(self.builder_mut(), Some(label)).finish()
     }
 
-    fn text_edit<'this>(&'this mut self, initial_text: &str, width: f32) -> TextEdit<'this>
+    fn text_edit<'this>(
+        &'this mut self,
+        text: &mut impl EditableText,
+        width: f32,
+    ) -> TextEdit<'this>
     where
         'a: 'this,
     {
-        TextEdit::new(self.builder_mut(), Size::Fixed(width)).default_text(initial_text)
+        TextEdit::new(self.builder_mut(), text, Size::Fixed(width))
     }
 
     fn label<'this>(&'this mut self, text: &str) -> Label<'this>

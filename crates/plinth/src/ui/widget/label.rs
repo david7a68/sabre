@@ -5,6 +5,7 @@ use crate::ui::UiBuilder;
 use crate::ui::style::BorderWidths;
 use crate::ui::style::CornerRadii;
 use crate::ui::style::StateFlags;
+use crate::ui::text::TextBuilderExt;
 
 use super::macros::forward_properties;
 

@@ -1,19 +1,15 @@
 use std::hash::Hash;
+use std::rc::Rc;
 use std::time::Duration;
-
-use rapidhash::v3::rapidhash_v3;
 
 use crate::graphics::Color;
 use crate::graphics::GradientPaint;
 use crate::graphics::Paint;
-use crate::graphics::TextAlignment;
-use crate::graphics::TextLayoutContext;
 use crate::shell::Clipboard;
 use crate::shell::Input;
 
 use super::Alignment;
 use super::Atom;
-use super::Flex;
 use super::LayoutDirection;
 use super::OverlayPosition;
 use super::Padding;
@@ -22,13 +18,14 @@ use super::Size;
 use super::UiElementId;
 use super::WidgetId;
 use super::context::LayoutContent;
+use super::context::UiContent;
 use super::context::UiContext;
 use super::style::BorderWidths;
 use super::style::CornerRadii;
 use super::style::StateFlags;
 use super::style::StyleId;
-use super::text::TextLayoutStorage;
 use super::text::TextOverflow;
+use super::text::TextServices;
 use super::theme::StyleClass;
 use super::theme::Theme;
 use super::widget::WidgetState;
@@ -42,8 +39,7 @@ pub struct UiBuilder<'a> {
     pub(super) context: &'a mut UiContext,
     pub clipboard: &'a mut Clipboard,
     pub format_buffer: &'a mut String,
-    pub text_context: &'a mut TextLayoutContext,
-    pub text_layouts: &'a mut TextLayoutStorage,
+    pub text_services: TextServices,
 
     /// The z_layer of the node this builder represents. Propagated to children.
     /// Overlay children receive `parent.layer + 1`.
@@ -204,19 +200,6 @@ impl UiBuilder<'_> {
         self
     }
 
-    pub fn text_overflow(&mut self, overflow: TextOverflow) -> &mut Self {
-        self.text_overflow = overflow;
-        self
-    }
-
-    pub fn clip_text(&mut self) -> &mut Self {
-        self.text_overflow(TextOverflow::Clip)
-    }
-
-    pub fn wrap_text(&mut self) -> &mut Self {
-        self.text_overflow(TextOverflow::Wrap)
-    }
-
     pub fn prev_state(&self) -> Option<&WidgetState> {
         self.context
             .widget_states
@@ -266,64 +249,24 @@ impl UiBuilder<'_> {
         self
     }
 
-    pub fn text(&mut self, text: &str, height: impl Into<Size>) -> &mut Self {
-        let (text_id, text_layout) = self.context.static_text_layout(self.text_layouts, self.id);
-
-        let text_hash = hash_string(text);
-
-        let needs_rebuild = text_layout.style_id != self.style_id
-            || text_layout.state != self.state
-            || text_layout.text_hash != text_hash;
-
-        if needs_rebuild {
-            let mut builder = self.text_context.layouts.ranged_builder(
-                &mut self.text_context.fonts,
-                text,
-                1.0,
-                false,
-            );
-
-            self.theme
-                .push_text_defaults(self.style_id, self.state, &mut builder);
-            builder.build_into(&mut text_layout.layout, text);
-
-            // Update cache tracking fields
-            text_layout.style_id = self.style_id;
-            text_layout.state = self.state;
-            text_layout.text_hash = text_hash;
-            text_layout.raw_text = text.to_string();
-            text_layout.needs_line_break = true;
-        }
-
-        let alignment = self
-            .theme
-            .resolve_style::<TextAlignment>(self.style_id, self.state);
-        let size = text_layout.layout.calculate_content_widths();
-
+    pub(crate) fn custom_content(
+        &mut self,
+        width: impl Into<Size>,
+        height: impl Into<Size>,
+        clip_overflow: bool,
+        content: Rc<dyn UiContent>,
+    ) -> &mut Self {
         self.context.ui_tree.add(
             Some(self.index),
             Atom {
-                width: Flex {
-                    min: size.min,
-                    max: size.max,
-                },
+                width: width.into(),
                 height: height.into(),
                 z_layer: self.layer,
                 is_modal: self.is_modal,
-                clip_overflow: matches!(self.text_overflow, TextOverflow::Clip),
+                clip_overflow,
                 ..Default::default()
             },
-            (
-                LayoutContent::Text {
-                    layout: text_id,
-                    cursor_size: 0.0,
-                    alignment,
-                    overflow: self.text_overflow,
-                    selection_color: Color::TRANSPARENT,
-                    cursor_color: Color::TRANSPARENT,
-                },
-                None,
-            ),
+            (LayoutContent::Custom(content), None),
         );
 
         self
@@ -354,8 +297,7 @@ impl UiBuilder<'_> {
 
             clipboard: self.clipboard,
             format_buffer: self.format_buffer,
-            text_context: self.text_context,
-            text_layouts: self.text_layouts,
+            text_services: self.text_services.clone(),
 
             is_modal: self.is_modal,
             layer: self.layer,
@@ -493,8 +435,7 @@ impl UiBuilder<'_> {
 
             clipboard: self.clipboard,
             format_buffer: self.format_buffer,
-            text_context: self.text_context,
-            text_layouts: self.text_layouts,
+            text_services: self.text_services.clone(),
 
             id: child_id,
             index: child_index,
@@ -507,9 +448,4 @@ impl UiBuilder<'_> {
             text_overflow: self.text_overflow,
         }
     }
-}
-
-/// Compute a hash of a string for cache invalidation
-fn hash_string(text: &str) -> u64 {
-    rapidhash_v3(text.as_bytes())
 }

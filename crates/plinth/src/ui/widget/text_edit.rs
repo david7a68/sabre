@@ -1,20 +1,21 @@
-use parley::PlainEditor;
 use winit::keyboard::KeyCode;
 use winit::keyboard::PhysicalKey;
 
 use crate::graphics::Color;
 use crate::graphics::GradientPaint;
 use crate::graphics::Paint;
-use crate::graphics::TextLayoutContext;
 use crate::shell::Clipboard;
 use crate::shell::Input;
-use crate::ui::Atom;
 use crate::ui::Size;
 use crate::ui::builder::UiBuilder;
-use crate::ui::context::LayoutContent;
 use crate::ui::style::BorderWidths;
 use crate::ui::style::CornerRadii;
 use crate::ui::style::StateFlags;
+use crate::ui::text::EditableText;
+use crate::ui::text::EditableTextContent;
+use crate::ui::text::EditableTextHandle;
+use crate::ui::text::TextEditCommand;
+use crate::ui::text::TextServices;
 use crate::ui::theme::StyleClass;
 use crate::ui::widget::ClickBehavior;
 use crate::ui::widget::Interaction;
@@ -23,13 +24,15 @@ use super::macros::forward_properties;
 
 pub struct TextEdit<'a> {
     builder: UiBuilder<'a>,
+    text: EditableTextHandle,
     interaction: Interaction,
     state_flags: StateFlags,
 }
 
 impl<'a> TextEdit<'a> {
-    pub fn new(builder: &'a mut UiBuilder<'_>, width: Size) -> Self {
+    pub fn new(builder: &'a mut UiBuilder<'_>, text: &mut impl EditableText, width: Size) -> Self {
         let mut builder = builder.child();
+        let text = text.handle();
 
         let (interaction, state_flags) = Interaction::compute(
             &builder,
@@ -62,6 +65,7 @@ impl<'a> TextEdit<'a> {
 
         Self {
             builder,
+            text,
             interaction,
             state_flags,
         }
@@ -70,37 +74,20 @@ impl<'a> TextEdit<'a> {
     forward_properties!(width, height);
 
     pub fn default_text(self, text: &str) -> Self {
-        let (_, dynamic_layout) = self
-            .builder
-            .context
-            .dynamic_text_layout(self.builder.text_layouts, self.builder.id);
-
-        if dynamic_layout.editor.raw_text().is_empty() {
-            dynamic_layout.editor.set_text(text);
+        if self.text.borrow().raw_text().is_empty() {
+            self.text.borrow_mut().set_text(text);
         }
 
         self
     }
 
     pub fn text(self, text: &str) -> Self {
-        let (_, dynamic_layout) = self
-            .builder
-            .context
-            .dynamic_text_layout(self.builder.text_layouts, self.builder.id);
-
-        dynamic_layout.editor.set_text(text);
-
+        self.text.borrow_mut().set_text(text);
         self
     }
 
     pub fn set_text(&mut self, text: &str) -> &mut Self {
-        let (_, dynamic_layout) = self
-            .builder
-            .context
-            .dynamic_text_layout(self.builder.text_layouts, self.builder.id);
-
-        dynamic_layout.editor.set_text(text);
-
+        self.text.borrow_mut().set_text(text);
         self
     }
 
@@ -116,7 +103,7 @@ impl<'a> TextEdit<'a> {
         self
     }
 
-    pub fn finish(mut self) -> (Option<&'a str>, Interaction) {
+    pub fn finish(mut self) -> Interaction {
         let is_focused = self.state_flags.contains(StateFlags::FOCUSED);
 
         if is_focused {
@@ -129,26 +116,18 @@ impl<'a> TextEdit<'a> {
         let theme = self.builder.theme;
 
         let input = self.builder.input().clone();
-        let (placement, has_text_layout) = self
-            .builder
-            .prev_state()
-            .map(|s| (s.placement, s.text_layout.is_some()))
-            .unwrap_or_default();
+        let placement = self.builder.prev_state().map(|s| s.placement);
+        let services = self.builder.text_services.clone();
 
-        let (text_layout_id, dynamic_layout) = self
-            .builder
-            .context
-            .dynamic_text_layout(self.builder.text_layouts, self.builder.id);
+        let mut paint = self
+            .text
+            .borrow_mut()
+            .apply_style(theme, style_id, self.state_flags);
 
-        let style =
-            theme.apply_plain_editor_styles(style_id, self.state_flags, &mut dynamic_layout.editor);
-
-        if has_text_layout {
+        if let Some(placement) = placement {
             Self::handle_mouse_events(
-                &mut dynamic_layout.editor.driver(
-                    &mut self.builder.text_context.fonts,
-                    &mut self.builder.text_context.layouts,
-                ),
+                &self.text,
+                &services,
                 &input,
                 placement,
                 self.interaction,
@@ -157,62 +136,37 @@ impl<'a> TextEdit<'a> {
         }
 
         if is_focused {
-            Self::handle_keyboard_events(
-                self.builder.clipboard,
-                self.builder.text_context,
-                &mut dynamic_layout.editor,
-                &input,
-            );
+            Self::handle_keyboard_events(self.builder.clipboard, &services, &self.text, &input);
         }
 
-        let cursor_size = style.font_size.get(self.state_flags) as f32;
+        if !is_focused {
+            paint.selection_color = Color::TRANSPARENT;
+            paint.cursor_color = Color::TRANSPARENT;
+        }
 
-        let (selection_color, cursor_color) = if is_focused {
-            let sel_color = style.selection_color.get(self.state_flags);
-            let cur_color = style.cursor_color.get(self.state_flags);
-            (sel_color, cur_color)
-        } else {
-            Default::default()
-        };
-
-        self.builder.context.ui_tree.add(
-            Some(self.builder.index),
-            Atom {
-                width: Size::Grow,
-                height: Size::Fit {
-                    min: cursor_size,
-                    max: f32::MAX,
-                },
-                ..Default::default()
+        let content = EditableTextContent::new(services, self.text.clone(), paint);
+        self.builder.custom_content(
+            Size::Grow,
+            Size::Fit {
+                min: paint.cursor_size,
+                max: f32::MAX,
             },
-            (
-                LayoutContent::Text {
-                    layout: text_layout_id,
-                    alignment: style.text_align.get(self.state_flags),
-                    overflow: crate::ui::TextOverflow::Clip,
-                    cursor_size,
-                    selection_color,
-                    cursor_color,
-                },
-                None,
-            ),
+            true,
+            content,
         );
 
-        let is_composing = dynamic_layout.editor.is_composing();
-        let text = (!is_composing).then_some(dynamic_layout.editor.raw_text());
-
-        (text, self.interaction)
+        self.interaction
     }
 
     fn handle_keyboard_events(
         clipboard: &mut Clipboard,
-        context: &mut TextLayoutContext,
-        editor: &mut PlainEditor<Color>,
+        services: &TextServices,
+        text: &EditableTextHandle,
         input: &Input,
     ) {
-        macro_rules! driver {
-            () => {
-                context.drive(editor)
+        macro_rules! command {
+            ($command:expr) => {
+                text.borrow_mut().command(services, $command)
             };
         }
 
@@ -228,69 +182,94 @@ impl<'a> TextEdit<'a> {
                 PhysicalKey::Code(KeyCode::ControlLeft | KeyCode::ControlRight) => {}
                 PhysicalKey::Code(KeyCode::ShiftLeft | KeyCode::ShiftRight) => {}
                 PhysicalKey::Code(KeyCode::KeyA) if ctrl_held => {
-                    driver!().select_all();
+                    command!(TextEditCommand::SelectAll);
                 }
                 PhysicalKey::Code(KeyCode::ArrowLeft) => match (ctrl_held, shift_held) {
-                    (true, true) => driver!().select_word_left(),
-                    (true, false) => driver!().move_word_left(),
-                    (false, true) => driver!().select_left(),
-                    (false, false) => driver!().move_left(),
+                    (true, true) => command!(TextEditCommand::MoveLeft {
+                        select: true,
+                        word: true,
+                    }),
+                    (true, false) => command!(TextEditCommand::MoveLeft {
+                        select: false,
+                        word: true,
+                    }),
+                    (false, true) => command!(TextEditCommand::MoveLeft {
+                        select: true,
+                        word: false,
+                    }),
+                    (false, false) => command!(TextEditCommand::MoveLeft {
+                        select: false,
+                        word: false,
+                    }),
                 },
                 PhysicalKey::Code(KeyCode::ArrowRight) => match (ctrl_held, shift_held) {
-                    (true, true) => driver!().select_word_right(),
-                    (true, false) => driver!().move_word_right(),
-                    (false, true) => driver!().select_right(),
-                    (false, false) => driver!().move_right(),
+                    (true, true) => command!(TextEditCommand::MoveRight {
+                        select: true,
+                        word: true,
+                    }),
+                    (true, false) => command!(TextEditCommand::MoveRight {
+                        select: false,
+                        word: true,
+                    }),
+                    (false, true) => command!(TextEditCommand::MoveRight {
+                        select: true,
+                        word: false,
+                    }),
+                    (false, false) => command!(TextEditCommand::MoveRight {
+                        select: false,
+                        word: false,
+                    }),
                 },
                 PhysicalKey::Code(KeyCode::ArrowUp) => match shift_held {
-                    true => driver!().select_up(),
-                    false => driver!().move_up(),
+                    true => command!(TextEditCommand::MoveUp { select: true }),
+                    false => command!(TextEditCommand::MoveUp { select: false }),
                 },
                 PhysicalKey::Code(KeyCode::ArrowDown) => match shift_held {
-                    true => driver!().select_down(),
-                    false => driver!().move_down(),
+                    true => command!(TextEditCommand::MoveDown { select: true }),
+                    false => command!(TextEditCommand::MoveDown { select: false }),
                 },
                 PhysicalKey::Code(KeyCode::PageUp) => match shift_held {
-                    true => driver!().select_up(),
-                    false => driver!().move_up(),
+                    true => command!(TextEditCommand::MoveUp { select: true }),
+                    false => command!(TextEditCommand::MoveUp { select: false }),
                 },
                 PhysicalKey::Code(KeyCode::PageDown) => match shift_held {
-                    true => driver!().select_down(),
-                    false => driver!().move_down(),
+                    true => command!(TextEditCommand::MoveDown { select: true }),
+                    false => command!(TextEditCommand::MoveDown { select: false }),
                 },
                 PhysicalKey::Code(KeyCode::Backspace) => match ctrl_held {
-                    true => driver!().backdelete_word(),
-                    false => driver!().backdelete(),
+                    true => command!(TextEditCommand::Backdelete { word: true }),
+                    false => command!(TextEditCommand::Backdelete { word: false }),
                 },
                 PhysicalKey::Code(KeyCode::Delete) => match ctrl_held {
-                    true => driver!().delete_word(),
-                    false => driver!().delete(),
+                    true => command!(TextEditCommand::Delete { word: true }),
+                    false => command!(TextEditCommand::Delete { word: false }),
                 },
                 PhysicalKey::Code(KeyCode::Home) => match (ctrl_held, shift_held) {
-                    (true, true) => driver!().select_to_text_start(),
-                    (true, false) => driver!().move_to_text_start(),
-                    (false, true) => driver!().select_to_line_start(),
-                    (false, false) => driver!().move_to_line_start(),
+                    (true, true) => command!(TextEditCommand::MoveToTextStart { select: true }),
+                    (true, false) => command!(TextEditCommand::MoveToTextStart { select: false }),
+                    (false, true) => command!(TextEditCommand::MoveToLineStart { select: true }),
+                    (false, false) => command!(TextEditCommand::MoveToLineStart { select: false }),
                 },
                 PhysicalKey::Code(KeyCode::End) => match (ctrl_held, shift_held) {
-                    (true, true) => driver!().select_to_text_end(),
-                    (true, false) => driver!().move_to_text_end(),
-                    (false, true) => driver!().select_to_line_end(),
-                    (false, false) => driver!().move_to_line_end(),
+                    (true, true) => command!(TextEditCommand::MoveToTextEnd { select: true }),
+                    (true, false) => command!(TextEditCommand::MoveToTextEnd { select: false }),
+                    (false, true) => command!(TextEditCommand::MoveToLineEnd { select: true }),
+                    (false, false) => command!(TextEditCommand::MoveToLineEnd { select: false }),
                 },
                 PhysicalKey::Code(KeyCode::KeyC) if ctrl_held => {
-                    if let Some(text) = editor.selected_text() {
-                        clipboard.set_text(text);
+                    let selected = text.borrow().selected_text().map(str::to_owned);
+                    if let Some(selected) = selected {
+                        clipboard.set_text(&selected);
                     }
                 }
                 PhysicalKey::Code(KeyCode::KeyV) if ctrl_held => {
                     if let Some(text) = clipboard.get_text() {
-                        driver!().insert_or_replace_selection(&text);
+                        command!(TextEditCommand::InsertOrReplaceSelection(&text));
                     }
                 }
                 _ => {
                     if let Some(text) = &event.text {
-                        driver!().insert_or_replace_selection(text.as_str());
+                        command!(TextEditCommand::InsertOrReplaceSelection(text.as_str()));
                     }
                 }
             }
@@ -298,7 +277,8 @@ impl<'a> TextEdit<'a> {
     }
 
     fn handle_mouse_events(
-        driver: &mut parley::PlainEditorDriver<Color>,
+        text: &EditableTextHandle,
+        services: &TextServices,
         input: &Input,
         placement: glamour::Rect<crate::ui::Pixels>,
         interaction: Interaction,
@@ -319,21 +299,48 @@ impl<'a> TextEdit<'a> {
         let is_shift_held = input.modifiers.shift_key();
         let is_left_down = input.mouse_state.is_left_down();
 
-        if interaction.is_activated && is_hovered {
+        let command = if interaction.is_activated && is_hovered {
             match left_click_count {
-                4.. => driver.select_all(),
-                3 => driver.select_line_at_point(local.x, local.y),
-                2 => driver.select_word_at_point(local.x, local.y),
-                1 if is_shift_held => driver.extend_selection_to_point(local.x, local.y),
-                1 => driver.move_to_point(local.x, local.y),
-                0 => {}
+                4.. => Some(TextEditCommand::SelectAll),
+                3 => Some(TextEditCommand::SelectLineAtPoint {
+                    x: local.x,
+                    y: local.y,
+                }),
+                2 => Some(TextEditCommand::SelectWordAtPoint {
+                    x: local.x,
+                    y: local.y,
+                }),
+                1 if is_shift_held => Some(TextEditCommand::ExtendSelectionToPoint {
+                    x: local.x,
+                    y: local.y,
+                }),
+                1 => Some(TextEditCommand::MoveToPoint {
+                    x: local.x,
+                    y: local.y,
+                }),
+                0 => None,
             }
         } else if is_left_down && is_focused {
             match left_click_count {
-                3 => driver.select_line_at_point(local.x, local.y),
-                2 => driver.select_word_at_point(local.x, local.y),
-                _ => driver.extend_selection_to_point(local.x, local.y),
+                3 => Some(TextEditCommand::SelectLineAtPoint {
+                    x: local.x,
+                    y: local.y,
+                }),
+                2 => Some(TextEditCommand::SelectWordAtPoint {
+                    x: local.x,
+                    y: local.y,
+                }),
+                _ => Some(TextEditCommand::ExtendSelectionToPoint {
+                    x: local.x,
+                    y: local.y,
+                }),
             }
+        } else {
+            None
+        };
+
+        if let Some(command) = command {
+            text.borrow_mut().command(services, command);
         }
     }
 }

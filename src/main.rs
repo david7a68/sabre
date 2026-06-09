@@ -13,6 +13,7 @@ use plinth::ui::Size;
 use plinth::ui::Size::Flex;
 use plinth::ui::Size::Grow;
 use plinth::ui::StyleClass;
+use plinth::ui::TextBuilderExt;
 use plinth::ui::Theme;
 use plinth::ui::UiBuilder;
 use plinth::ui::style::StateFlags;

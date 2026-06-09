@@ -9,6 +9,7 @@ use plinth::ui::Alignment;
 use plinth::ui::CommonWidgetsExt;
 use plinth::ui::LayoutDirection;
 use plinth::ui::Padding;
+use plinth::ui::PlainEditableText;
 use plinth::ui::UiBuilder;
 
 fn main() {
@@ -34,7 +35,7 @@ impl AppLifecycleHandler for TextEditDemo {
 
 #[derive(Default)]
 struct AppWindow {
-    text_content: String,
+    text_content: PlainEditableText,
 }
 
 impl AppWindow {
@@ -55,27 +56,20 @@ impl AppWindow {
 
         panel.label("TextEdit Widget Demo:");
 
-        let (text_result, interaction) = panel
-            .text_edit(&self.text_content, 200.0)
+        let interaction = panel
+            .text_edit(&mut self.text_content, 200.0)
             .with_height(100.0)
             .finish();
 
-        let is_composing = if let Some(text_str) = text_result {
-            self.text_content = text_str.to_string();
-            false
-        } else {
-            true
-        };
+        let text = self.text_content.raw_text();
+        let is_composing = self.text_content.is_composing();
 
         let mut info_panel = panel
             .surface()
             .with_child_direction(LayoutDirection::Horizontal);
 
-        info_panel.label(&format!("Current text: {}", self.text_content));
-        info_panel.label(&format!(
-            "Text length: {} characters",
-            self.text_content.len()
-        ));
+        info_panel.label(&format!("Current text: {text}"));
+        info_panel.label(&format!("Text length: {} characters", text.len()));
         info_panel.label(&format!("Hovered: {}", interaction.is_hovered));
         info_panel.label(&format!("Clicked: {}", interaction.is_activated));
 

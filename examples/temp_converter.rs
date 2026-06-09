@@ -14,6 +14,7 @@ use plinth::shell::Context;
 use plinth::shell::WindowConfig;
 use plinth::ui::Alignment;
 use plinth::ui::CommonWidgetsExt;
+use plinth::ui::PlainEditableText;
 use plinth::ui::StyleClass;
 use plinth::ui::Theme;
 use plinth::ui::UiBuilder;
@@ -64,6 +65,8 @@ impl AppLifecycleHandler for Demo {
 struct AppWindow {
     temp_f: f32,
     temp_c: Option<f32>,
+    edit_c: PlainEditableText,
+    edit_f: PlainEditableText,
 }
 
 impl AppWindow {
@@ -76,16 +79,17 @@ impl AppWindow {
             .child_alignment(Alignment::Center, Alignment::Center)
             .surface();
 
-        let mut edit_c = panel.text_edit("", 60.0);
+        let mut edit_c = panel.text_edit(&mut self.edit_c, 60.0);
         if let Some(temp_c) = self.temp_c.take() {
             edit_c.set_text(&format!("{:.2}", temp_c));
         }
 
-        let temp_c = parse_temp(edit_c.finish());
+        let temp_c_interaction = edit_c.finish();
+        let temp_c = parse_temp(&self.edit_c, temp_c_interaction);
 
         panel.label("°C =");
 
-        let mut edit_f = panel.text_edit("", 60.0);
+        let mut edit_f = panel.text_edit(&mut self.edit_f, 60.0);
 
         if let Some(temp_c) = temp_c {
             let temp_f = temp_c * 9.0 / 5.0 + 32.0;
@@ -95,7 +99,8 @@ impl AppWindow {
             }
         }
 
-        if let Some(temp) = parse_temp(edit_f.finish()) {
+        let temp_f_interaction = edit_f.finish();
+        if let Some(temp) = parse_temp(&self.edit_f, temp_f_interaction) {
             let temp_c = (temp - 32.0) * 5.0 / 9.0;
 
             if self.temp_c != Some(temp_c) {
@@ -113,10 +118,9 @@ impl AppWindow {
     }
 }
 
-fn parse_temp((text, interaction): (Option<&str>, Interaction)) -> Option<f32> {
-    if let Some(text) = text
-        && interaction.is_focused
-        && let Ok(temp) = text.parse::<f32>()
+fn parse_temp(text: &PlainEditableText, interaction: Interaction) -> Option<f32> {
+    if interaction.is_focused
+        && let Ok(temp) = text.raw_text().parse::<f32>()
     {
         Some(temp)
     } else {

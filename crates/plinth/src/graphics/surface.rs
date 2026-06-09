@@ -132,7 +132,15 @@ impl Surface {
         &mut self,
         device: &wgpu::Device,
         storage_version: u64,
-    ) -> Result<(wgpu::SurfaceTexture, &mut Frame, &RenderPipeline, &mut BindGroupCache), RenderError> {
+    ) -> Result<
+        (
+            wgpu::SurfaceTexture,
+            &mut Frame,
+            &RenderPipeline,
+            &mut BindGroupCache,
+        ),
+        RenderError,
+    > {
         let output = tracing::info_span!("get_current_texture").in_scope(|| {
             let mut attempts = 0;
 

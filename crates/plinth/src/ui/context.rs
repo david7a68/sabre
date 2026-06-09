@@ -1,3 +1,4 @@
+use std::rc::Rc;
 use std::time::Duration;
 
 use glamour::Contains;
@@ -6,13 +7,10 @@ use glamour::Rect;
 use glamour::Size2;
 
 use crate::graphics::Canvas;
-use crate::graphics::ClipRect;
 use crate::graphics::Color;
 use crate::graphics::GradientPaint;
 use crate::graphics::Paint;
 use crate::graphics::Primitive;
-use crate::graphics::TextAlignment;
-use crate::graphics::TextLayoutContext;
 use crate::shell::Clipboard;
 use crate::shell::Input;
 use crate::ui::theme::Theme;
@@ -20,6 +18,7 @@ use crate::ui::theme::Theme;
 use super::Atom;
 use super::IdMap;
 use super::LayoutTree;
+use super::Pixels;
 use super::Position;
 use super::StyleClass;
 use super::UiBuilder;
@@ -27,10 +26,8 @@ use super::UiElementId;
 use super::WidgetId;
 use super::style::BorderWidths;
 use super::style::CornerRadii;
-use super::text::TextLayoutId;
-use super::text::TextLayoutMut;
-use super::text::TextLayoutStorage;
 use super::text::TextOverflow;
+use super::text::TextServices;
 use super::widget::WidgetState;
 
 #[derive(Default)]
@@ -58,12 +55,10 @@ pub(crate) struct UiContext {
 }
 
 impl UiContext {
-    #[expect(clippy::too_many_arguments)]
     pub(crate) fn begin_frame<'a>(
         &'a mut self,
         clipboard: &'a mut Clipboard,
-        text_context: &'a mut TextLayoutContext,
-        text_layouts: &'a mut TextLayoutStorage,
+        text_services: TextServices,
         format_buffer: &'a mut String,
         theme: &'a Theme,
         input: &'a Input,
@@ -115,8 +110,7 @@ impl UiContext {
             context: self,
 
             clipboard,
-            text_context,
-            text_layouts,
+            text_services,
             format_buffer,
 
             id,
@@ -141,44 +135,6 @@ impl UiContext {
             });
 
         &mut container.state
-    }
-
-    pub fn static_text_layout<'a>(
-        &mut self,
-        text_layouts: &'a mut TextLayoutStorage,
-        widget_id: WidgetId,
-    ) -> (TextLayoutId, &'a mut super::text::StaticTextLayout) {
-        let state = self.state_mut(widget_id);
-
-        let static_layout_id = match state.text_layout {
-            Some(TextLayoutId::Static(id)) => Some(id),
-            Some(other) => panic!("Widget has non-static text layout assigned: {other:?}"),
-            None => None,
-        };
-
-        let (layout_id, layout) = text_layouts.get_or_create_static(static_layout_id);
-        state.text_layout = Some(TextLayoutId::Static(layout_id));
-
-        (TextLayoutId::Static(layout_id), layout)
-    }
-
-    pub fn dynamic_text_layout<'a>(
-        &mut self,
-        text_layouts: &'a mut TextLayoutStorage,
-        widget_id: WidgetId,
-    ) -> (TextLayoutId, &'a mut super::text::DynamicTextLayout) {
-        let state = self.state_mut(widget_id);
-
-        let dynamic_layout_id = match state.text_layout {
-            Some(TextLayoutId::Dynamic(id)) => Some(id),
-            Some(other) => panic!("Widget has non-dynamic text layout assigned: {other:?}"),
-            None => None,
-        };
-
-        let (layout_id, layout) = text_layouts.get_or_create_dynamic(dynamic_layout_id);
-        state.text_layout = Some(TextLayoutId::Dynamic(layout_id));
-
-        (TextLayoutId::Dynamic(layout_id), layout)
     }
 
     /// Insert an out-of-flow overlay node into the layout tree and return its index.
@@ -207,25 +163,12 @@ impl UiContext {
         )
     }
 
-    pub fn finish(
-        &mut self,
-        text_context: &mut TextLayoutContext,
-        text_layouts: &mut TextLayoutStorage,
-        canvas: &mut Canvas,
-    ) {
-        self.ui_tree.compute_layout(|(content, _), max_width| {
-            let (layout_id, alignment, overflow) = match content {
-                LayoutContent::Text {
-                    layout,
-                    alignment,
-                    overflow,
-                    ..
-                } => (layout, alignment, overflow),
-                _ => return None,
-            };
-
-            text_layouts.break_lines(text_context, *layout_id, max_width, *alignment, *overflow)
-        });
+    pub fn finish(&mut self, canvas: &mut Canvas) {
+        self.ui_tree
+            .compute_layout(|(content, _), max_width| match content {
+                LayoutContent::Custom(custom) => custom.measure(max_width),
+                _ => None,
+            });
 
         for (node, (content, widget_id)) in self.ui_tree.iter_nodes_by_layer() {
             let layout = &node.result;
@@ -252,55 +195,16 @@ impl UiContext {
                         use_nearest_sampling: false,
                     });
                 }
-                LayoutContent::Text {
-                    layout: text_layout_id,
-                    alignment: _,
-                    overflow: _,
-                    cursor_size,
-                    selection_color,
-                    cursor_color,
-                } => match text_layouts.get_mut(*text_layout_id) {
-                    None => {}
-                    Some(TextLayoutMut::Static(text_layout)) => {
-                        canvas.draw_text_layout(
-                            text_layout,
-                            [layout.x, layout.y],
-                            node.result.effective_clip,
-                        );
-                    }
-                    Some(TextLayoutMut::Dynamic(text_layout)) => {
-                        let clip = node.result.effective_clip;
-                        text_layout.editor.selection_geometry_with(|bbox, _| {
-                            Self::draw_selection_rect(
-                                canvas,
-                                &bbox,
-                                *selection_color,
-                                layout.x,
-                                layout.y,
-                                clip,
-                            );
-                        });
-
-                        if let Some(rect) = text_layout.editor.cursor_geometry(*cursor_size) {
-                            Self::draw_cursor(
-                                canvas,
-                                &rect,
-                                *cursor_color,
-                                layout.x,
-                                layout.y,
-                                clip,
-                            );
-                        }
-
-                        canvas.draw_text_layout(
-                            text_layout
-                                .editor
-                                .layout(&mut text_context.fonts, &mut text_context.layouts),
-                            [layout.x, layout.y],
-                            clip,
-                        );
-                    }
-                },
+                LayoutContent::Custom(content) => {
+                    content.draw(
+                        canvas,
+                        Rect::from_origin_and_size(
+                            (layout.x, layout.y),
+                            (layout.width, layout.height),
+                        ),
+                        node.result.effective_clip,
+                    );
+                }
             }
 
             if let Some(widget_id) = widget_id {
@@ -322,15 +226,9 @@ impl UiContext {
             }
         }
 
-        let removed = self
-            .widget_states
-            .extract_if(|_, container| container.frame_last_used < self.frame_counter);
-
-        for (_, element) in removed {
-            if let Some(text_layout_id) = element.state.text_layout {
-                text_layouts.remove(text_layout_id);
-            }
-        }
+        self.widget_states
+            .extract_if(|_, container| container.frame_last_used < self.frame_counter)
+            .for_each(drop);
 
         if self.widget_states.len() * 2 < self.widget_states.capacity() {
             self.widget_states.shrink_to_fit();
@@ -338,58 +236,20 @@ impl UiContext {
 
         self.frame_counter += 1;
     }
-
-    fn draw_selection_rect(
-        canvas: &mut Canvas,
-        rect: &parley::BoundingBox,
-        color: Color,
-        x: f32,
-        y: f32,
-        clip: ClipRect,
-    ) {
-        let y0 = (y + rect.y0 as f32).round();
-        let y1 = (y + rect.y1 as f32).round();
-
-        canvas.draw(Primitive {
-            point: [x + rect.x0 as f32, y0],
-            size: [(rect.x1 - rect.x0) as f32, y1 - y0],
-            clip,
-            paint: Paint::solid(color),
-            border: GradientPaint::default(),
-            border_width: [0.0; 4],
-            corner_radii: [0.0; 4],
-            use_nearest_sampling: false,
-        });
-    }
-
-    fn draw_cursor(
-        canvas: &mut Canvas,
-        cursor_rect: &parley::BoundingBox,
-        color: Color,
-        x: f32,
-        y: f32,
-        clip: ClipRect,
-    ) {
-        let y0 = (y + cursor_rect.y0 as f32).round();
-        let y1 = (y + cursor_rect.y1 as f32).round();
-
-        canvas.draw(Primitive {
-            point: [x + cursor_rect.x0 as f32, y0],
-            size: [2.0, y1 - y0], // 2px wide cursor
-            clip,
-            paint: Paint::solid(color),
-            border: GradientPaint::default(),
-            border_width: [0.0; 4],
-            corner_radii: [0.0; 4],
-            use_nearest_sampling: false,
-        });
-    }
 }
 
 #[derive(Default)]
 pub(super) struct WidgetContainer {
     pub(super) state: WidgetState,
     pub(super) frame_last_used: u64,
+}
+
+pub(crate) type LayoutRect = Rect<Pixels>;
+
+pub(crate) trait UiContent {
+    fn measure(&self, max_width: f32) -> Option<f32>;
+
+    fn draw(&self, canvas: &mut Canvas, rect: LayoutRect, clip: crate::graphics::ClipRect);
 }
 
 pub(super) enum LayoutContent {
@@ -400,12 +260,77 @@ pub(super) enum LayoutContent {
         border_width: BorderWidths,
         corner_radii: CornerRadii,
     },
-    Text {
-        layout: TextLayoutId,
-        alignment: TextAlignment,
-        overflow: TextOverflow,
-        cursor_size: f32,
-        selection_color: Color,
-        cursor_color: Color,
-    },
+    Custom(Rc<dyn UiContent>),
+}
+
+#[cfg(test)]
+mod tests {
+    use std::cell::RefCell;
+    use std::rc::Rc;
+
+    use crate::graphics::Canvas;
+    use crate::graphics::ClipRect;
+    use crate::ui::Size;
+
+    use super::*;
+
+    struct MeasureProbe {
+        widths: Rc<RefCell<Vec<f32>>>,
+        height: f32,
+    }
+
+    impl UiContent for MeasureProbe {
+        fn measure(&self, max_width: f32) -> Option<f32> {
+            self.widths.borrow_mut().push(max_width);
+            Some(self.height)
+        }
+
+        fn draw(&self, _canvas: &mut Canvas, _rect: LayoutRect, _clip: ClipRect) {}
+    }
+
+    #[test]
+    fn custom_content_measurement_sets_fit_height() {
+        let widths = Rc::new(RefCell::new(Vec::new()));
+        let content: Rc<dyn UiContent> = Rc::new(MeasureProbe {
+            widths: widths.clone(),
+            height: 24.0,
+        });
+        let mut context = UiContext::default();
+        let root = context.ui_tree.add(
+            None,
+            Atom {
+                width: Size::Fixed(100.0),
+                height: Size::Fixed(100.0),
+                ..Default::default()
+            },
+            (LayoutContent::None, None),
+        );
+        context.ui_tree.add(
+            Some(root),
+            Atom {
+                width: Size::Fixed(80.0),
+                height: Size::Fit {
+                    min: 0.0,
+                    max: f32::MAX,
+                },
+                ..Default::default()
+            },
+            (LayoutContent::Custom(content), None),
+        );
+
+        context
+            .ui_tree
+            .compute_layout(|(content, _), max_width| match content {
+                LayoutContent::Custom(content) => content.measure(max_width),
+                _ => None,
+            });
+
+        let heights = context
+            .ui_tree
+            .iter_nodes_by_layer()
+            .map(|(node, _)| node.result.height)
+            .collect::<Vec<_>>();
+        assert_eq!(widths.borrow().as_slice(), &[80.0]);
+        assert_eq!(heights[1], 24.0);
+    }
 }

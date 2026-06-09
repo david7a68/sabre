@@ -13,6 +13,7 @@ use crate::ui::UiBuilder;
 use crate::ui::WidgetId;
 use crate::ui::style::CornerRadii;
 use crate::ui::style::StateFlags;
+use crate::ui::text::TextBuilderExt;
 
 use super::ClickBehavior;
 use super::Interaction;
@@ -156,8 +157,7 @@ impl<'a> Dropdown<'a> {
                 context: root.context,
                 clipboard: root.clipboard,
                 format_buffer: root.format_buffer,
-                text_context: root.text_context,
-                text_layouts: root.text_layouts,
+                text_services: root.text_services.clone(),
                 id: child_id,
                 index: child_index,
                 style_id: root.style_id,

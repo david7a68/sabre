@@ -81,17 +81,38 @@ impl AppWindow {
         panel.label("Select a color:");
         let items = ["Red", "Green", "Blue", "Yellow", "Purple"];
         let prev = self.selected_color;
-        self.selected_color = panel.dropdown("color_dropdown", &self.color_label, self.selected_color, items);
+        self.selected_color = panel.dropdown(
+            "color_dropdown",
+            &self.color_label,
+            self.selected_color,
+            items,
+        );
         if self.selected_color != prev {
-            self.color_label = format!("Selected: {}", self.selected_color.map(|i| items[i]).unwrap_or("Click to select"));
+            self.color_label = format!(
+                "Selected: {}",
+                self.selected_color
+                    .map(|i| items[i])
+                    .unwrap_or("Click to select")
+            );
         }
 
         panel.label("Select a size:");
-        let sizes = ["Small (8px)", "Medium (12px)", "Large (16px)", "Extra Large (20px)"];
+        let sizes = [
+            "Small (8px)",
+            "Medium (12px)",
+            "Large (16px)",
+            "Extra Large (20px)",
+        ];
         let prev = self.selected_size;
-        self.selected_size = panel.dropdown("size_dropdown", &self.size_label, self.selected_size, sizes);
+        self.selected_size =
+            panel.dropdown("size_dropdown", &self.size_label, self.selected_size, sizes);
         if self.selected_size != prev {
-            self.size_label = format!("Selected: {}", self.selected_size.map(|i| sizes[i]).unwrap_or("Click to select"));
+            self.size_label = format!(
+                "Selected: {}",
+                self.selected_size
+                    .map(|i| sizes[i])
+                    .unwrap_or("Click to select")
+            );
         }
 
         panel.label("Select a style (custom items):");
@@ -104,7 +125,12 @@ impl AppWindow {
             style_items.iter().map(|s| s as &dyn DropdownItem),
         );
         if self.selected_style != prev {
-            self.style_label = format!("Selected: {}", self.selected_style.map(|i| style_items[i]).unwrap_or("Click to select"));
+            self.style_label = format!(
+                "Selected: {}",
+                self.selected_style
+                    .map(|i| style_items[i])
+                    .unwrap_or("Click to select")
+            );
         }
 
         panel.label("");

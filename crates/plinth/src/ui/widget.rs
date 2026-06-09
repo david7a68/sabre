@@ -7,7 +7,6 @@ use glamour::Rect;
 use std::mem::size_of;
 
 use crate::ui::Pixels;
-use crate::ui::text::TextLayoutId;
 
 use super::Alignment;
 use super::LayoutDirection;
@@ -181,8 +180,6 @@ pub struct WidgetState {
     // Placed immediately after placement to ensure that it is 8-byte aligned
     // for safe storage of any Pod type up to 8 bytes in size.
     custom_data: [u8; 8],
-
-    pub text_layout: Option<TextLayoutId>,
 
     /// Whether the widget was being actively pressed last frame
     pub was_active: bool,

@@ -1,6 +1,7 @@
 use crate::ui::StyleClass;
 use crate::ui::UiBuilder;
 use crate::ui::style::StateFlags;
+use crate::ui::text::TextBuilderExt;
 
 use super::ClickBehavior;
 use super::Interaction;
