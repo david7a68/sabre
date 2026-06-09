@@ -16,6 +16,7 @@ type BindGroupCache = HashMap<(StorageId, StorageId), wgpu::BindGroup>;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RenderError {
     Occluded,
+    SurfaceLost,
     TimedOut,
     Unknown,
 }
@@ -132,15 +133,28 @@ impl Surface {
         &mut self,
         device: &wgpu::Device,
         storage_version: u64,
-    ) -> Result<(wgpu::SurfaceTexture, &mut Frame, &RenderPipeline, &mut BindGroupCache), RenderError> {
+    ) -> Result<
+        (
+            wgpu::SurfaceTexture,
+            &mut Frame,
+            &RenderPipeline,
+            &mut BindGroupCache,
+        ),
+        RenderError,
+    > {
         let output = tracing::info_span!("get_current_texture").in_scope(|| {
             let mut attempts = 0;
+            let mut surface_lost = false;
 
             let mut output = self.handle.get_current_texture();
 
             loop {
                 if attempts > 3 {
-                    break Err(RenderError::TimedOut);
+                    break Err(if surface_lost {
+                        RenderError::SurfaceLost
+                    } else {
+                        RenderError::TimedOut
+                    });
                 }
 
                 match output {
@@ -155,7 +169,9 @@ impl Surface {
                     wgpu::CurrentSurfaceTexture::Timeout => break Err(RenderError::TimedOut),
                     wgpu::CurrentSurfaceTexture::Occluded => break Err(RenderError::Occluded),
                     wgpu::CurrentSurfaceTexture::Lost => {
-                        unimplemented!("Surface lost handling not implemented yet")
+                        surface_lost = true;
+                        self.resize_if_necessary(device);
+                        output = self.handle.get_current_texture();
                     }
                     wgpu::CurrentSurfaceTexture::Validation => break Err(RenderError::Unknown),
                 }

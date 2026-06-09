@@ -297,15 +297,17 @@ impl TextureManagerInner {
         self.get(self.opaque_pixel.get()).unwrap()
     }
 
-    #[inline]
-    fn storage_view(self: &Rc<Self>, storage_id: StorageId) -> Option<wgpu::TextureView> {
-        let storage = match storage_id.format {
+    fn manager_for_format(&self, format: TextureFormat) -> &RefCell<FormattedTextureManager> {
+        match format {
             TextureFormat::Rgba8Unorm => &self.rgba_textures,
             TextureFormat::Rgba8UnormSrgb => &self.srgba_textures,
             TextureFormat::R8Unorm => &self.alpha_textures,
-        };
+        }
+    }
 
-        storage
+    #[inline]
+    fn storage_view(self: &Rc<Self>, storage_id: StorageId) -> Option<wgpu::TextureView> {
+        self.manager_for_format(storage_id.format)
             .borrow()
             .storage
             .get(storage_id.id)
@@ -342,15 +344,11 @@ impl TextureManagerInner {
 
                 let usage = texture_map.remove(id).unwrap();
 
-                let storage = match usage.format {
-                    TextureFormat::Rgba8Unorm => &self.rgba_textures,
-                    TextureFormat::Rgba8UnormSrgb => &self.srgba_textures,
-                    TextureFormat::R8Unorm => &self.alpha_textures,
-                };
-
-                storage
-                    .borrow_mut()
-                    .release(usage.storage, usage.atlas_id, &self.storage_version);
+                self.manager_for_format(usage.format).borrow_mut().release(
+                    usage.storage,
+                    usage.atlas_id,
+                    &self.storage_version,
+                );
             }
         }
     }
@@ -364,15 +362,11 @@ impl TextureManagerInner {
             if usage.refcount == 0 {
                 let usage = texture_map.remove(id).unwrap();
 
-                let storage = match usage.format {
-                    TextureFormat::Rgba8Unorm => &self.rgba_textures,
-                    TextureFormat::Rgba8UnormSrgb => &self.srgba_textures,
-                    TextureFormat::R8Unorm => &self.alpha_textures,
-                };
-
-                storage
-                    .borrow_mut()
-                    .release(usage.storage, usage.atlas_id, &self.storage_version);
+                self.manager_for_format(usage.format).borrow_mut().release(
+                    usage.storage,
+                    usage.atlas_id,
+                    &self.storage_version,
+                );
             }
         }
     }
@@ -401,12 +395,7 @@ impl TextureManagerInner {
             bytes_per_pixel(format)
         );
 
-        let mut manager = match format {
-            TextureFormat::Rgba8UnormSrgb => &self.srgba_textures,
-            TextureFormat::Rgba8Unorm => &self.rgba_textures,
-            TextureFormat::R8Unorm => &self.alpha_textures,
-        }
-        .borrow_mut();
+        let mut manager = self.manager_for_format(format).borrow_mut();
 
         let (texture, usage, rectangle) =
             manager.allocate(width, height, &self.device, &self.storage_version);
@@ -481,13 +470,11 @@ impl TextureManagerInner {
             )
         };
 
-        let (format, mut manager) = match color_type {
-            image::ColorType::Rgba8 => (
-                TextureFormat::Rgba8UnormSrgb,
-                self.srgba_textures.borrow_mut(),
-            ),
+        let format = match color_type {
+            image::ColorType::Rgba8 => TextureFormat::Rgba8UnormSrgb,
             other => unimplemented!("Unsupported color type: {:?}", other),
         };
+        let mut manager = self.manager_for_format(format).borrow_mut();
 
         let width = width
             .try_into()
@@ -687,12 +674,7 @@ impl FormattedTextureManager {
     }
 
     /// Release a reference for the given texture.
-    fn release(
-        &mut self,
-        storage_id: RawStorageId,
-        node: AllocId,
-        storage_version: &Cell<u64>,
-    ) {
+    fn release(&mut self, storage_id: RawStorageId, node: AllocId, storage_version: &Cell<u64>) {
         let storage = self.storage.get_mut(storage_id).unwrap();
         storage.atlas.deallocate(node);
         storage.refcount -= 1;

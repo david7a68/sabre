@@ -12,6 +12,14 @@ use super::types::Position;
 use super::types::Size;
 use super::types::Size::*;
 
+fn clamp_size(size: f32, spec: Size) -> f32 {
+    match spec {
+        Fixed(value) => value.max(0.0),
+        Fit { min, max } | Flex { min, max } => size.clamp(min, max),
+        Grow => size.max(0.0),
+    }
+}
+
 pub(super) fn compute_major_axis_fit_sizes<D: LayoutDirectionExt>(
     nodes: &mut [LayoutNode],
     children: &[NodeIndexArray],
@@ -120,23 +128,23 @@ pub(super) fn compute_major_axis_grow_sizes<D: LayoutDirectionExt>(
 
             match D::major_size_spec(child) {
                 Fixed(_) | Fit { .. } => false,
-                Flex { max, .. } => {
+                Flex { min, max } => {
                     let tentative_size = child_size + distributed_size;
 
-                    let (is_done, actual_size) = if tentative_size > max {
-                        (true, max)
-                    } else {
-                        (false, tentative_size)
-                    };
+                    let actual_size = tentative_size.clamp(min, max);
+                    let delta = actual_size - child_size;
+                    let is_done =
+                        actual_size <= min || actual_size >= max || delta.abs() <= f32::EPSILON;
 
                     D::set_major_size(child, actual_size);
-                    remaining_size -= actual_size - child_size;
+                    remaining_size -= delta;
 
                     !is_done
                 }
                 Grow if remaining_size > 0.0 => {
-                    D::set_major_size(child, child_size + distributed_size);
-                    remaining_size -= distributed_size;
+                    let actual_size = (child_size + distributed_size).max(0.0);
+                    remaining_size -= actual_size - child_size;
+                    D::set_major_size(child, actual_size);
                     true
                 }
                 Grow => false,
@@ -365,8 +373,11 @@ pub(super) fn compute_minor_axis_grow_sizes<D: LayoutDirectionExt>(
         // Only in-flow children consume the parent's minor-axis remaining space.
         if nodes[child_id.0 as usize].atom.position.is_in_flow() {
             let child = &mut nodes[child_id.0 as usize];
-            if matches!(D::minor_size_spec(child), Grow) {
-                D::set_minor_size(child, remaining_size);
+            match D::minor_size_spec(child) {
+                Grow | Flex { .. } => {
+                    D::set_minor_size(child, clamp_size(remaining_size, D::minor_size_spec(child)));
+                }
+                Fixed(_) | Fit { .. } => {}
             }
         }
 

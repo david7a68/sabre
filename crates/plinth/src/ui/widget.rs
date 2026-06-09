@@ -1,5 +1,3 @@
-use std::hash::Hash;
-
 use bytemuck::NoUninit;
 use bytemuck::Pod;
 use glamour::Contains;
@@ -9,8 +7,6 @@ use std::mem::size_of;
 use crate::ui::Pixels;
 use crate::ui::text::TextLayoutId;
 
-use super::Alignment;
-use super::LayoutDirection;
 use super::UiBuilder;
 use super::style::StateFlags;
 
@@ -43,61 +39,16 @@ pub struct Interaction {
     pub is_focused: bool,
 }
 
-pub trait Container<'a>: Sized {
-    fn builder_mut(&mut self) -> &mut UiBuilder<'a>;
-
-    fn child<'this>(&'this mut self) -> UiBuilder<'this>
-    where
-        'a: 'this,
-    {
-        self.builder_mut().child()
-    }
-
-    fn named_child<'this>(&'this mut self, name: impl Hash) -> UiBuilder<'this>
-    where
-        'a: 'this,
-    {
-        self.builder_mut().named_child(name)
-    }
-
-    fn child_direction(&mut self, direction: LayoutDirection) -> &mut Self {
-        self.builder_mut().child_direction(direction);
-        self
-    }
-
-    fn with_child_direction(mut self, direction: LayoutDirection) -> Self {
-        self.child_direction(direction);
-        self
-    }
-
-    fn child_alignment(&mut self, major: Alignment, minor: Alignment) -> &mut Self {
-        self.builder_mut().child_alignment(major, minor);
-        self
-    }
-
-    fn with_child_alignment(mut self, major: Alignment, minor: Alignment) -> Self {
-        self.child_alignment(major, minor);
-        self
-    }
-}
-
-impl<'a> Container<'a> for UiBuilder<'a> {
-    fn builder_mut(&mut self) -> &mut UiBuilder<'a> {
-        self
-    }
-
-    fn child<'this>(&'this mut self) -> UiBuilder<'this>
-    where
-        'a: 'this,
-    {
-        self.child()
-    }
-
-    fn named_child<'this>(&'this mut self, name: impl Hash) -> UiBuilder<'this>
-    where
-        'a: 'this,
-    {
-        self.named_child(name)
+fn compute_activation(
+    behavior: ClickBehavior,
+    is_hovered: bool,
+    was_active: bool,
+    left_pressed_this_frame: bool,
+    left_released_this_frame: bool,
+) -> bool {
+    match behavior {
+        ClickBehavior::OnPress => is_hovered && left_pressed_this_frame,
+        ClickBehavior::OnRelease => is_hovered && left_released_this_frame && was_active,
     }
 }
 
@@ -143,13 +94,14 @@ impl Interaction {
             .unwrap_or_default();
 
         let is_left_down = builder.input.mouse_state.is_left_down();
-        let just_pressed = is_left_down && !was_active;
-        let just_released = !is_left_down && was_active;
-
-        let is_activated = match behavior {
-            ClickBehavior::OnPress => is_hovered && just_pressed,
-            ClickBehavior::OnRelease => is_hovered && just_released,
-        };
+        let just_pressed = builder.input.left_pressed_this_frame;
+        let is_activated = compute_activation(
+            behavior,
+            is_hovered,
+            was_active,
+            just_pressed,
+            builder.input.left_released_this_frame,
+        );
 
         let mut state = StateFlags::NORMAL;
         if is_hovered {
@@ -320,5 +272,16 @@ mod tests {
         state.set_custom_data(42u64);
         *state.custom_data_mut::<u64>().unwrap() = 100;
         assert_eq!(state.custom_data::<u64>(), Some(100u64));
+    }
+
+    #[test]
+    fn on_press_does_not_activate_when_dragging_into_widget() {
+        assert!(!compute_activation(
+            ClickBehavior::OnPress,
+            true,
+            false,
+            false,
+            false,
+        ));
     }
 }

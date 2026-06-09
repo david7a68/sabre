@@ -177,12 +177,6 @@ fn draw_glyph_run(
 
         // figure out which glyph offset variant to use
         let x_placement = SubpixelAlignment::new(x);
-        let y_placement = SubpixelAlignment {
-            step: 0,
-            offset: 0.0,
-            needs_carry: false,
-        };
-
         let mut snapped_x = x.floor();
         let snapped_y = y.floor();
         if x_placement.needs_carry {
@@ -194,7 +188,6 @@ fn draw_glyph_run(
             font_id: font.data.id(),
             glyph_id,
             x_variant: x_placement.step,
-            y_variant: y_placement.step,
             size: font_size as u16,
         };
 
@@ -203,7 +196,7 @@ fn draw_glyph_run(
             Entry::Vacant(vacant_entry) => {
                 temp_glyph.clear();
 
-                let offset = Vector::new(x_placement.offset, y_placement.offset);
+                let offset = Vector::new(x_placement.offset, 0.0);
 
                 let success = Render::new(&[
                     Source::ColorOutline(0),
@@ -235,6 +228,7 @@ fn draw_glyph_run(
 
                 vacant_entry.insert(GlyphCacheEntry {
                     texture,
+                    is_color: temp_glyph.content == Content::Color,
                     width: temp_glyph.placement.width as u8,
                     height: temp_glyph.placement.height as u8,
                     left: temp_glyph.placement.left,
@@ -245,17 +239,26 @@ fn draw_glyph_run(
 
         let glyph_x = (snapped_x as i32 + entry.left) as f32;
         let glyph_y = (snapped_y as i32 - entry.top) as f32;
+        let paint = if entry.is_color {
+            Paint::Sampled {
+                color_tint: Color::WHITE,
+                color_texture: Some(entry.texture.clone()),
+                alpha_texture: None,
+            }
+        } else {
+            Paint::Sampled {
+                color_tint: color,
+                color_texture: None,
+                alpha_texture: Some(entry.texture.clone()),
+            }
+        };
 
         canvas.push(
             textures,
             Primitive {
                 point: [glyph_x, glyph_y],
                 size: [entry.width as f32, entry.height as f32],
-                paint: Paint::Sampled {
-                    color_tint: color,
-                    color_texture: None,
-                    alpha_texture: Some(entry.texture.clone()),
-                },
+                paint,
                 border: GradientPaint::default(),
                 border_width: [0.0; 4],
                 corner_radii: [0.0; 4],
@@ -271,13 +274,13 @@ struct GlyphCacheKey {
     font_id: u64,
     glyph_id: u16,
     x_variant: u8,
-    y_variant: u8,
     // We can't use `f32` here because it is not `Hash`.
     size: u16,
 }
 
 struct GlyphCacheEntry {
     texture: Texture,
+    is_color: bool,
     width: u8,
     height: u8,
     left: i32,

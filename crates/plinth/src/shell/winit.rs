@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use winit::application::ApplicationHandler;
+use winit::dpi::PhysicalSize;
 use winit::event::ButtonSource;
 use winit::event::WindowEvent;
 use winit::event_loop::ActiveEventLoop;
@@ -22,6 +23,7 @@ use super::app_context::AppContext;
 use super::app_context::AppLifecycleHandler;
 use super::frame::Context;
 use super::input::DoubleClickTracker;
+use super::input::WindowSize;
 
 pub(super) struct WinitWindow {
     pub window: Arc<dyn Window>,
@@ -30,7 +32,6 @@ pub(super) struct WinitWindow {
     pub canvas: Canvas,
     pub ui_context: UiContext,
     pub input: Input,
-    pub config: WindowConfig,
     pub handler: Box<dyn FnMut(Context, UiBuilder)>,
 }
 
@@ -49,42 +50,68 @@ pub(super) struct WinitApp<App> {
 }
 
 impl<App> WinitApp<App> {
+    fn window_attributes(config: &WindowConfig) -> WindowAttributes {
+        WindowAttributes::default()
+            .with_title(config.title.clone())
+            .with_surface_size(PhysicalSize::new(config.width, config.height))
+            .with_visible(false)
+            .with_platform_attributes(Box::new(
+                WindowAttributesWindows::default().with_no_redirection_bitmap(true),
+            ))
+    }
+
+    fn input_for_window(window: &dyn Window) -> Input {
+        let size = window.surface_size();
+        Input {
+            window_size: WindowSize {
+                width: size.width as f32,
+                height: size.height as f32,
+            },
+            ..Default::default()
+        }
+    }
+
     fn handle_deferred_commands(&mut self, event_loop: &dyn ActiveEventLoop) {
         for command in self.runtime.deferred_commands.drain(..) {
             match command {
                 DeferredCommand::Create { config, handler } => {
                     let window = Arc::<dyn Window>::from(
                         event_loop
-                            .create_window(
-                                WindowAttributes::default()
-                                    .with_visible(false)
-                                    .with_platform_attributes(Box::new(
-                                        WindowAttributesWindows::default()
-                                            .with_no_redirection_bitmap(true),
-                                    )),
-                            )
+                            .create_window(Self::window_attributes(&config))
                             .unwrap(),
                     );
 
-                    let graphics = self
-                        .runtime
-                        .graphics
-                        .get_or_insert_with(|| GraphicsContext::new(window.clone()));
+                    let graphics = match self.runtime.graphics.as_mut() {
+                        Some(graphics) => {
+                            graphics.init_surface(window.clone());
+                            graphics
+                        }
+                        None => self
+                            .runtime
+                            .graphics
+                            .get_or_insert_with(|| GraphicsContext::new(window.clone())),
+                    };
+
+                    let input = Self::input_for_window(window.as_ref());
+                    let window_id = window.id();
 
                     self.windows.insert(
-                        window.id(),
+                        window_id,
                         WinitWindow {
                             canvas: graphics.create_canvas(),
                             handler,
                             ui_context: UiContext::default(),
-                            input: Input::default(),
-                            config,
+                            input,
                             double_click_tracker: DoubleClickTracker::load_parameters(
                                 window.scale_factor(),
                             ),
                             window,
                         },
                     );
+
+                    if let Some(window) = self.windows.get(&window_id) {
+                        window.window.request_redraw();
+                    }
                 }
             }
         }
@@ -136,9 +163,11 @@ impl<App: AppLifecycleHandler> ApplicationHandler for WinitApp<App> {
 
                 match (button, state) {
                     (winit::event::MouseButton::Left, winit::event::ElementState::Pressed) => {
+                        window.input.left_pressed_this_frame = true;
                         window.input.mouse_state.left_click_count = click_count;
                     }
                     (winit::event::MouseButton::Left, winit::event::ElementState::Released) => {
+                        window.input.left_released_this_frame = true;
                         window.input.mouse_state.left_click_count = click_count;
                     }
                     (winit::event::MouseButton::Right, winit::event::ElementState::Pressed) => {
@@ -180,9 +209,6 @@ impl<App: AppLifecycleHandler> ApplicationHandler for WinitApp<App> {
             }
             WindowEvent::SurfaceResized(physical_size) => {
                 let window = self.windows.get_mut(&window_id).unwrap();
-
-                window.config.width = physical_size.width;
-                window.config.height = physical_size.height;
 
                 window.input.window_size.width = physical_size.width as f32;
                 window.input.window_size.height = physical_size.height as f32;
