@@ -12,6 +12,7 @@ use super::Alignment;
 use super::LayoutDirection;
 use super::UiBuilder;
 use super::style::StateFlags;
+use super::text::StaticTextLayoutId;
 
 mod button;
 mod dropdown;
@@ -188,6 +189,7 @@ pub struct WidgetState {
     pub layer: u8,
     /// Whether this widget's overlay was modal last frame (blocks input to lower layers).
     pub is_modal: bool,
+    pub(crate) static_text_layout: Option<StaticTextLayoutId>,
 
     custom_data_size: u8,
 }

@@ -124,7 +124,9 @@ impl AppContext {
             window.input.keyboard_events.clear();
 
             window.canvas.reset(Color::BLACK);
-            window.ui_context.finish(&mut window.canvas);
+            window
+                .ui_context
+                .finish(&self.text_services, &mut window.canvas);
 
             if window.canvas.has_unready_textures() {
                 window.window.request_redraw();

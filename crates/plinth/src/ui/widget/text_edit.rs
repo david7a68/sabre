@@ -73,19 +73,6 @@ impl<'a> TextEdit<'a> {
 
     forward_properties!(width, height);
 
-    pub fn default_text(self, text: &str) -> Self {
-        if self.text.borrow().raw_text().is_empty() {
-            self.text.borrow_mut().set_text(text);
-        }
-
-        self
-    }
-
-    pub fn text(self, text: &str) -> Self {
-        self.text.borrow_mut().set_text(text);
-        self
-    }
-
     pub fn set_text(&mut self, text: &str) -> &mut Self {
         self.text.borrow_mut().set_text(text);
         self

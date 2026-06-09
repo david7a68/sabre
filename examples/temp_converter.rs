@@ -120,6 +120,7 @@ impl AppWindow {
 
 fn parse_temp(text: &PlainEditableText, interaction: Interaction) -> Option<f32> {
     if interaction.is_focused
+        && !text.is_composing()
         && let Ok(temp) = text.raw_text().parse::<f32>()
     {
         Some(temp)

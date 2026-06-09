@@ -37,12 +37,6 @@ impl PlainEditableText {
         }
     }
 
-    pub fn with_text(text: &str) -> Self {
-        let this = Self::new();
-        this.set_text(text);
-        this
-    }
-
     pub fn raw_text(&self) -> String {
         self.inner.borrow().raw_text().to_owned()
     }

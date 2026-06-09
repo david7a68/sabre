@@ -5,6 +5,7 @@ use std::time::Duration;
 use crate::graphics::Color;
 use crate::graphics::GradientPaint;
 use crate::graphics::Paint;
+use crate::graphics::TextAlignment;
 use crate::shell::Clipboard;
 use crate::shell::Input;
 
@@ -24,6 +25,7 @@ use super::style::BorderWidths;
 use super::style::CornerRadii;
 use super::style::StateFlags;
 use super::style::StyleId;
+use super::text::StaticTextLayoutId;
 use super::text::TextOverflow;
 use super::text::TextServices;
 use super::theme::StyleClass;
@@ -49,7 +51,6 @@ pub struct UiBuilder<'a> {
     pub(super) style_id: StyleId,
     pub(super) state: StateFlags,
     pub(super) num_child_widgets: usize,
-    pub(super) text_overflow: TextOverflow,
 }
 
 impl UiBuilder<'_> {
@@ -272,6 +273,37 @@ impl UiBuilder<'_> {
         self
     }
 
+    pub(crate) fn static_text(
+        &mut self,
+        width: impl Into<Size>,
+        height: impl Into<Size>,
+        layout: StaticTextLayoutId,
+        alignment: TextAlignment,
+        overflow: TextOverflow,
+    ) -> &mut Self {
+        self.context.ui_tree.add(
+            Some(self.index),
+            Atom {
+                width: width.into(),
+                height: height.into(),
+                z_layer: self.layer,
+                is_modal: self.is_modal,
+                clip_overflow: matches!(overflow, TextOverflow::Clip),
+                ..Default::default()
+            },
+            (
+                LayoutContent::StaticText {
+                    layout,
+                    alignment,
+                    overflow,
+                },
+                None,
+            ),
+        );
+
+        self
+    }
+
     pub fn child(&mut self) -> UiBuilder<'_> {
         self.named_child(self.num_child_widgets + 1)
     }
@@ -307,7 +339,6 @@ impl UiBuilder<'_> {
             style_id: self.style_id,
             state: self.state,
             num_child_widgets: 0,
-            text_overflow: self.text_overflow,
         }
     }
 
@@ -445,7 +476,6 @@ impl UiBuilder<'_> {
 
             is_modal,
             layer: child_layer,
-            text_overflow: self.text_overflow,
         }
     }
 }

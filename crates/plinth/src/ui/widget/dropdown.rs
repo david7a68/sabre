@@ -8,7 +8,6 @@ use crate::ui::OverlayPosition;
 use crate::ui::Position;
 use crate::ui::Size;
 use crate::ui::StyleClass;
-use crate::ui::TextOverflow;
 use crate::ui::UiBuilder;
 use crate::ui::WidgetId;
 use crate::ui::style::CornerRadii;
@@ -165,7 +164,6 @@ impl<'a> Dropdown<'a> {
                 num_child_widgets: 0,
                 is_modal: true,
                 layer: child_layer,
-                text_overflow: TextOverflow::Clip,
             })
         } else {
             root.context.state_mut(root_id).set_custom_data(RootState {

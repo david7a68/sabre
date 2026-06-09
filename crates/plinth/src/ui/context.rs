@@ -11,6 +11,7 @@ use crate::graphics::Color;
 use crate::graphics::GradientPaint;
 use crate::graphics::Paint;
 use crate::graphics::Primitive;
+use crate::graphics::TextAlignment;
 use crate::shell::Clipboard;
 use crate::shell::Input;
 use crate::ui::theme::Theme;
@@ -26,6 +27,7 @@ use super::UiElementId;
 use super::WidgetId;
 use super::style::BorderWidths;
 use super::style::CornerRadii;
+use super::text::StaticTextLayoutId;
 use super::text::TextOverflow;
 use super::text::TextServices;
 use super::widget::WidgetState;
@@ -121,7 +123,6 @@ impl UiContext {
 
             layer: 0,
             is_modal: false,
-            text_overflow: TextOverflow::Clip,
         }
     }
 
@@ -135,6 +136,22 @@ impl UiContext {
             });
 
         &mut container.state
+    }
+
+    pub(crate) fn static_text_layout(
+        &mut self,
+        widget_id: WidgetId,
+        text_services: &TextServices,
+    ) -> StaticTextLayoutId {
+        let state = self.state_mut(widget_id);
+        match state.static_text_layout {
+            Some(id) => id,
+            None => {
+                let id = text_services.create_static_text_layout();
+                state.static_text_layout = Some(id);
+                id
+            }
+        }
     }
 
     /// Insert an out-of-flow overlay node into the layout tree and return its index.
@@ -163,9 +180,16 @@ impl UiContext {
         )
     }
 
-    pub fn finish(&mut self, canvas: &mut Canvas) {
+    pub fn finish(&mut self, text_services: &TextServices, canvas: &mut Canvas) {
         self.ui_tree
             .compute_layout(|(content, _), max_width| match content {
+                LayoutContent::StaticText {
+                    layout,
+                    alignment,
+                    overflow,
+                } => text_services.measure_static_text_layout(
+                    *layout, max_width, *alignment, *overflow,
+                ),
                 LayoutContent::Custom(custom) => custom.measure(max_width),
                 _ => None,
             });
@@ -194,6 +218,17 @@ impl UiContext {
                         corner_radii: corner_radii.into_array(),
                         use_nearest_sampling: false,
                     });
+                }
+                LayoutContent::StaticText {
+                    layout: text_layout,
+                    ..
+                } => {
+                    text_services.draw_static_text_layout(
+                        *text_layout,
+                        canvas,
+                        [layout.x, layout.y],
+                        node.result.effective_clip,
+                    );
                 }
                 LayoutContent::Custom(content) => {
                     content.draw(
@@ -226,9 +261,14 @@ impl UiContext {
             }
         }
 
-        self.widget_states
-            .extract_if(|_, container| container.frame_last_used < self.frame_counter)
-            .for_each(drop);
+        let removed = self
+            .widget_states
+            .extract_if(|_, container| container.frame_last_used < self.frame_counter);
+        for (_, container) in removed {
+            if let Some(id) = container.state.static_text_layout {
+                text_services.remove_static_text_layout(id);
+            }
+        }
 
         if self.widget_states.len() * 2 < self.widget_states.capacity() {
             self.widget_states.shrink_to_fit();
@@ -260,6 +300,11 @@ pub(super) enum LayoutContent {
         border_width: BorderWidths,
         corner_radii: CornerRadii,
     },
+    StaticText {
+        layout: StaticTextLayoutId,
+        alignment: TextAlignment,
+        overflow: TextOverflow,
+    },
     Custom(Rc<dyn UiContent>),
 }
 
@@ -270,7 +315,10 @@ mod tests {
 
     use crate::graphics::Canvas;
     use crate::graphics::ClipRect;
+    use crate::shell::Clipboard;
+    use crate::shell::Input;
     use crate::ui::Size;
+    use crate::ui::text::TextBuilderExt;
 
     use super::*;
 
@@ -332,5 +380,49 @@ mod tests {
             .collect::<Vec<_>>();
         assert_eq!(widths.borrow().as_slice(), &[80.0]);
         assert_eq!(heights[1], 24.0);
+    }
+
+    #[test]
+    fn static_text_layout_is_cached_across_frames() {
+        let services = TextServices::default();
+        let theme = Theme::default();
+        let input = Input::default();
+        let mut clipboard = Clipboard::new();
+        let mut format_buffer = String::new();
+        let mut context = UiContext::default();
+
+        {
+            let mut builder = context.begin_frame(
+                &mut clipboard,
+                services.clone(),
+                &mut format_buffer,
+                &theme,
+                &input,
+                Duration::ZERO,
+            );
+            builder
+                .named_child("label")
+                .text("hello", Size::Fixed(20.0));
+        }
+
+        assert_eq!(services.static_text_layout_count(), 1);
+        assert_eq!(services.static_text_rebuild_count(), 1);
+
+        {
+            let mut builder = context.begin_frame(
+                &mut clipboard,
+                services.clone(),
+                &mut format_buffer,
+                &theme,
+                &input,
+                Duration::ZERO,
+            );
+            builder
+                .named_child("label")
+                .text("hello", Size::Fixed(20.0));
+        }
+
+        assert_eq!(services.static_text_layout_count(), 1);
+        assert_eq!(services.static_text_rebuild_count(), 1);
     }
 }
