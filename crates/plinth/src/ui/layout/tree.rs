@@ -216,7 +216,7 @@ impl<T> LayoutTree<T> {
 #[cfg(test)]
 mod tests {
     use super::super::types::Size::*;
-    use super::super::types::{AxisAnchor, OverlayPosition};
+    use super::super::types::{AxisAnchor, OverlayPosition, Padding};
     use super::*;
 
     fn node_result(tree: &LayoutTree<()>, id: UiElementId) -> &LayoutNodeResult {
@@ -285,6 +285,68 @@ mod tests {
             50.0,
             "parent width should match in-flow child only"
         );
+    }
+
+    #[test]
+    fn minor_axis_grow_does_not_become_negative() {
+        let mut tree = LayoutTree::new();
+        let root = tree.add(
+            None,
+            Atom {
+                width: Fixed(100.0),
+                height: Fixed(10.0),
+                inner_padding: Padding {
+                    top: 8.0,
+                    bottom: 8.0,
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            (),
+        );
+        let child = tree.add(
+            Some(root),
+            Atom {
+                width: Fixed(10.0),
+                height: Grow,
+                ..Default::default()
+            },
+            (),
+        );
+
+        tree.compute_layout(|_, _| None);
+
+        assert_eq!(node_result(&tree, child).height, 0.0);
+    }
+
+    #[test]
+    fn flex_child_does_not_shrink_below_min() {
+        let mut tree = LayoutTree::new();
+        let root = tree.add(
+            None,
+            Atom {
+                width: Fixed(20.0),
+                height: Fixed(100.0),
+                ..Default::default()
+            },
+            (),
+        );
+        let child = tree.add(
+            Some(root),
+            Atom {
+                width: Flex {
+                    min: 30.0,
+                    max: 100.0,
+                },
+                height: Fixed(10.0),
+                ..Default::default()
+            },
+            (),
+        );
+
+        tree.compute_layout(|_, _| None);
+
+        assert_eq!(node_result(&tree, child).width, 30.0);
     }
 
     // ── compute_overlay_positions: dropdown preset ───────────────────────────

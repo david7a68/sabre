@@ -8,6 +8,7 @@ use winit::platform::windows::EventLoopBuilderExtWindows;
 
 use crate::graphics::Color;
 use crate::graphics::GraphicsContext;
+use crate::graphics::RenderError;
 use crate::graphics::TextLayoutContext;
 use crate::shell::Clipboard;
 use crate::shell::WindowConfig;
@@ -102,7 +103,6 @@ impl AppContext {
         let mut outputs = SmallVec::with_capacity(windows.size_hint().0);
 
         for window in windows {
-            // borrow input for this frame
             let mut input = std::mem::take(&mut window.input);
 
             let ui_builder = window.ui_context.begin_frame(
@@ -123,9 +123,8 @@ impl AppContext {
 
             (window.handler)(context, ui_builder);
 
-            input.prev_pointer = input.pointer;
+            input.end_frame();
             window.input = input;
-            window.input.keyboard_events.clear();
 
             window.canvas.reset(Color::BLACK);
             window.ui_context.finish(
@@ -141,6 +140,14 @@ impl AppContext {
             outputs.push((window.window.id(), &window.canvas));
         }
 
-        graphics.render(outputs).unwrap();
+        match graphics.render(outputs) {
+            Ok(()) => {}
+            Err(RenderError::Occluded | RenderError::TimedOut | RenderError::SurfaceLost) => {
+                tracing::debug!("Skipping repaint for transient surface state");
+            }
+            Err(RenderError::Unknown) => {
+                tracing::warn!("Skipping repaint after unknown render error");
+            }
+        }
     }
 }

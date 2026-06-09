@@ -114,14 +114,7 @@ impl Canvas {
     }
 
     pub fn reset(&mut self, clear_color: impl Into<Option<Color>>) {
-        let white_pixel = self.texture_manager.white_pixel();
-        let opaque_pixel = self.texture_manager.opaque_pixel();
-
-        self.storage.reset(
-            clear_color,
-            white_pixel.storage_id(),
-            opaque_pixel.storage_id(),
-        );
+        self.storage.reset(clear_color);
     }
 
     pub fn load_texture(&mut self, path: impl AsRef<Path>) -> Result<Texture, TextureLoadError> {
@@ -163,6 +156,7 @@ pub(crate) struct CanvasStorage {
     commands: Vec<DrawCommand>,
     primitives: Vec<GpuPrimitive>,
     clips: Vec<GpuClip>,
+    retained_textures: Vec<Texture>,
 
     last_clip_alloc: Option<(ClipRect, u32)>,
 
@@ -186,16 +180,12 @@ impl CanvasStorage {
         &self.clips
     }
 
-    pub(crate) fn reset(
-        &mut self,
-        clear_color: impl Into<Option<Color>>,
-        white: StorageId,
-        opaque: StorageId,
-    ) {
+    pub(crate) fn reset(&mut self, clear_color: impl Into<Option<Color>>) {
         self.clear_color = clear_color.into();
         self.has_unready_textures = false;
 
         self.clips.clear();
+        self.retained_textures.clear();
         self.clips.push(GpuClip {
             point: [0.0, 0.0],
             extent: [f32::MAX, f32::MAX],
@@ -204,11 +194,6 @@ impl CanvasStorage {
 
         self.commands.clear();
         self.primitives.clear();
-        self.commands.push(DrawCommand::Draw {
-            color_storage_id: white,
-            alpha_storage_id: opaque,
-            num_vertices: 0,
-        });
     }
 
     pub(crate) fn push(&mut self, texture_manager: &TextureManager, primitive: Primitive) {
@@ -302,13 +287,15 @@ impl CanvasStorage {
             _padding2: 0,
         });
 
-        let DrawCommand::Draw {
+        self.retained_textures.push(color_texture.clone());
+        self.retained_textures.push(alpha_texture.clone());
+
+        if let Some(DrawCommand::Draw {
             color_storage_id: prev_color_texture_id,
             alpha_storage_id: prev_alpha_texture_id,
             num_vertices,
-        } = self.commands.last_mut().unwrap();
-
-        if color_texture.storage_id() == *prev_color_texture_id
+        }) = self.commands.last_mut()
+            && color_texture.storage_id() == *prev_color_texture_id
             && alpha_texture.storage_id() == *prev_alpha_texture_id
         {
             *num_vertices += VERTICES_PER_PRIMITIVE;
@@ -319,5 +306,18 @@ impl CanvasStorage {
                 num_vertices: VERTICES_PER_PRIMITIVE,
             });
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn reset_does_not_seed_empty_draw_command() {
+        let mut storage = CanvasStorage::default();
+        storage.reset(Color::BLACK);
+
+        assert!(storage.commands().is_empty());
     }
 }

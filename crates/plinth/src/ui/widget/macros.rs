@@ -88,7 +88,7 @@ pub(crate) use forward_properties;
 
 macro_rules! impl_container {
     ($type:ident < $($lt:lifetime),+>) => {
-        impl <$($lt),+> $crate::ui::widget::Container<$($lt),+> for $type <$($lt),+> {
+        impl <$($lt),+> $crate::ui::Container<$($lt),+> for $type <$($lt),+> {
             fn builder_mut(&mut self) -> &mut UiBuilder<$($lt),+> {
                 &mut self.builder
             }
@@ -96,7 +96,7 @@ macro_rules! impl_container {
 
         impl <$($lt),+> $type <$($lt),+> {
             pub fn child_direction(&mut self, direction: $crate::ui::LayoutDirection) -> &mut Self {
-                use $crate::ui::widget::Container;
+                use $crate::ui::Container;
 
                 self.builder_mut().child_direction(direction);
                 self
@@ -109,7 +109,7 @@ macro_rules! impl_container {
             }
 
             pub fn child_alignment(&mut self, major: $crate::ui::Alignment, minor: $crate::ui::Alignment) -> &mut Self {
-                use $crate::ui::widget::Container;
+                use $crate::ui::Container;
 
                 self.builder_mut().child_alignment(major, minor);
                 self

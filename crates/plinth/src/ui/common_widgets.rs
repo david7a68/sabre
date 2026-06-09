@@ -1,8 +1,9 @@
 use crate::graphics::Texture;
+use std::hash::Hash;
 
+use super::Container;
 use super::Size;
 use super::widget::Button;
-use super::widget::Container;
 use super::widget::Dropdown;
 use super::widget::DropdownItem;
 use super::widget::Frame;
@@ -53,6 +54,10 @@ pub trait CommonWidgetsExt<'a>: Container<'a> {
 
     fn text_button(&mut self, label: &str) -> Interaction {
         Button::new(self.builder_mut(), Some(label)).finish()
+    }
+
+    fn named_text_button(&mut self, id: impl Hash, label: &str) -> Interaction {
+        Button::with_id(self.builder_mut(), id, Some(label)).finish()
     }
 
     fn text_edit<'this>(&'this mut self, initial_text: &str, width: f32) -> TextEdit<'this>

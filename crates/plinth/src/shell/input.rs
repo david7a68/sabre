@@ -43,6 +43,8 @@ pub struct Input {
     pub pointer: Point2<Pixels>,
     pub prev_pointer: Point2<Pixels>,
     pub mouse_state: MouseButtonState,
+    pub left_pressed_this_frame: bool,
+    pub left_released_this_frame: bool,
     pub window_size: WindowSize,
     pub keyboard_events: SmallVec<[KeyboardEvent; 4]>,
     pub modifiers: winit::keyboard::ModifiersState,
@@ -54,6 +56,13 @@ impl Input {
             window_size: self.window_size,
             ..Default::default()
         }
+    }
+
+    pub(crate) fn end_frame(&mut self) {
+        self.prev_pointer = self.pointer;
+        self.keyboard_events.clear();
+        self.left_pressed_this_frame = false;
+        self.left_released_this_frame = false;
     }
 }
 

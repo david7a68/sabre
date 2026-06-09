@@ -170,39 +170,44 @@ impl GraphicsContext {
 
         self.textures.flush();
 
-        for (window_id, canvas) in targets {
-            let canvas = canvas.storage();
+        let result = (|| {
+            for (window_id, canvas) in targets {
+                let canvas = canvas.storage();
 
-            let Some(window) = self.windows.iter_mut().find(|w| w.window_id() == window_id) else {
-                warn!("Window not found, skipping render.");
-                continue;
-            };
-
-            window.resize_if_necessary(&self.device);
-
-            let (target, command_buffer) =
-                write_commands(&self.device, &self.queue, &self.textures, window, canvas)?;
-
-            command_buffers.push(command_buffer);
-            presents.push((window_id, target));
-        }
-
-        tracing::info_span!("submit").in_scope(|| {
-            self.queue.submit(command_buffers);
-        });
-
-        tracing::info_span!("present").in_scope(|| {
-            for (window_id, target) in presents {
                 let Some(window) = self.windows.iter_mut().find(|w| w.window_id() == window_id)
                 else {
                     warn!("Window not found, skipping render.");
                     continue;
                 };
 
-                window.pre_present_notify();
-                target.present();
+                window.resize_if_necessary(&self.device);
+
+                let (target, command_buffer) =
+                    write_commands(&self.device, &self.queue, &self.textures, window, canvas)?;
+
+                command_buffers.push(command_buffer);
+                presents.push((window_id, target));
             }
-        });
+
+            tracing::info_span!("submit").in_scope(|| {
+                self.queue.submit(command_buffers);
+            });
+
+            tracing::info_span!("present").in_scope(|| {
+                for (window_id, target) in presents {
+                    let Some(window) = self.windows.iter_mut().find(|w| w.window_id() == window_id)
+                    else {
+                        warn!("Window not found, skipping render.");
+                        continue;
+                    };
+
+                    window.pre_present_notify();
+                    target.present();
+                }
+            });
+
+            Ok(())
+        })();
 
         self.textures.end_frame();
 
@@ -211,7 +216,7 @@ impl GraphicsContext {
             tracing_tracy::client::frame_mark();
         }
 
-        Ok(())
+        result
     }
 }
 

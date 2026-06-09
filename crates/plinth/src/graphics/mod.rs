@@ -5,6 +5,7 @@ pub use draw::ClipRect;
 pub use draw::Primitive;
 pub use paint::GradientPaint;
 pub use paint::Paint;
+pub(crate) use surface::RenderError;
 pub use text::*;
 pub use texture::Texture;
 pub use texture::TextureId;

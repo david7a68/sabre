@@ -1,3 +1,5 @@
+use std::hash::Hash;
+
 use crate::ui::StyleClass;
 use crate::ui::UiBuilder;
 use crate::ui::style::StateFlags;
@@ -14,11 +16,18 @@ pub struct Button<'a> {
 
 impl Button<'_> {
     pub fn new<'a>(builder: &'a mut UiBuilder<'_>, label: Option<&str>) -> Button<'a> {
-        let mut builder = match label {
-            Some(label_text) => builder.named_child(label_text),
-            None => builder.child(),
-        };
+        Self::from_builder(builder.child(), label)
+    }
 
+    pub fn with_id<'a>(
+        builder: &'a mut UiBuilder<'_>,
+        id: impl Hash,
+        label: Option<&str>,
+    ) -> Button<'a> {
+        Self::from_builder(builder.named_child(id), label)
+    }
+
+    fn from_builder<'a>(mut builder: UiBuilder<'a>, label: Option<&str>) -> Button<'a> {
         let (interaction, state) = Interaction::compute(
             &builder,
             ClickBehavior::OnPress,
