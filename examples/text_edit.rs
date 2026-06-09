@@ -61,15 +61,16 @@ impl AppWindow {
             .with_height(100.0)
             .finish();
 
-        let text = self.text_content.raw_text();
         let is_composing = self.text_content.is_composing();
 
         let mut info_panel = panel
             .surface()
             .with_child_direction(LayoutDirection::Horizontal);
 
-        info_panel.label(&format!("Current text: {text}"));
-        info_panel.label(&format!("Text length: {} characters", text.len()));
+        self.text_content.with_raw_text(|text| {
+            info_panel.label(&format!("Current text: {text}"));
+            info_panel.label(&format!("Text length: {} characters", text.len()));
+        });
         info_panel.label(&format!("Hovered: {}", interaction.is_hovered));
         info_panel.label(&format!("Clicked: {}", interaction.is_activated));
 

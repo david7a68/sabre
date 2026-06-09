@@ -187,9 +187,8 @@ impl UiContext {
                     layout,
                     alignment,
                     overflow,
-                } => text_services.measure_static_text_layout(
-                    *layout, max_width, *alignment, *overflow,
-                ),
+                } => text_services
+                    .measure_static_text_layout(*layout, max_width, *alignment, *overflow),
                 LayoutContent::Custom(custom) => custom.measure(max_width),
                 _ => None,
             });

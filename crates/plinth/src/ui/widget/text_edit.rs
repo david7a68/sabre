@@ -244,9 +244,9 @@ impl<'a> TextEdit<'a> {
                     (false, false) => command!(TextEditCommand::MoveToLineEnd { select: false }),
                 },
                 PhysicalKey::Code(KeyCode::KeyC) if ctrl_held => {
-                    let selected = text.borrow().selected_text().map(str::to_owned);
-                    if let Some(selected) = selected {
-                        clipboard.set_text(&selected);
+                    let text = text.borrow();
+                    if let Some(selected) = text.selected_text() {
+                        clipboard.set_text(selected);
                     }
                 }
                 PhysicalKey::Code(KeyCode::KeyV) if ctrl_held => {

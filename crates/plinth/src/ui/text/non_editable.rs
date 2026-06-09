@@ -28,7 +28,9 @@ impl TextBuilderExt for UiBuilder<'_> {
         let alignment = self
             .theme
             .resolve_style::<TextAlignment>(self.style_id, self.state);
-        let layout = self.context.static_text_layout(self.id, &self.text_services);
+        let layout = self
+            .context
+            .static_text_layout(self.id, &self.text_services);
         let width = self.text_services.prepare_static_text_layout(
             layout,
             self.theme,

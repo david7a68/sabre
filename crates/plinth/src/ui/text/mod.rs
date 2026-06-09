@@ -267,4 +267,14 @@ mod tests {
             .command(&services, TextEditCommand::InsertOrReplaceSelection("bye"));
         assert_eq!(text.raw_text(), "bye");
     }
+
+    #[test]
+    fn plain_editable_text_exposes_raw_text_without_allocation() {
+        let text = PlainEditableText::new();
+        text.set_text("hello");
+
+        let len = text.with_raw_text(str::len);
+
+        assert_eq!(len, 5);
+    }
 }
