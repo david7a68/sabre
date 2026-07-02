@@ -73,6 +73,7 @@ impl Surface {
         let config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             format,
+            color_space: wgpu::SurfaceColorSpace::Auto,
             width: window.surface_size().width,
             height: window.surface_size().height,
             present_mode,
