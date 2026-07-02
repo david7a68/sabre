@@ -165,8 +165,7 @@ impl TextLayoutStorage {
                 }
 
                 if text.needs_line_break || width_changed || alignment_changed || overflow_changed {
-                    text.layout
-                        .align(Some(max_width), alignment.into(), Default::default());
+                    text.layout.align(alignment.into(), Default::default());
                     text.needs_line_break = false;
                     text.prev_width = max_width;
                     text.prev_alignment = Some(alignment);

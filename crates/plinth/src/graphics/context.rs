@@ -73,6 +73,7 @@ impl GraphicsContext {
                     power_preference: wgpu::PowerPreference::LowPower,
                     force_fallback_adapter: false,
                     compatible_surface: Some(&surface),
+                    apply_limit_buckets: false,
                 })
                 .await
         })
@@ -200,7 +201,7 @@ impl GraphicsContext {
                 };
 
                 window.pre_present_notify();
-                target.present();
+                self.queue.present(target);
             }
         });
 
