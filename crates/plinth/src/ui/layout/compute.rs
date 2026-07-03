@@ -1,8 +1,8 @@
 use crate::graphics::ClipRect;
 
 use super::tree::LayoutNode;
-use super::tree::LayoutNodeResult;
 use super::tree::NodeIndexArray;
+use super::tree::NodeLayout;
 use super::tree::UiElementId;
 use super::types::Alignment;
 use super::types::AxisAnchor;
@@ -656,8 +656,8 @@ fn resolve_overlay_position(
 }
 
 fn compute_anchored_position(
-    parent: &LayoutNodeResult,
-    child: &LayoutNodeResult,
+    parent: &NodeLayout,
+    child: &NodeLayout,
     pos: OverlayPosition,
 ) -> (f32, f32) {
     let anchor_x = resolve_anchor(parent.x, parent.width, pos.parent_x);

@@ -6,7 +6,6 @@ use glamour::Rect;
 use glamour::Size2;
 
 use crate::graphics::Canvas;
-use crate::graphics::ClipRect;
 use crate::graphics::Color;
 use crate::graphics::GradientPaint;
 use crate::graphics::Paint;
@@ -25,6 +24,7 @@ use super::StyleClass;
 use super::UiBuilder;
 use super::UiElementId;
 use super::WidgetId;
+use super::layout::NodeLayout;
 use super::style::BorderWidths;
 use super::style::CornerRadii;
 use super::text::TextLayoutId;
@@ -150,35 +150,12 @@ impl UiContext {
     ) -> (TextLayoutId, &'a mut super::text::StaticTextLayout) {
         let state = self.state_mut(widget_id);
 
-        let static_layout_id = match state.text_layout {
-            Some(TextLayoutId::Static(id)) => Some(id),
-            Some(other) => panic!("Widget has non-static text layout assigned: {other:?}"),
-            None => None,
-        };
+        let static_layout_id = state.text_layout.map(|TextLayoutId::Static(id)| id);
 
         let (layout_id, layout) = text_layouts.get_or_create_static(static_layout_id);
         state.text_layout = Some(TextLayoutId::Static(layout_id));
 
         (TextLayoutId::Static(layout_id), layout)
-    }
-
-    pub fn dynamic_text_layout<'a>(
-        &mut self,
-        text_layouts: &'a mut TextLayoutStorage,
-        widget_id: WidgetId,
-    ) -> (TextLayoutId, &'a mut super::text::DynamicTextLayout) {
-        let state = self.state_mut(widget_id);
-
-        let dynamic_layout_id = match state.text_layout {
-            Some(TextLayoutId::Dynamic(id)) => Some(id),
-            Some(other) => panic!("Widget has non-dynamic text layout assigned: {other:?}"),
-            None => None,
-        };
-
-        let (layout_id, layout) = text_layouts.get_or_create_dynamic(dynamic_layout_id);
-        state.text_layout = Some(TextLayoutId::Dynamic(layout_id));
-
-        (TextLayoutId::Dynamic(layout_id), layout)
     }
 
     /// Insert an out-of-flow overlay node into the layout tree and return its index.
@@ -221,6 +198,9 @@ impl UiContext {
                     overflow,
                     ..
                 } => (layout, alignment, overflow),
+                LayoutContent::EditableText { content, visuals } => {
+                    return content.measure(text_context, max_width, visuals.alignment);
+                }
                 _ => return None,
             };
 
@@ -256,9 +236,6 @@ impl UiContext {
                     layout: text_layout_id,
                     alignment: _,
                     overflow: _,
-                    cursor_size,
-                    selection_color,
-                    cursor_color,
                 } => match text_layouts.get_mut(*text_layout_id) {
                     None => {}
                     Some(TextLayoutMut::Static(text_layout)) => {
@@ -268,39 +245,10 @@ impl UiContext {
                             node.result.effective_clip,
                         );
                     }
-                    Some(TextLayoutMut::Dynamic(text_layout)) => {
-                        let clip = node.result.effective_clip;
-                        text_layout.editor.selection_geometry_with(|bbox, _| {
-                            Self::draw_selection_rect(
-                                canvas,
-                                &bbox,
-                                *selection_color,
-                                layout.x,
-                                layout.y,
-                                clip,
-                            );
-                        });
-
-                        if let Some(rect) = text_layout.editor.cursor_geometry(*cursor_size) {
-                            Self::draw_cursor(
-                                canvas,
-                                &rect,
-                                *cursor_color,
-                                layout.x,
-                                layout.y,
-                                clip,
-                            );
-                        }
-
-                        canvas.draw_text_layout(
-                            text_layout
-                                .editor
-                                .layout(&mut text_context.fonts, &mut text_context.layouts),
-                            [layout.x, layout.y],
-                            clip,
-                        );
-                    }
                 },
+                LayoutContent::EditableText { content, visuals } => {
+                    content.draw(text_context, canvas, layout, *visuals);
+                }
             }
 
             if let Some(widget_id) = widget_id {
@@ -338,52 +286,31 @@ impl UiContext {
 
         self.frame_counter += 1;
     }
+}
 
-    fn draw_selection_rect(
+#[derive(Clone, Copy)]
+pub(super) struct EditableTextVisuals {
+    pub(super) alignment: TextAlignment,
+    pub(super) cursor_size: f32,
+    pub(super) selection_color: Color,
+    pub(super) cursor_color: Color,
+}
+
+pub(super) trait EditableTextContent {
+    fn measure(
+        &self,
+        text_context: &mut TextLayoutContext,
+        max_width: f32,
+        alignment: TextAlignment,
+    ) -> Option<f32>;
+
+    fn draw(
+        &self,
+        text_context: &mut TextLayoutContext,
         canvas: &mut Canvas,
-        rect: &parley::BoundingBox,
-        color: Color,
-        x: f32,
-        y: f32,
-        clip: ClipRect,
-    ) {
-        let y0 = (y + rect.y0 as f32).round();
-        let y1 = (y + rect.y1 as f32).round();
-
-        canvas.draw(Primitive {
-            point: [x + rect.x0 as f32, y0],
-            size: [(rect.x1 - rect.x0) as f32, y1 - y0],
-            clip,
-            paint: Paint::solid(color),
-            border: GradientPaint::default(),
-            border_width: [0.0; 4],
-            corner_radii: [0.0; 4],
-            use_nearest_sampling: false,
-        });
-    }
-
-    fn draw_cursor(
-        canvas: &mut Canvas,
-        cursor_rect: &parley::BoundingBox,
-        color: Color,
-        x: f32,
-        y: f32,
-        clip: ClipRect,
-    ) {
-        let y0 = (y + cursor_rect.y0 as f32).round();
-        let y1 = (y + cursor_rect.y1 as f32).round();
-
-        canvas.draw(Primitive {
-            point: [x + cursor_rect.x0 as f32, y0],
-            size: [2.0, y1 - y0], // 2px wide cursor
-            clip,
-            paint: Paint::solid(color),
-            border: GradientPaint::default(),
-            border_width: [0.0; 4],
-            corner_radii: [0.0; 4],
-            use_nearest_sampling: false,
-        });
-    }
+        layout: &NodeLayout,
+        visuals: EditableTextVisuals,
+    );
 }
 
 #[derive(Default)]
@@ -404,8 +331,9 @@ pub(super) enum LayoutContent {
         layout: TextLayoutId,
         alignment: TextAlignment,
         overflow: TextOverflow,
-        cursor_size: f32,
-        selection_color: Color,
-        cursor_color: Color,
+    },
+    EditableText {
+        content: std::rc::Rc<dyn EditableTextContent>,
+        visuals: EditableTextVisuals,
     },
 }

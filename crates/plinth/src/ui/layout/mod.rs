@@ -2,8 +2,9 @@ mod compute;
 mod tree;
 mod types;
 
-pub(crate) use self::tree::Atom;
-pub(crate) use self::tree::LayoutTree;
-pub(crate) use self::tree::UiElementId;
-pub use self::types::Size::*;
-pub use self::types::*;
+pub use tree::Atom;
+pub(crate) use tree::LayoutTree;
+pub use tree::NodeLayout;
+pub(crate) use tree::UiElementId;
+pub use types::Size::*;
+pub use types::*;

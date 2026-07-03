@@ -171,38 +171,6 @@ impl Theme {
         }
     }
 
-    pub(crate) fn apply_plain_editor_styles(
-        &self,
-        style_id: StyleId,
-        state: StateFlags,
-        editor: &mut parley::PlainEditor<Color>,
-    ) -> &Style {
-        use parley::StyleProperty as Prop;
-
-        let styles = editor.edit_styles();
-
-        let style = self.enumerate_styles(style_id, state, |prop| {
-            styles.insert(prop);
-        });
-
-        match &style.font.get(state).family {
-            FontStack::Source(cow) => {
-                styles.insert(Prop::FontFamily(parley::FontFamily::Source(cow.clone())));
-            }
-            FontStack::Single(font_family) => {
-                styles.insert(Prop::FontFamily(parley::FontFamily::Single(
-                    font_family.clone().into(),
-                )));
-            }
-            FontStack::List(cow) => {
-                let families = cow.iter().cloned().map(|f| f.into()).collect::<Vec<_>>();
-                styles.insert(Prop::FontFamily(parley::FontFamily::List(families.into())));
-            }
-        }
-
-        style
-    }
-
     fn enumerate_styles<'a>(
         &self,
         style_id: StyleId,
@@ -241,7 +209,7 @@ impl Default for Theme {
     }
 }
 
-fn default_font_features() -> parley::FontFeatures<'static> {
+pub(crate) fn default_font_features() -> parley::FontFeatures<'static> {
     DEFAULT_FONT_FEATURES
         .get_or_init(|| {
             let mut list = Vec::new();
@@ -392,11 +360,15 @@ fn default_theme() -> Theme {
                 ),
                 (
                     StateFlags::HOVERED,
-                    StyleProperty::Background(Paint::solid(Color::srgb_nonlinear(0.92, 0.92, 0.92, 1.0))),
+                    StyleProperty::Background(Paint::solid(Color::srgb_nonlinear(
+                        0.92, 0.92, 0.92, 1.0,
+                    ))),
                 ),
                 (
                     StateFlags::PRESSED,
-                    StyleProperty::Background(Paint::solid(Color::srgb_nonlinear(0.86, 0.86, 0.86, 1.0))),
+                    StyleProperty::Background(Paint::solid(Color::srgb_nonlinear(
+                        0.86, 0.86, 0.86, 1.0,
+                    ))),
                 ),
                 (
                     StateFlags::empty(),

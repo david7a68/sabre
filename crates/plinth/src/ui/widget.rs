@@ -33,7 +33,12 @@ pub use horizontal_separator::HorizontalSeparator;
 pub use image::Image;
 pub use label::Label;
 pub use surface::Surface;
+pub use text_edit::EditableTextBuffer;
+pub use text_edit::EditableTextLayout;
+pub use text_edit::PlainTextEditorState;
 pub use text_edit::TextEdit;
+pub use text_edit::TextEditMotion;
+pub use text_edit::TextEditorState;
 pub use vertical_separator::VerticalSeparator;
 
 #[derive(Clone, Copy, Debug)]

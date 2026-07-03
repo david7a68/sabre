@@ -316,11 +316,8 @@ impl UiBuilder<'_> {
             (
                 LayoutContent::Text {
                     layout: text_id,
-                    cursor_size: 0.0,
                     alignment,
                     overflow: self.text_overflow,
-                    selection_color: Color::TRANSPARENT,
-                    cursor_color: Color::TRANSPARENT,
                 },
                 None,
             ),
