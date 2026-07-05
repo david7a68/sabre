@@ -32,28 +32,18 @@ impl<'a> ContextMenu<'a> {
         id: &str,
         trigger: impl FnOnce(&mut UiBuilder<'_>),
     ) -> Self {
-        Self::new_inner(builder, id, Some(trigger), None)
-    }
-
-    pub fn at(builder: &'a mut UiBuilder<'_>, id: &str, position: Option<Point2<Pixels>>) -> Self {
-        Self::new_inner(builder, id, None::<fn(&mut UiBuilder<'_>)>, position)
+        Self::new_inner(builder, id, trigger)
     }
 
     fn new_inner(
         builder: &'a mut UiBuilder<'_>,
         id: &str,
-        trigger: Option<impl FnOnce(&mut UiBuilder<'_>)>,
-        open_at: Option<Point2<Pixels>>,
+        trigger: impl FnOnce(&mut UiBuilder<'_>),
     ) -> Self {
         let mut root = builder.named_child((id, "root"));
         root.child_direction(LayoutDirection::Vertical);
         root.child_spacing(0.0);
-
-        if let Some(trigger) = trigger {
-            trigger(&mut root);
-        } else {
-            root.size(0.0, 0.0);
-        }
+        trigger(&mut root);
 
         let root_id = root.id;
         let root_state = root
@@ -70,10 +60,8 @@ impl<'a> ContextMenu<'a> {
         );
         root.set_button_active(PointerButton::Right, state.contains(StateFlags::PRESSED));
 
-        let is_open = was_open || interaction.is_activated || open_at.is_some();
-        let anchor = if let Some(position) = open_at {
-            position
-        } else if interaction.is_activated {
+        let is_open = was_open || interaction.is_activated;
+        let anchor = if interaction.is_activated {
             root.input.pointer
         } else {
             root_state.anchor()

@@ -1,8 +1,5 @@
-use glamour::Point2;
-
 use crate::graphics::Texture;
 
-use super::Pixels;
 use super::Size;
 use super::widget::Button;
 use super::widget::Container;
@@ -117,21 +114,6 @@ pub trait CommonWidgetsExt<'a>: Container<'a> {
         'a: 'this,
     {
         let mut menu = ContextMenu::new(self.builder_mut(), id, trigger);
-        build_menu(&mut menu);
-        let (selected_idx, _) = menu.finish();
-        selected_idx
-    }
-
-    fn context_menu_at<'this>(
-        &'this mut self,
-        id: &str,
-        position: Option<Point2<Pixels>>,
-        build_menu: impl FnOnce(&mut ContextMenu<'this>),
-    ) -> Option<usize>
-    where
-        'a: 'this,
-    {
-        let mut menu = ContextMenu::at(self.builder_mut(), id, position);
         build_menu(&mut menu);
         let (selected_idx, _) = menu.finish();
         selected_idx
