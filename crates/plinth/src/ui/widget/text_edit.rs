@@ -1,3 +1,4 @@
+use std::cell::Cell;
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -83,7 +84,7 @@ pub enum TextEditMotion {
     BackdeleteWord,
     Delete,
     DeleteWord,
-    ExtendSelectionToPoint { x: f32, y: f32 },
+    ExtendSelectionToPoint(Point2<Pixels>),
     MoveDown,
     MoveLeft,
     MoveWordLeft,
@@ -91,7 +92,7 @@ pub enum TextEditMotion {
     MoveWordRight,
     MoveToLineEnd,
     MoveToLineStart,
-    MoveToPoint { x: f32, y: f32 },
+    MoveToPoint(Point2<Pixels>),
     MoveToTextEnd,
     MoveToTextStart,
     MoveUp,
@@ -99,7 +100,7 @@ pub enum TextEditMotion {
     SelectDown,
     SelectLeft,
     SelectWordLeft,
-    SelectLineAtPoint { x: f32, y: f32 },
+    SelectLineAtPoint(Point2<Pixels>),
     SelectRight,
     SelectWordRight,
     SelectToLineEnd,
@@ -107,7 +108,7 @@ pub enum TextEditMotion {
     SelectToTextEnd,
     SelectToTextStart,
     SelectUp,
-    SelectWordAtPoint { x: f32, y: f32 },
+    SelectWordAtPoint(Point2<Pixels>),
 }
 
 pub struct TextEditorState<T: EditableTextBuffer> {
@@ -119,8 +120,9 @@ impl<T: EditableTextBuffer> TextEditorState<T> {
         Self {
             content: Rc::new(TextEditorContent {
                 buffer: RefCell::new(buffer),
+                applied_style: Cell::new(None),
                 #[cfg(debug_assertions)]
-                frame_last_used: std::cell::Cell::new(None),
+                frame_last_used: Cell::new(None),
             }),
         }
     }
@@ -136,30 +138,34 @@ impl<T: EditableTextBuffer> TextEditorState<T> {
     }
 }
 
-pub type PlainTextEditorState = TextEditorState<PlainEditor<Color>>;
+pub type PlainTextEditorState = TextEditorState<PlainTextBuffer>;
 
-impl TextEditorState<PlainEditor<Color>> {
+impl TextEditorState<PlainTextBuffer> {
     pub fn plain() -> Self {
-        Self::new(PlainEditor::new(14.0))
+        Self::new(PlainTextBuffer::default())
     }
 
     pub fn set_text(&self, text: &str) {
-        self.with_buffer_mut(|buffer| buffer.set_text(text));
+        self.with_buffer_mut(|buffer| buffer.editor.set_text(text));
     }
 
     pub fn with_raw_text<R>(&self, callback: impl FnOnce(&str) -> R) -> R {
-        self.with_buffer(|buffer| callback(buffer.raw_text()))
+        self.with_buffer(|buffer| callback(buffer.editor.raw_text()))
     }
 
     pub fn is_composing(&self) -> bool {
-        self.with_buffer(PlainEditor::is_composing)
+        self.with_buffer(|buffer| buffer.editor.is_composing())
     }
 }
 
 struct TextEditorContent<T: EditableTextBuffer> {
     buffer: RefCell<T>,
+    // The (theme revision, state flags) the buffer styles were last resolved
+    // from. Reapplying styles marks the text layout dirty, so it must be
+    // skipped when nothing changed.
+    applied_style: Cell<Option<(u64, StateFlags)>>,
     #[cfg(debug_assertions)]
-    frame_last_used: std::cell::Cell<Option<u64>>,
+    frame_last_used: Cell<Option<u64>>,
 }
 
 impl<T: EditableTextBuffer> TextEditorContent<T> {
@@ -210,11 +216,14 @@ impl<T: EditableTextBuffer> EditableTextContent for TextEditorContent<T> {
             let y = layout.y + offset.y;
 
             text_layout.selection_geometry_with(|bbox, _| {
-                draw_selection_rect(canvas, &bbox, visuals.selection_color, x, y, clip);
+                fill_snapped_rect(canvas, &bbox, visuals.selection_color, x, y, clip);
             });
 
-            if let Some(rect) = text_layout.cursor_geometry(visuals.cursor_size) {
-                draw_cursor(canvas, &rect, visuals.cursor_color, x, y, clip);
+            if let Some(mut rect) = text_layout.cursor_geometry(visuals.cursor_size) {
+                // Draw the caret as a 2px-wide bar regardless of the width
+                // reported by the layout.
+                rect.size.width = 2.0;
+                fill_snapped_rect(canvas, &rect, visuals.cursor_color, x, y, clip);
             }
 
             canvas.draw_text_layout(text_layout.layout(), [x, y], clip);
@@ -282,12 +291,8 @@ impl<'a, T: EditableTextBuffer + 'static> TextEdit<'a, T> {
         self
     }
 
-    pub fn text(self, text: &str) -> Self {
-        let mut buffer = self.state.content.buffer.borrow_mut();
-
-        buffer.move_cursor(self.builder.text_context, TextEditMotion::SelectAll);
-        buffer.enter_text(self.builder.text_context, text);
-
+    pub fn text(mut self, text: &str) -> Self {
+        self.set_text(text);
         self
     }
 
@@ -333,7 +338,11 @@ impl<'a, T: EditableTextBuffer + 'static> TextEdit<'a, T> {
         let mut buffer = self.state.content.buffer.borrow_mut();
         let style = theme.get(StyleClass::TextEdit);
 
-        buffer.apply_style(style, self.state_flags);
+        let style_key = (theme.revision(), self.state_flags);
+        if self.state.content.applied_style.get() != Some(style_key) {
+            self.state.content.applied_style.set(Some(style_key));
+            buffer.apply_style(style, self.state_flags);
+        }
 
         if let Some(placement) = placement {
             self.handle_mouse_events(
@@ -496,69 +505,36 @@ impl<'a, T: EditableTextBuffer + 'static> TextEdit<'a, T> {
 
         let is_shift_held = input.modifiers.shift_key();
         let is_left_down = input.mouse_state.is_left_down();
+        let local = local.to_point();
 
-        if interaction.is_activated && is_hovered {
+        let motion = if interaction.is_activated && is_hovered {
             match left_click_count {
-                4.. => buffer.move_cursor(self.builder.text_context, TextEditMotion::SelectAll),
-                3 => buffer.move_cursor(
-                    self.builder.text_context,
-                    TextEditMotion::SelectLineAtPoint {
-                        x: local.x,
-                        y: local.y,
-                    },
-                ),
-                2 => buffer.move_cursor(
-                    self.builder.text_context,
-                    TextEditMotion::SelectWordAtPoint {
-                        x: local.x,
-                        y: local.y,
-                    },
-                ),
-                1 if is_shift_held => buffer.move_cursor(
-                    self.builder.text_context,
-                    TextEditMotion::ExtendSelectionToPoint {
-                        x: local.x,
-                        y: local.y,
-                    },
-                ),
-                1 => buffer.move_cursor(
-                    self.builder.text_context,
-                    TextEditMotion::MoveToPoint {
-                        x: local.x,
-                        y: local.y,
-                    },
-                ),
-                0 => {}
+                4.. => Some(TextEditMotion::SelectAll),
+                3 => Some(TextEditMotion::SelectLineAtPoint(local)),
+                2 => Some(TextEditMotion::SelectWordAtPoint(local)),
+                1 if is_shift_held => Some(TextEditMotion::ExtendSelectionToPoint(local)),
+                1 => Some(TextEditMotion::MoveToPoint(local)),
+                0 => None,
             }
         } else if is_left_down && is_focused {
-            match left_click_count {
-                3 => buffer.move_cursor(
-                    self.builder.text_context,
-                    TextEditMotion::SelectLineAtPoint {
-                        x: local.x,
-                        y: local.y,
-                    },
-                ),
-                2 => buffer.move_cursor(
-                    self.builder.text_context,
-                    TextEditMotion::SelectWordAtPoint {
-                        x: local.x,
-                        y: local.y,
-                    },
-                ),
-                _ => buffer.move_cursor(
-                    self.builder.text_context,
-                    TextEditMotion::ExtendSelectionToPoint {
-                        x: local.x,
-                        y: local.y,
-                    },
-                ),
-            }
+            Some(match left_click_count {
+                3 => TextEditMotion::SelectLineAtPoint(local),
+                2 => TextEditMotion::SelectWordAtPoint(local),
+                _ => TextEditMotion::ExtendSelectionToPoint(local),
+            })
+        } else {
+            None
+        };
+
+        if let Some(motion) = motion {
+            buffer.move_cursor(self.builder.text_context, motion);
         }
     }
 }
 
-fn draw_selection_rect(
+/// Fill a rect from a text layout, snapping its vertical extent to whole
+/// pixels.
+fn fill_snapped_rect(
     canvas: &mut Canvas,
     rect: &Rect<Pixels>,
     color: Color,
@@ -572,29 +548,6 @@ fn draw_selection_rect(
     canvas.draw(Primitive {
         point: [x + rect.origin.x, y0],
         size: [rect.size.width, y1 - y0],
-        clip,
-        paint: Paint::solid(color),
-        border: GradientPaint::default(),
-        border_width: [0.0; 4],
-        corner_radii: [0.0; 4],
-        use_nearest_sampling: false,
-    });
-}
-
-fn draw_cursor(
-    canvas: &mut Canvas,
-    cursor_rect: &Rect<Pixels>,
-    color: Color,
-    x: f32,
-    y: f32,
-    clip: ClipRect,
-) {
-    let y0 = (y + cursor_rect.origin.y).round();
-    let y1 = (y + cursor_rect.origin.y + cursor_rect.size.height).round();
-
-    canvas.draw(Primitive {
-        point: [x + cursor_rect.origin.x, y0],
-        size: [2.0, y1 - y0],
         clip,
         paint: Paint::solid(color),
         border: GradientPaint::default(),
@@ -625,21 +578,41 @@ impl EditableTextLayout for PlainEditorTextLayout<'_> {
     }
 }
 
-impl EditableTextBuffer for PlainEditor<Color> {
+/// An [`EditableTextBuffer`] backed by parley's single-style [`PlainEditor`].
+pub struct PlainTextBuffer {
+    editor: PlainEditor<Color>,
+    // The width/alignment last pushed to the editor. Setting either marks the
+    // parley layout dirty even when the value is unchanged, so only real
+    // changes are forwarded.
+    prev_width: Option<f32>,
+    prev_alignment: Option<TextAlignment>,
+}
+
+impl Default for PlainTextBuffer {
+    fn default() -> Self {
+        Self {
+            editor: PlainEditor::new(14.0),
+            prev_width: None,
+            prev_alignment: None,
+        }
+    }
+}
+
+impl EditableTextBuffer for PlainTextBuffer {
     type Layout<'a> = PlainEditorTextLayout<'a>;
 
     fn is_empty(&self) -> bool {
-        self.raw_text().is_empty()
+        self.editor.raw_text().is_empty()
     }
 
     fn selected_text(&self) -> Option<&str> {
-        self.selected_text()
+        self.editor.selected_text()
     }
 
     fn apply_style(&mut self, style: &Style, state: StateFlags) {
         use parley::StyleProperty as Prop;
 
-        let styles = self.edit_styles();
+        let styles = self.editor.edit_styles();
 
         styles.insert(Prop::FontFeatures(default_font_features()));
         styles.insert(Prop::Brush(style.text_color.get(state)));
@@ -676,19 +649,21 @@ impl EditableTextBuffer for PlainEditor<Color> {
     }
 
     fn enter_text(&mut self, context: &mut TextLayoutContext, text: &str) {
-        context.drive(self).insert_or_replace_selection(text);
+        context
+            .drive(&mut self.editor)
+            .insert_or_replace_selection(text);
     }
 
     fn move_cursor(&mut self, context: &mut TextLayoutContext, motion: TextEditMotion) {
-        let mut driver = context.drive(self);
+        let mut driver = context.drive(&mut self.editor);
 
         match motion {
             TextEditMotion::Backdelete => driver.backdelete(),
             TextEditMotion::BackdeleteWord => driver.backdelete_word(),
             TextEditMotion::Delete => driver.delete(),
             TextEditMotion::DeleteWord => driver.delete_word(),
-            TextEditMotion::ExtendSelectionToPoint { x, y } => {
-                driver.extend_selection_to_point(x, y);
+            TextEditMotion::ExtendSelectionToPoint(p) => {
+                driver.extend_selection_to_point(p.x, p.y);
             }
             TextEditMotion::MoveDown => driver.move_down(),
             TextEditMotion::MoveLeft => driver.move_left(),
@@ -697,20 +672,20 @@ impl EditableTextBuffer for PlainEditor<Color> {
             TextEditMotion::MoveWordRight => driver.move_word_right(),
             TextEditMotion::MoveToLineEnd => driver.move_to_line_end(),
             TextEditMotion::MoveToLineStart => driver.move_to_line_start(),
-            TextEditMotion::MoveToPoint { x, y } => driver.move_to_point(x, y),
+            TextEditMotion::MoveToPoint(p) => driver.move_to_point(p.x, p.y),
             TextEditMotion::MoveToTextEnd => driver.move_to_text_end(),
             TextEditMotion::MoveToTextStart => driver.move_to_text_start(),
             TextEditMotion::MoveUp => driver.move_up(),
             TextEditMotion::SelectAll => driver.select_all(),
             TextEditMotion::SelectDown => driver.select_down(),
             TextEditMotion::SelectLeft => driver.select_left(),
-            TextEditMotion::SelectLineAtPoint { x, y } => {
-                driver.select_line_at_point(x, y);
+            TextEditMotion::SelectLineAtPoint(p) => {
+                driver.select_line_at_point(p.x, p.y);
             }
             TextEditMotion::SelectRight => driver.select_right(),
             TextEditMotion::SelectUp => driver.select_up(),
-            TextEditMotion::SelectWordAtPoint { x, y } => {
-                driver.select_word_at_point(x, y);
+            TextEditMotion::SelectWordAtPoint(p) => {
+                driver.select_word_at_point(p.x, p.y);
             }
             TextEditMotion::SelectWordLeft => driver.select_word_left(),
             TextEditMotion::SelectWordRight => driver.select_word_right(),
@@ -727,10 +702,19 @@ impl EditableTextBuffer for PlainEditor<Color> {
         max_width: f32,
         alignment: TextAlignment,
     ) -> Option<f32> {
-        self.set_width(Some(max_width));
-        self.set_alignment(alignment.into());
+        if self.prev_width != Some(max_width) {
+            self.prev_width = Some(max_width);
+            self.editor.set_width(Some(max_width));
+        }
+
+        if self.prev_alignment != Some(alignment) {
+            self.prev_alignment = Some(alignment);
+            self.editor.set_alignment(alignment.into());
+        }
+
         Some(
-            self.layout(&mut context.fonts, &mut context.layouts)
+            self.editor
+                .layout(&mut context.fonts, &mut context.layouts)
                 .height(),
         )
     }
@@ -740,8 +724,11 @@ impl EditableTextBuffer for PlainEditor<Color> {
         context: &'a mut TextLayoutContext,
         mut callback: impl FnMut(Self::Layout<'a>),
     ) {
-        self.refresh_layout(&mut context.fonts, &mut context.layouts);
-        callback(PlainEditorTextLayout { editor: self });
+        self.editor
+            .refresh_layout(&mut context.fonts, &mut context.layouts);
+        callback(PlainEditorTextLayout {
+            editor: &self.editor,
+        });
     }
 }
 

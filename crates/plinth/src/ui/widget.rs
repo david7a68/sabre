@@ -35,6 +35,7 @@ pub use label::Label;
 pub use surface::Surface;
 pub use text_edit::EditableTextBuffer;
 pub use text_edit::EditableTextLayout;
+pub use text_edit::PlainTextBuffer;
 pub use text_edit::PlainTextEditorState;
 pub use text_edit::TextEdit;
 pub use text_edit::TextEditMotion;

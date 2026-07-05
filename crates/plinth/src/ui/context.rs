@@ -204,7 +204,7 @@ impl UiContext {
                 _ => return None,
             };
 
-            text_layouts.break_lines(text_context, *layout_id, max_width, *alignment, *overflow)
+            text_layouts.break_lines(*layout_id, max_width, *alignment, *overflow)
         });
 
         for (node, (content, widget_id)) in self.ui_tree.iter_nodes_by_layer() {

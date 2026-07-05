@@ -4,7 +4,6 @@ use slotmap::new_key_type;
 
 use crate::graphics::Color;
 use crate::graphics::TextAlignment;
-use crate::graphics::TextLayoutContext;
 
 use super::style::StateFlags;
 use super::style::StyleId;
@@ -18,6 +17,7 @@ pub struct StaticTextLayout {
 
     // Cache invalidation tracking: relayout when any of these change
     pub style_id: StyleId,
+    pub theme_revision: u64,
     pub state: StateFlags,
     pub text_hash: u64,
     pub raw_text: String,
@@ -70,6 +70,7 @@ impl TextLayoutStorage {
                 let layout = StaticTextLayout {
                     layout: parley::Layout::new(),
                     style_id: Default::default(),
+                    theme_revision: 0,
                     state: Default::default(),
                     text_hash: 0,
                     raw_text: String::new(),
@@ -94,7 +95,6 @@ impl TextLayoutStorage {
 
     pub(crate) fn break_lines(
         &mut self,
-        _context: &mut TextLayoutContext,
         layout_id: TextLayoutId,
         max_width: f32,
         alignment: TextAlignment,
