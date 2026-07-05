@@ -1,3 +1,4 @@
+use glamour::Contains;
 use glamour::Point2;
 
 use crate::ui::AxisAnchor;
@@ -7,23 +8,17 @@ use crate::ui::Pixels;
 use crate::ui::Position;
 use crate::ui::Size;
 use crate::ui::StyleClass;
-use crate::ui::TextOverflow;
 use crate::ui::UiBuilder;
-use crate::ui::WidgetId;
 use crate::ui::style::StateFlags;
 
 use super::ClickBehavior;
 use super::Interaction;
 use super::PointerButton;
 use super::menu::MenuItem as ContextMenuItem;
-use super::menu::MenuList;
-use super::menu::MenuOverlayState;
+use super::menu::MenuPopup;
 
 pub struct ContextMenu<'a> {
-    builder: Option<UiBuilder<'a>>,
-    root_id: WidgetId,
-    interaction: Interaction,
-    menu: MenuList,
+    popup: MenuPopup<'a>,
 }
 
 impl<'a> ContextMenu<'a> {
@@ -51,17 +46,27 @@ impl<'a> ContextMenu<'a> {
             .and_then(|s| s.custom_data::<RootState>())
             .unwrap_or_default();
         let was_open = root_state.is_open();
+        let pointer = root.input().pointer;
+        let pointer_over_trigger = root
+            .prev_state()
+            .is_some_and(|s| s.placement.contains(&pointer));
+        let press_started_over_trigger = root
+            .prev_state()
+            .is_some_and(|s| s.placement.contains(&root.input().prev_pointer));
 
-        let (interaction, state) = Interaction::compute_for_button(
+        let (mut interaction, state) = Interaction::compute_for_button(
             &root,
             PointerButton::Right,
             ClickBehavior::OnPress,
             StateFlags::HOVERED | StateFlags::PRESSED,
         );
+        if !press_started_over_trigger {
+            interaction.is_activated = false;
+        }
         root.set_button_active(PointerButton::Right, state.contains(StateFlags::PRESSED));
 
         let is_open = was_open || interaction.is_activated;
-        let anchor = if interaction.is_activated {
+        let mut anchor = if interaction.is_activated {
             root.input.pointer
         } else {
             root_state.anchor()
@@ -71,42 +76,15 @@ impl<'a> ContextMenu<'a> {
         let mut overlay_hovered = false;
 
         let mut overlay = if is_open {
-            dismiss_activated = {
-                let window_w = root.input.window_size.width;
-                let window_h = root.input.window_size.height;
-
-                let mut left_dismiss = root.modal_offset_child(
-                    (id, "dismiss", PointerButton::Left),
-                    Position::Absolute { x: 0.0, y: 0.0 },
-                    2,
-                );
-                left_dismiss.size(window_w, window_h);
-                let (left_interaction, left_state) = Interaction::compute(
-                    &left_dismiss,
-                    ClickBehavior::OnPress,
-                    StateFlags::HOVERED | StateFlags::PRESSED,
-                );
-                left_dismiss.set_active(left_state.contains(StateFlags::PRESSED));
-
-                let mut right_dismiss = root.modal_offset_child(
-                    (id, "dismiss", PointerButton::Right),
-                    Position::Absolute { x: 0.0, y: 0.0 },
-                    2,
-                );
-                right_dismiss.size(window_w, window_h);
-                let (right_interaction, right_state) = Interaction::compute_for_button(
-                    &right_dismiss,
-                    PointerButton::Right,
-                    ClickBehavior::OnPress,
-                    StateFlags::HOVERED | StateFlags::PRESSED,
-                );
-                right_dismiss.set_button_active(
-                    PointerButton::Right,
-                    right_state.contains(StateFlags::PRESSED),
-                );
-
-                left_interaction.is_activated || right_interaction.is_activated
-            };
+            let dismiss = super::menu::dismiss_state(
+                &mut root,
+                id,
+                &[PointerButton::Left, PointerButton::Right],
+            );
+            dismiss_activated = dismiss.any_activated();
+            if dismiss.button_activated(PointerButton::Right) && pointer_over_trigger {
+                anchor = root.input.pointer;
+            }
 
             root.context.state_mut(root_id).set_custom_data(RootState {
                 anchor_x_bits: anchor.x.to_bits(),
@@ -144,23 +122,12 @@ impl<'a> ContextMenu<'a> {
                 true,
             );
 
-            Some(UiBuilder {
-                theme: root.theme,
-                input: root.input,
-                context: root.context,
-                clipboard: root.clipboard,
-                format_buffer: root.format_buffer,
-                text_context: root.text_context,
-                text_layouts: root.text_layouts,
-                id: child_id,
-                index: child_index,
-                style_id: root.style_id,
-                state: root.state,
-                num_child_widgets: 0,
-                is_modal: true,
-                layer: child_layer,
-                text_overflow: TextOverflow::Clip,
-            })
+            Some(super::menu::add_overlay_builder(
+                root,
+                child_id,
+                child_index,
+                child_layer,
+            ))
         } else {
             root.context
                 .state_mut(root_id)
@@ -169,61 +136,36 @@ impl<'a> ContextMenu<'a> {
         };
 
         if let Some(overlay) = overlay.as_mut() {
-            let (overlay_interaction, overlay_state) = Interaction::compute(
-                overlay,
-                ClickBehavior::OnPress,
-                StateFlags::HOVERED | StateFlags::PRESSED,
-            );
-            overlay_hovered = overlay_interaction.is_hovered;
-
-            overlay.apply_style(StyleClass::ContextMenu, overlay_state);
-            overlay.child_spacing(0.0);
-            overlay.set_active(overlay_state.contains(StateFlags::PRESSED));
-            overlay.child_direction(LayoutDirection::Vertical);
-            overlay.request_focus();
+            overlay_hovered = super::menu::prepare_overlay(overlay, StyleClass::ContextMenu, None);
         }
 
-        let prev_overlay_state = overlay
-            .as_ref()
-            .and_then(|o| o.prev_state())
-            .and_then(|s| s.custom_data::<MenuOverlayState>())
-            .unwrap_or_default();
-        let mut menu = MenuList::from_overlay_state(prev_overlay_state);
-        menu.close_requested = dismiss_activated && !overlay_hovered;
-
         Self {
-            builder: overlay,
-            root_id,
-            interaction,
-            menu,
+            popup: MenuPopup::new(
+                overlay,
+                root_id,
+                interaction,
+                dismiss_activated && !overlay_hovered && !pointer_over_trigger,
+            ),
         }
     }
 
     pub fn width(&mut self, width: impl Into<Size>) -> &mut Self {
-        if let Some(builder) = self.builder.as_mut() {
-            builder.width(width);
-        }
+        self.popup.width(width);
         self
     }
 
     pub fn height(&mut self, height: impl Into<Size>) -> &mut Self {
-        if let Some(builder) = self.builder.as_mut() {
-            builder.height(height);
-        }
+        self.popup.height(height);
         self
     }
 
     pub fn size(&mut self, width: impl Into<Size>, height: impl Into<Size>) -> &mut Self {
-        if let Some(builder) = self.builder.as_mut() {
-            builder.size(width, height);
-        }
+        self.popup.size(width, height);
         self
     }
 
     pub fn padding(&mut self, padding: crate::ui::Padding) -> &mut Self {
-        if let Some(builder) = self.builder.as_mut() {
-            builder.padding(padding);
-        }
+        self.popup.padding(padding);
         self
     }
 
@@ -234,47 +176,16 @@ impl<'a> ContextMenu<'a> {
         self.item_inner(&callback)
     }
 
-    pub fn finish(mut self) -> (Option<usize>, Interaction) {
-        if self.builder.is_none() {
-            return (self.menu.selected_index(), self.interaction);
-        }
-
-        if let Some(builder) = self.builder.as_ref() {
-            self.menu.handle_keyboard_input(builder);
-        }
-
-        if let Some(builder) = self.builder.as_mut() {
-            if self.menu.close_requested {
-                builder
-                    .context
-                    .state_mut(builder.id)
-                    .set_custom_data(MenuOverlayState::default());
-                if let Some(s) = builder
-                    .context
-                    .state_mut(self.root_id)
-                    .custom_data_mut::<RootState>()
-                {
-                    *s = RootState::default();
-                }
-                builder.release_focus();
-            } else {
-                builder
-                    .context
-                    .state_mut(builder.id)
-                    .set_custom_data(self.menu.overlay_state());
+    pub fn finish(self) -> (Option<usize>, Interaction) {
+        self.popup.finish(|state| {
+            if let Some(root) = state.custom_data_mut::<RootState>() {
+                *root = RootState::default();
             }
-        }
-
-        (self.menu.selected_index(), self.interaction)
+        })
     }
 
     fn item_inner(&mut self, callback: &dyn ContextMenuItem) -> &mut Self {
-        let Some(builder) = self.builder.as_mut() else {
-            return self;
-        };
-
-        self.menu
-            .item(builder, StyleClass::ContextMenuItem, None, callback);
+        self.popup.item(StyleClass::ContextMenuItem, None, callback);
         self
     }
 }

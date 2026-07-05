@@ -1,3 +1,10 @@
+use std::hash::Hash;
+
+use crate::ui::OverlayPosition;
+use crate::ui::Position;
+use crate::ui::TextOverflow;
+use crate::ui::UiElementId;
+use crate::ui::WidgetId;
 use winit::keyboard::KeyCode;
 use winit::keyboard::PhysicalKey;
 
@@ -5,9 +12,222 @@ use crate::ui::Size;
 use crate::ui::StyleClass;
 use crate::ui::UiBuilder;
 use crate::ui::style::StateFlags;
+use crate::ui::widget::PointerButton;
+use crate::ui::widget::WidgetState;
 
 use super::ClickBehavior;
 use super::Interaction;
+
+pub(super) struct MenuPopup<'a> {
+    builder: Option<UiBuilder<'a>>,
+    root_id: WidgetId,
+    interaction: Interaction,
+    menu: MenuList,
+}
+
+impl<'a> MenuPopup<'a> {
+    pub fn new(
+        overlay: Option<UiBuilder<'a>>,
+        root_id: WidgetId,
+        interaction: Interaction,
+        close_requested: bool,
+    ) -> Self {
+        let prev_overlay_state = overlay
+            .as_ref()
+            .and_then(|o| o.prev_state())
+            .and_then(|s| s.custom_data::<MenuOverlayState>())
+            .unwrap_or_default();
+        let mut menu = MenuList::from_overlay_state(prev_overlay_state);
+        menu.close_requested = close_requested;
+
+        Self {
+            builder: overlay,
+            root_id,
+            interaction,
+            menu,
+        }
+    }
+
+    pub fn width(&mut self, width: impl Into<Size>) {
+        if let Some(builder) = self.builder.as_mut() {
+            builder.width(width);
+        }
+    }
+
+    pub fn height(&mut self, height: impl Into<Size>) {
+        if let Some(builder) = self.builder.as_mut() {
+            builder.height(height);
+        }
+    }
+
+    pub fn size(&mut self, width: impl Into<Size>, height: impl Into<Size>) {
+        if let Some(builder) = self.builder.as_mut() {
+            builder.size(width, height);
+        }
+    }
+
+    pub fn padding(&mut self, padding: crate::ui::Padding) {
+        if let Some(builder) = self.builder.as_mut() {
+            builder.padding(padding);
+        }
+    }
+
+    pub fn item(
+        &mut self,
+        item_style: StyleClass,
+        padding_style: Option<StyleClass>,
+        callback: &dyn MenuItem,
+    ) {
+        let Some(builder) = self.builder.as_mut() else {
+            return;
+        };
+
+        self.menu.item(builder, item_style, padding_style, callback);
+    }
+
+    pub fn finish(
+        mut self,
+        close_root: impl FnOnce(&mut WidgetState),
+    ) -> (Option<usize>, Interaction) {
+        if self.builder.is_none() {
+            return (self.menu.selected_index(), self.interaction);
+        }
+
+        if let Some(builder) = self.builder.as_ref() {
+            self.menu.handle_keyboard_input(builder);
+        }
+
+        if let Some(builder) = self.builder.as_mut() {
+            if self.menu.close_requested {
+                builder
+                    .context
+                    .state_mut(builder.id)
+                    .set_custom_data(MenuOverlayState::default());
+                close_root(builder.context.state_mut(self.root_id));
+                builder.release_focus();
+            } else {
+                builder
+                    .context
+                    .state_mut(builder.id)
+                    .set_custom_data(self.menu.overlay_state());
+            }
+        }
+
+        (self.menu.selected_index(), self.interaction)
+    }
+}
+
+pub(super) struct DismissState {
+    activated_buttons: u8,
+}
+
+impl DismissState {
+    pub fn any_activated(&self) -> bool {
+        self.activated_buttons != 0
+    }
+
+    pub fn button_activated(&self, button: PointerButton) -> bool {
+        self.activated_buttons & button.bit() != 0
+    }
+}
+
+pub(super) fn dismiss_state(
+    root: &mut UiBuilder<'_>,
+    id: impl Hash,
+    buttons: &[PointerButton],
+) -> DismissState {
+    let window_w = root.input.window_size.width;
+    let window_h = root.input.window_size.height;
+    let mut dismiss =
+        root.modal_offset_child((id, "dismiss"), Position::Absolute { x: 0.0, y: 0.0 }, 2);
+    dismiss.size(window_w, window_h);
+
+    let mut activated_buttons = 0;
+    for &button in buttons {
+        let (interaction, _) = Interaction::compute_for_button(
+            &dismiss,
+            button,
+            ClickBehavior::OnPress,
+            StateFlags::HOVERED | StateFlags::PRESSED,
+        );
+        if interaction.is_activated {
+            activated_buttons |= button.bit();
+        }
+
+        let active = button.is_down(&dismiss.input().mouse_state);
+        dismiss
+            .context
+            .state_mut(dismiss.id)
+            .set_pointer_button_active(button, active);
+    }
+
+    DismissState { activated_buttons }
+}
+
+pub(super) fn add_overlay_builder<'a>(
+    root: UiBuilder<'a>,
+    child_id: WidgetId,
+    child_index: UiElementId,
+    child_layer: u8,
+) -> UiBuilder<'a> {
+    UiBuilder {
+        theme: root.theme,
+        input: root.input,
+        context: root.context,
+        clipboard: root.clipboard,
+        format_buffer: root.format_buffer,
+        text_context: root.text_context,
+        text_layouts: root.text_layouts,
+        id: child_id,
+        index: child_index,
+        style_id: root.style_id,
+        state: root.state,
+        num_child_widgets: 0,
+        is_modal: true,
+        layer: child_layer,
+        text_overflow: TextOverflow::Clip,
+    }
+}
+
+pub(super) fn add_root_overlay(
+    root: &mut UiBuilder<'_>,
+    child_id: WidgetId,
+    pos: OverlayPosition,
+    child_layer: u8,
+) -> UiElementId {
+    let child_index = root.context.add_overlay_node(
+        root.index,
+        child_id,
+        Position::OutOfFlow(pos),
+        child_layer,
+        true,
+    );
+    root.num_child_widgets += 1;
+    child_index
+}
+
+pub(super) fn prepare_overlay(
+    overlay: &mut UiBuilder<'_>,
+    style: StyleClass,
+    width: Option<Size>,
+) -> bool {
+    let (overlay_interaction, overlay_state) = Interaction::compute(
+        overlay,
+        ClickBehavior::OnPress,
+        StateFlags::HOVERED | StateFlags::PRESSED,
+    );
+
+    overlay.apply_style(style, overlay_state);
+    if let Some(width) = width {
+        overlay.width(width);
+    }
+    overlay.child_spacing(0.0);
+    overlay.set_active(overlay_state.contains(StateFlags::PRESSED));
+    overlay.child_direction(crate::ui::LayoutDirection::Vertical);
+    overlay.request_focus();
+
+    overlay_interaction.is_hovered
+}
 
 #[derive(Default)]
 pub(super) struct MenuList {

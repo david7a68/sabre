@@ -63,7 +63,7 @@ pub enum PointerButton {
 }
 
 impl PointerButton {
-    const fn bit(self) -> u8 {
+    pub(crate) const fn bit(self) -> u8 {
         match self {
             Self::Left => 1 << 0,
             Self::Right => 1 << 1,
@@ -71,7 +71,7 @@ impl PointerButton {
         }
     }
 
-    fn is_down(self, state: &MouseButtonState) -> bool {
+    pub(crate) fn is_down(self, state: &MouseButtonState) -> bool {
         match self {
             Self::Left => state.is_left_down(),
             Self::Right => state.is_right_down(),
@@ -230,8 +230,6 @@ pub struct WidgetState {
 
     pub text_layout: Option<TextLayoutId>,
 
-    /// Whether the widget was being actively pressed last frame by the primary button.
-    pub was_active: bool,
     active_pointer_buttons: u8,
     /// The z_layer of the node this widget occupied last frame. Used to determine
     /// hit-test priority when multiple layers are present.
@@ -252,10 +250,6 @@ impl WidgetState {
             self.active_pointer_buttons |= button.bit();
         } else {
             self.active_pointer_buttons &= !button.bit();
-        }
-
-        if button == PointerButton::Left {
-            self.was_active = active;
         }
     }
 
