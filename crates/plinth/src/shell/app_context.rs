@@ -46,6 +46,7 @@ impl AppContextBuilder {
                 text_system: TextLayoutContext::default(),
                 text_layouts: TextLayoutStorage::default(),
                 format_buffer: String::with_capacity(2048),
+                ui_frame_counter: 0,
             },
             windows: HashMap::new(),
             user_handler: handler,
@@ -73,6 +74,7 @@ pub struct AppContext {
     pub(super) text_system: TextLayoutContext,
     pub(super) text_layouts: TextLayoutStorage,
     pub(super) format_buffer: String,
+    pub(super) ui_frame_counter: u64,
 }
 
 impl AppContext {
@@ -97,6 +99,8 @@ impl AppContext {
 
     pub(super) fn repaint<'a>(&mut self, windows: impl IntoIterator<Item = &'a mut WinitWindow>) {
         let graphics = self.graphics.as_mut().unwrap();
+        let ui_frame_counter = self.ui_frame_counter;
+        self.ui_frame_counter = self.ui_frame_counter.wrapping_add(1);
 
         let windows = windows.into_iter();
         let mut outputs = SmallVec::with_capacity(windows.size_hint().0);
@@ -113,6 +117,7 @@ impl AppContext {
                 &self.theme,
                 &input,
                 Duration::ZERO,
+                ui_frame_counter,
             );
 
             let context = Context {

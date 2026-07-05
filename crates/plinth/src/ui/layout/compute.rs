@@ -53,23 +53,24 @@ pub(super) fn compute_major_axis_fit_sizes<D: LayoutDirectionExt>(
             + inter_child_padding * in_flow_count.saturating_sub(1) as f32
     };
 
-    let mut size = match size_spec {
-        Size::Fixed(size) => size,
-        Size::Fit { min, max } => child_sizes.clamp(min, max),
-        Size::Flex { max, .. } => max,
-        Size::Grow => {
-            // Grow is handled in the offsets phase
-            0.0
+    let (mut size, mut fit_size) = match size_spec {
+        Size::Fixed(size) => (size, size),
+        Size::Fit { min, max } => {
+            let size = child_sizes.clamp(min, max);
+            (size, size)
         }
+        Size::Flex { max, .. } => (max, max),
+        Size::Grow => (0.0, child_sizes),
     };
 
     if let Some(limit) = parent_limit {
         size = size.min(limit);
+        fit_size = fit_size.min(limit);
     }
 
     D::set_major_size(&mut nodes[node_id.0 as usize], size);
 
-    size
+    fit_size
 }
 
 pub(super) fn compute_major_axis_grow_sizes<D: LayoutDirectionExt>(
@@ -332,19 +333,23 @@ pub(super) fn compute_minor_axis_fit_sizes<D: LayoutDirectionExt>(
         max_in_flow_size
     };
 
-    let mut size = match size_spec {
-        Fixed(size) => size,
-        Fit { min, max } => (child_sizes + size_padding).clamp(min, max),
-        Flex { max, .. } => max,
-        Grow => 0.0, // Grow is handled later
+    let (mut size, mut fit_size) = match size_spec {
+        Fixed(size) => (size, size),
+        Fit { min, max } => {
+            let size = (child_sizes + size_padding).clamp(min, max);
+            (size, size)
+        }
+        Flex { max, .. } => (max, max),
+        Grow => (0.0, child_sizes + size_padding),
     };
 
     if let Some(limit) = parent_limit {
         size = size.min(limit);
+        fit_size = fit_size.min(limit);
     }
 
     D::set_minor_size(&mut nodes[node_id.0 as usize], size);
-    size
+    fit_size
 }
 
 pub(super) fn compute_minor_axis_grow_sizes<D: LayoutDirectionExt>(

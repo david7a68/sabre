@@ -287,6 +287,62 @@ mod tests {
         );
     }
 
+    #[test]
+    fn fit_width_uses_grow_child_content_width() {
+        let mut tree = LayoutTree::new();
+        let root = tree.add(
+            None,
+            Atom {
+                width: Fixed(400.0),
+                height: Fixed(200.0),
+                ..Default::default()
+            },
+            (),
+        );
+        let panel = tree.add(
+            Some(root),
+            Atom {
+                width: Fit {
+                    min: 20.0,
+                    max: f32::MAX,
+                },
+                height: Fixed(40.0),
+                direction: LayoutDirection::Vertical,
+                inner_padding: Padding {
+                    left: 1.0,
+                    right: 1.0,
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            (),
+        );
+        let item = tree.add(
+            Some(panel),
+            Atom {
+                width: Grow,
+                height: Fixed(20.0),
+                direction: LayoutDirection::Horizontal,
+                ..Default::default()
+            },
+            (),
+        );
+        tree.add(
+            Some(item),
+            Atom {
+                width: Fixed(80.0),
+                height: Fixed(10.0),
+                ..Default::default()
+            },
+            (),
+        );
+
+        tree.compute_layout(|_, _| None);
+
+        assert_eq!(node_result(&tree, panel).width, 82.0);
+        assert_eq!(node_result(&tree, item).width, 80.0);
+    }
+
     // ── compute_overlay_positions: dropdown preset ───────────────────────────
 
     #[test]

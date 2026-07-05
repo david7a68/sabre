@@ -1,8 +1,9 @@
 use std::borrow::Cow;
 use std::sync::OnceLock;
+use std::sync::atomic::AtomicU64;
+use std::sync::atomic::Ordering;
 
 use parley::FontFeatures;
-use smallvec::SmallVec;
 
 use crate::graphics::Color;
 use crate::graphics::FontStack;
@@ -21,6 +22,7 @@ use super::style::StyleProperty;
 use super::style::StyleRegistry;
 
 static DEFAULT_FONT_FEATURES: OnceLock<FontFeatures<'static>> = OnceLock::new();
+static NEXT_THEME_REVISION: AtomicU64 = AtomicU64::new(1);
 
 #[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -34,11 +36,13 @@ pub enum StyleClass {
     VerticalSeparator,
     DropdownMenu,
     DropdownItem,
+    ContextMenu,
+    ContextMenuItem,
 }
 
 impl StyleClass {
     /// Number of style class variants. Update when adding new variants.
-    pub const COUNT: usize = 9;
+    pub const COUNT: usize = 11;
 }
 
 pub struct Theme {
@@ -54,12 +58,11 @@ impl Theme {
         Self {
             styles,
             well_known_classes: [None; StyleClass::COUNT],
-            revision: 0,
+            revision: next_theme_revision(),
         }
     }
 
-    /// A counter that increases on every theme mutation, so that cached style
-    /// resolutions can be invalidated by comparing revisions.
+    /// A globally unique generation stamp for this theme version.
     pub fn revision(&self) -> u64 {
         self.revision
     }
@@ -78,7 +81,7 @@ impl Theme {
     /// Assigns a style to a style class.
     pub fn set(&mut self, class: StyleClass, style_id: StyleId) {
         self.well_known_classes[class as usize] = Some(style_id);
-        self.revision += 1;
+        self.mark_changed();
     }
 
     /// Sets properties on the default style.
@@ -91,7 +94,7 @@ impl Theme {
     ) {
         let default_style_id = self.styles.default_style_id();
         self.styles.update(default_style_id, properties);
-        self.revision += 1;
+        self.mark_changed();
     }
 
     /// Modifies a style class by replacing its properties, registering a new
@@ -137,7 +140,7 @@ impl Theme {
     ) -> Result<StyleId, StyleError> {
         let parent = parent.unwrap_or_else(|| self.styles.default_style_id());
         let style_id = self.styles.register(Some(parent), properties)?;
-        self.revision += 1;
+        self.mark_changed();
         Ok(style_id)
     }
 
@@ -149,7 +152,7 @@ impl Theme {
         properties: impl IntoIterator<Item = (StateFlags, StyleProperty)>,
     ) {
         self.styles.update(style_id, properties);
-        self.revision += 1;
+        self.mark_changed();
     }
 
     pub(crate) fn push_text_defaults(
@@ -158,61 +161,55 @@ impl Theme {
         state: StateFlags,
         builder: &mut parley::RangedBuilder<Color>,
     ) {
-        use parley::StyleProperty as Prop;
-
-        let style = self.enumerate_styles(style_id, state, |prop| {
+        let style = self.styles.get(style_id).unwrap();
+        enumerate_text_style(style, state, |prop| {
             builder.push_default(prop);
         });
-
-        match &style.font.get(state).family {
-            FontStack::Source(cow) => {
-                builder.push_default(Prop::FontFamily(parley::FontFamily::Source(cow.clone())));
-            }
-            FontStack::Single(font_family) => {
-                builder.push_default(Prop::FontFamily(parley::FontFamily::Single(
-                    font_family.clone().into(),
-                )));
-            }
-            FontStack::List(cow) => {
-                let families = cow
-                    .iter()
-                    .cloned()
-                    .map(|f| f.into())
-                    .collect::<SmallVec<[parley::FontFamilyName; 4]>>();
-                builder.push_default(Prop::FontFamily(families.as_slice().into()));
-            }
-        }
     }
 
-    fn enumerate_styles<'a>(
-        &self,
-        style_id: StyleId,
-        state: StateFlags,
-        mut callback: impl FnMut(parley::StyleProperty<'a, Color>),
-    ) -> &Style {
-        use parley::StyleProperty as Prop;
+    fn mark_changed(&mut self) {
+        self.revision = next_theme_revision();
+    }
+}
 
-        let style = self.styles.get(style_id).unwrap();
+pub(crate) fn enumerate_text_style(
+    style: &Style,
+    state: StateFlags,
+    mut callback: impl FnMut(parley::StyleProperty<'static, Color>),
+) {
+    use parley::StyleProperty as Prop;
 
-        callback(Prop::FontFeatures(default_font_features()));
-        callback(Prop::Brush(style.text_color.get(state)));
-        callback(Prop::FontSize(style.font_size.get(state) as f32));
-        callback(Prop::FontStyle(style.font_style.get(state).into()));
-        callback(Prop::FontWeight(parley::FontWeight::new(
-            style.font_weight.get(state) as f32,
-        )));
-        callback(Prop::StrikethroughBrush(Some(
-            style.strikethrough_color.get(state),
-        )));
-        callback(Prop::StrikethroughOffset(Some(
-            style.strikethrough_offset.get(state),
-        )));
-        callback(Prop::UnderlineBrush(Some(style.underline_color.get(state))));
-        callback(Prop::UnderlineOffset(Some(
-            style.underline_offset.get(state),
-        )));
+    callback(Prop::FontFeatures(default_font_features()));
+    callback(Prop::Brush(style.text_color.get(state)));
+    callback(Prop::FontSize(style.font_size.get(state) as f32));
+    callback(Prop::FontStyle(style.font_style.get(state).into()));
+    callback(Prop::FontWeight(parley::FontWeight::new(
+        style.font_weight.get(state) as f32,
+    )));
+    callback(Prop::StrikethroughBrush(Some(
+        style.strikethrough_color.get(state),
+    )));
+    callback(Prop::StrikethroughOffset(Some(
+        style.strikethrough_offset.get(state),
+    )));
+    callback(Prop::UnderlineBrush(Some(style.underline_color.get(state))));
+    callback(Prop::UnderlineOffset(Some(
+        style.underline_offset.get(state),
+    )));
 
-        style
+    match &style.font.get(state).family {
+        FontStack::Source(cow) => {
+            callback(Prop::FontFamily(parley::FontFamily::Source(cow.clone())));
+        }
+        FontStack::Single(font_family) => {
+            callback(Prop::FontFamily(parley::FontFamily::Single(
+                font_family.clone().into(),
+            )));
+        }
+        FontStack::List(cow) => {
+            let families = cow.iter().cloned().map(|f| f.into()).collect::<Vec<_>>();
+            callback(Prop::FontFamily(parley::FontFamily::List(families.into())));
+        }
     }
 }
 
@@ -236,6 +233,10 @@ pub(crate) fn default_font_features() -> parley::FontFeatures<'static> {
             parley::FontFeatures::List(Cow::Borrowed(Vec::leak(list)))
         })
         .clone()
+}
+
+fn next_theme_revision() -> u64 {
+    NEXT_THEME_REVISION.fetch_add(1, Ordering::Relaxed)
 }
 
 fn default_theme() -> Theme {
@@ -364,6 +365,22 @@ fn default_theme() -> Theme {
 
     theme
         .set_style_class(
+            StyleClass::ContextMenu,
+            Some(theme.get_id(StyleClass::DropdownMenu)),
+            [(
+                StateFlags::empty(),
+                StyleProperty::BorderWidths(BorderWidths {
+                    left: 1.0,
+                    right: 1.0,
+                    top: 1.0,
+                    bottom: 1.0,
+                }),
+            )],
+        )
+        .unwrap();
+
+    theme
+        .set_style_class(
             StyleClass::DropdownItem,
             Some(theme.get_id(StyleClass::Label)),
             [
@@ -403,6 +420,14 @@ fn default_theme() -> Theme {
                 ),
                 (StateFlags::empty(), StyleProperty::Width(Size::Grow)),
             ],
+        )
+        .unwrap();
+
+    theme
+        .set_style_class(
+            StyleClass::ContextMenuItem,
+            Some(theme.get_id(StyleClass::DropdownItem)),
+            [],
         )
         .unwrap();
 

@@ -6,6 +6,7 @@ use glamour::Contains;
 use glamour::Rect;
 use std::mem::size_of;
 
+use crate::shell::MouseButtonState;
 use crate::ui::Pixels;
 use crate::ui::text::TextLayoutId;
 
@@ -15,23 +16,27 @@ use super::UiBuilder;
 use super::style::StateFlags;
 
 mod button;
+mod context_menu;
 mod dropdown;
 mod frame;
 mod horizontal_separator;
 mod image;
 mod label;
 pub(crate) mod macros;
+mod menu;
 mod surface;
 mod text_edit;
 mod vertical_separator;
 
 pub use button::Button;
+pub use context_menu::ContextMenu;
 pub use dropdown::Dropdown;
-pub use dropdown::DropdownItem;
 pub use frame::Frame;
 pub use horizontal_separator::HorizontalSeparator;
 pub use image::Image;
 pub use label::Label;
+pub use menu::MenuItem as ContextMenuItem;
+pub use menu::MenuItem as DropdownItem;
 pub use surface::Surface;
 pub use text_edit::EditableTextBuffer;
 pub use text_edit::EditableTextLayout;
@@ -47,6 +52,32 @@ pub struct Interaction {
     pub is_activated: bool,
     pub is_hovered: bool,
     pub is_focused: bool,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum PointerButton {
+    #[default]
+    Left,
+    Right,
+    Middle,
+}
+
+impl PointerButton {
+    pub(crate) const fn bit(self) -> u8 {
+        match self {
+            Self::Left => 1 << 0,
+            Self::Right => 1 << 1,
+            Self::Middle => 1 << 2,
+        }
+    }
+
+    pub(crate) fn is_down(self, state: &MouseButtonState) -> bool {
+        match self {
+            Self::Left => state.is_left_down(),
+            Self::Right => state.is_right_down(),
+            Self::Middle => state.is_middle_down(),
+        }
+    }
 }
 
 pub trait Container<'a>: Sized {
@@ -126,6 +157,15 @@ impl Interaction {
         behavior: ClickBehavior,
         interest: StateFlags,
     ) -> (Self, StateFlags) {
+        Self::compute_for_button(builder, PointerButton::Left, behavior, interest)
+    }
+
+    pub fn compute_for_button(
+        builder: &UiBuilder<'_>,
+        button: PointerButton,
+        behavior: ClickBehavior,
+        interest: StateFlags,
+    ) -> (Self, StateFlags) {
         let was_focused = builder.is_focused();
 
         // Layer-aware hit testing: a widget can only be hovered if no higher layer
@@ -142,15 +182,15 @@ impl Interaction {
             .prev_state()
             .map(|s| {
                 (
-                    s.was_active,
+                    s.is_pointer_button_active(button),
                     !layer_blocked && s.placement.contains(&builder.input.pointer),
                 )
             })
             .unwrap_or_default();
 
-        let is_left_down = builder.input.mouse_state.is_left_down();
-        let just_pressed = is_left_down && !was_active;
-        let just_released = !is_left_down && was_active;
+        let is_button_down = button.is_down(&builder.input.mouse_state);
+        let just_pressed = is_button_down && !was_active;
+        let just_released = !is_button_down && was_active;
 
         let is_activated = match behavior {
             ClickBehavior::OnPress => is_hovered && just_pressed,
@@ -161,7 +201,7 @@ impl Interaction {
         if is_hovered {
             state |= StateFlags::HOVERED & interest;
         }
-        if is_hovered && is_left_down {
+        if is_hovered && is_button_down {
             state |= StateFlags::PRESSED & interest;
         }
         if is_activated || ((is_hovered || !just_pressed) && was_focused) {
@@ -190,8 +230,7 @@ pub struct WidgetState {
 
     pub text_layout: Option<TextLayoutId>,
 
-    /// Whether the widget was being actively pressed last frame
-    pub was_active: bool,
+    active_pointer_buttons: u8,
     /// The z_layer of the node this widget occupied last frame. Used to determine
     /// hit-test priority when multiple layers are present.
     pub layer: u8,
@@ -202,6 +241,18 @@ pub struct WidgetState {
 }
 
 impl WidgetState {
+    fn is_pointer_button_active(&self, button: PointerButton) -> bool {
+        self.active_pointer_buttons & button.bit() != 0
+    }
+
+    pub(crate) fn set_pointer_button_active(&mut self, button: PointerButton, active: bool) {
+        if active {
+            self.active_pointer_buttons |= button.bit();
+        } else {
+            self.active_pointer_buttons &= !button.bit();
+        }
+    }
+
     /// Copy a [Pod] value previously stored with [set_custom_data].
     ///
     /// Returns `None` if no custom data has been written or `size_of::<T>() > 8`.
