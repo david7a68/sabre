@@ -10,6 +10,7 @@ use crate::ui::Pixels;
 use crate::ui::text::TextLayoutId;
 
 use super::Alignment;
+use super::ChildWrap;
 use super::LayoutDirection;
 use super::UiBuilder;
 use super::style::StateFlags;
@@ -73,6 +74,46 @@ pub trait Container<'a>: Sized {
 
     fn with_child_direction(mut self, direction: LayoutDirection) -> Self {
         self.child_direction(direction);
+        self
+    }
+
+    fn child_wrap(&mut self, wrap: ChildWrap) -> &mut Self {
+        self.builder_mut().child_wrap(wrap);
+        self
+    }
+
+    fn with_child_wrap(mut self, wrap: ChildWrap) -> Self {
+        self.child_wrap(wrap);
+        self
+    }
+
+    fn wrap_children(&mut self) -> &mut Self {
+        self.builder_mut().wrap_children();
+        self
+    }
+
+    fn set_wrap_children(&mut self, wrap: bool) -> &mut Self {
+        self.builder_mut().set_wrap_children(wrap);
+        self
+    }
+
+    fn child_line_spacing(&mut self, spacing: f32) -> &mut Self {
+        self.builder_mut().child_line_spacing(spacing);
+        self
+    }
+
+    fn with_child_line_spacing(mut self, spacing: f32) -> Self {
+        self.child_line_spacing(spacing);
+        self
+    }
+
+    fn child_line_alignment(&mut self, alignment: Alignment) -> &mut Self {
+        self.builder_mut().child_line_alignment(alignment);
+        self
+    }
+
+    fn with_child_line_alignment(mut self, alignment: Alignment) -> Self {
+        self.child_line_alignment(alignment);
         self
     }
 

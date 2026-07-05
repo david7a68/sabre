@@ -13,6 +13,7 @@ use super::compute::compute_minor_axis_offsets;
 use super::compute::compute_overlay_positions;
 use super::compute::compute_text_heights;
 use super::types::Alignment;
+use super::types::ChildWrap;
 use super::types::LayoutDirection;
 use super::types::Padding;
 use super::types::Position;
@@ -29,6 +30,9 @@ pub struct Atom {
     pub minor_align: Alignment,
     pub direction: LayoutDirection,
     pub inter_child_padding: f32,
+    pub child_wrap: ChildWrap,
+    pub line_spacing: f32,
+    pub line_align: Alignment,
 
     pub clip_overflow: bool,
 
@@ -57,6 +61,17 @@ pub(crate) struct UiElementId(pub(crate) u16);
 pub(super) type NodeIndexArray = SmallVec<[UiElementId; 8]>;
 
 #[derive(Default, Debug)]
+pub(super) struct WrapLine {
+    pub children: NodeIndexArray,
+    pub major_size: f32,
+}
+
+#[derive(Default, Debug)]
+pub(super) struct WrapLines {
+    pub lines: SmallVec<[WrapLine; 4]>,
+}
+
+#[derive(Default, Debug)]
 pub(crate) struct LayoutNode {
     pub atom: Atom,
     pub result: NodeLayout,
@@ -65,6 +80,7 @@ pub(crate) struct LayoutNode {
 pub(crate) struct LayoutTree<T> {
     nodes: Vec<LayoutNode>,
     children: Vec<NodeIndexArray>,
+    wrap_lines: Vec<WrapLines>,
 
     /// Content associated with nodes, such as text layouts.
     ///
@@ -95,6 +111,7 @@ impl<T> LayoutTree<T> {
         Self {
             nodes: Vec::new(),
             children: Vec::new(),
+            wrap_lines: Vec::new(),
             content: Vec::new(),
             out_of_flow_nodes: SmallVec::new(),
             layer_buckets: SmallVec::new(),
@@ -143,6 +160,7 @@ impl<T> LayoutTree<T> {
         self.nodes.push(node);
         self.content.push(content);
         self.children.push(NodeIndexArray::new());
+        self.wrap_lines.push(WrapLines::default());
 
         if let Some(parent_id) = parent {
             self.children[parent_id.0 as usize].push(node_id);
@@ -154,6 +172,7 @@ impl<T> LayoutTree<T> {
     pub fn clear(&mut self) {
         self.nodes.clear();
         self.children.clear();
+        self.wrap_lines.clear();
         self.content.clear();
         self.out_of_flow_nodes.clear();
         // Clear each bucket in place so spilled inner SmallVec allocations
@@ -177,16 +196,50 @@ impl<T> LayoutTree<T> {
             "The root node must have a horizontal layout direction"
         );
 
-        compute_major_axis_fit_sizes::<HorizontalMode>(nodes, &self.children, node_id, None);
-        compute_major_axis_grow_sizes::<HorizontalMode>(nodes, &self.children, node_id);
+        compute_major_axis_fit_sizes::<HorizontalMode>(
+            nodes,
+            &self.children,
+            &mut self.wrap_lines,
+            node_id,
+            None,
+        );
+        compute_major_axis_grow_sizes::<HorizontalMode>(
+            nodes,
+            &self.children,
+            &mut self.wrap_lines,
+            node_id,
+        );
 
         compute_text_heights(measure_text, nodes.iter_mut().zip(self.content.iter_mut()));
 
-        compute_minor_axis_fit_sizes::<HorizontalMode>(nodes, &self.children, node_id, None);
-        compute_minor_axis_grow_sizes::<HorizontalMode>(nodes, &self.children, node_id);
+        compute_minor_axis_fit_sizes::<HorizontalMode>(
+            nodes,
+            &self.children,
+            &mut self.wrap_lines,
+            node_id,
+            None,
+        );
+        compute_minor_axis_grow_sizes::<HorizontalMode>(
+            nodes,
+            &self.children,
+            &mut self.wrap_lines,
+            node_id,
+        );
 
-        compute_major_axis_offsets::<HorizontalMode>(nodes, &self.children, node_id, 0.0);
-        compute_minor_axis_offsets::<HorizontalMode>(nodes, &self.children, node_id, 0.0);
+        compute_major_axis_offsets::<HorizontalMode>(
+            nodes,
+            &self.children,
+            &self.wrap_lines,
+            node_id,
+            0.0,
+        );
+        compute_minor_axis_offsets::<HorizontalMode>(
+            nodes,
+            &self.children,
+            &self.wrap_lines,
+            node_id,
+            0.0,
+        );
 
         // Pass 7.5: position out-of-flow (overlay) nodes relative to their parents.
         let viewport_clip = {
@@ -216,11 +269,402 @@ impl<T> LayoutTree<T> {
 #[cfg(test)]
 mod tests {
     use super::super::types::Size::*;
-    use super::super::types::{AxisAnchor, OverlayPosition};
+    use super::super::types::{AxisAnchor, ChildWrap, OverlayPosition};
     use super::*;
 
     fn node_result(tree: &LayoutTree<()>, id: UiElementId) -> &NodeLayout {
         &tree.nodes[id.0 as usize].result
+    }
+
+    fn fixed_child(
+        tree: &mut LayoutTree<()>,
+        parent: UiElementId,
+        width: f32,
+        height: f32,
+    ) -> UiElementId {
+        tree.add(
+            Some(parent),
+            Atom {
+                width: Fixed(width),
+                height: Fixed(height),
+                ..Default::default()
+            },
+            (),
+        )
+    }
+
+    fn aligned_child_positions(major_align: Alignment) -> (f32, f32) {
+        let mut tree = LayoutTree::new();
+        let root = tree.add(
+            None,
+            Atom {
+                width: Fixed(200.0),
+                height: Fixed(100.0),
+                ..Default::default()
+            },
+            (),
+        );
+        let parent = tree.add(
+            Some(root),
+            Atom {
+                width: Fixed(100.0),
+                height: Fixed(20.0),
+                child_wrap: ChildWrap::Wrap,
+                inter_child_padding: 10.0,
+                major_align,
+                ..Default::default()
+            },
+            (),
+        );
+        let first = fixed_child(&mut tree, parent, 20.0, 10.0);
+        let second = fixed_child(&mut tree, parent, 20.0, 10.0);
+
+        tree.compute_layout(|_, _| None);
+
+        (node_result(&tree, first).x, node_result(&tree, second).x)
+    }
+
+    #[test]
+    fn no_wrap_still_lays_out_one_row() {
+        let mut tree = LayoutTree::new();
+        let root = tree.add(
+            None,
+            Atom {
+                width: Fixed(200.0),
+                height: Fixed(100.0),
+                ..Default::default()
+            },
+            (),
+        );
+        let parent = tree.add(
+            Some(root),
+            Atom {
+                width: Fixed(100.0),
+                height: Fit {
+                    min: 0.0,
+                    max: f32::MAX,
+                },
+                ..Default::default()
+            },
+            (),
+        );
+        let first = fixed_child(&mut tree, parent, 60.0, 20.0);
+        let second = fixed_child(&mut tree, parent, 60.0, 30.0);
+
+        tree.compute_layout(|_, _| None);
+
+        assert_eq!(node_result(&tree, parent).height, 30.0);
+        assert_eq!(node_result(&tree, first).x, 0.0);
+        assert_eq!(node_result(&tree, first).y, 0.0);
+        assert_eq!(node_result(&tree, second).x, 60.0);
+        assert_eq!(node_result(&tree, second).y, 0.0);
+    }
+
+    #[test]
+    fn horizontal_children_wrap_into_rows() {
+        let mut tree = LayoutTree::new();
+        let root = tree.add(
+            None,
+            Atom {
+                width: Fixed(200.0),
+                height: Fixed(100.0),
+                ..Default::default()
+            },
+            (),
+        );
+        let parent = tree.add(
+            Some(root),
+            Atom {
+                width: Fixed(100.0),
+                height: Fit {
+                    min: 0.0,
+                    max: f32::MAX,
+                },
+                child_wrap: ChildWrap::Wrap,
+                line_spacing: 5.0,
+                ..Default::default()
+            },
+            (),
+        );
+        let first = fixed_child(&mut tree, parent, 60.0, 20.0);
+        let second = fixed_child(&mut tree, parent, 60.0, 30.0);
+        let third = fixed_child(&mut tree, parent, 40.0, 10.0);
+
+        tree.compute_layout(|_, _| None);
+
+        assert_eq!(node_result(&tree, parent).height, 55.0);
+        assert_eq!(node_result(&tree, first).x, 0.0);
+        assert_eq!(node_result(&tree, first).y, 0.0);
+        assert_eq!(node_result(&tree, second).x, 0.0);
+        assert_eq!(node_result(&tree, second).y, 25.0);
+        assert_eq!(node_result(&tree, third).x, 60.0);
+        assert_eq!(node_result(&tree, third).y, 25.0);
+    }
+
+    #[test]
+    fn vertical_children_wrap_into_columns() {
+        let mut tree = LayoutTree::new();
+        let root = tree.add(
+            None,
+            Atom {
+                width: Fixed(200.0),
+                height: Fixed(200.0),
+                ..Default::default()
+            },
+            (),
+        );
+        let parent = tree.add(
+            Some(root),
+            Atom {
+                width: Fit {
+                    min: 0.0,
+                    max: f32::MAX,
+                },
+                height: Fixed(100.0),
+                direction: LayoutDirection::Vertical,
+                child_wrap: ChildWrap::Wrap,
+                line_spacing: 5.0,
+                ..Default::default()
+            },
+            (),
+        );
+        let first = fixed_child(&mut tree, parent, 20.0, 60.0);
+        let second = fixed_child(&mut tree, parent, 30.0, 60.0);
+        let third = fixed_child(&mut tree, parent, 10.0, 40.0);
+
+        tree.compute_layout(|_, _| None);
+
+        assert_eq!(node_result(&tree, parent).width, 55.0);
+        assert_eq!(node_result(&tree, first).x, 0.0);
+        assert_eq!(node_result(&tree, first).y, 0.0);
+        assert_eq!(node_result(&tree, second).x, 25.0);
+        assert_eq!(node_result(&tree, second).y, 0.0);
+        assert_eq!(node_result(&tree, third).x, 25.0);
+        assert_eq!(node_result(&tree, third).y, 60.0);
+    }
+
+    #[test]
+    fn item_spacing_and_line_spacing_are_separate() {
+        let mut tree = LayoutTree::new();
+        let root = tree.add(
+            None,
+            Atom {
+                width: Fixed(200.0),
+                height: Fixed(100.0),
+                ..Default::default()
+            },
+            (),
+        );
+        let parent = tree.add(
+            Some(root),
+            Atom {
+                width: Fixed(100.0),
+                height: Fit {
+                    min: 0.0,
+                    max: f32::MAX,
+                },
+                child_wrap: ChildWrap::Wrap,
+                inter_child_padding: 10.0,
+                line_spacing: 7.0,
+                ..Default::default()
+            },
+            (),
+        );
+        let first = fixed_child(&mut tree, parent, 45.0, 10.0);
+        let second = fixed_child(&mut tree, parent, 45.0, 20.0);
+        let third = fixed_child(&mut tree, parent, 10.0, 30.0);
+
+        tree.compute_layout(|_, _| None);
+
+        assert_eq!(node_result(&tree, parent).height, 57.0);
+        assert_eq!(node_result(&tree, first).x, 0.0);
+        assert_eq!(node_result(&tree, second).x, 55.0);
+        assert_eq!(node_result(&tree, third).y, 27.0);
+    }
+
+    #[test]
+    fn major_alignment_applies_per_wrapped_line() {
+        assert_eq!(aligned_child_positions(Alignment::Start), (0.0, 30.0));
+        assert_eq!(aligned_child_positions(Alignment::Center), (25.0, 55.0));
+        assert_eq!(aligned_child_positions(Alignment::End), (50.0, 80.0));
+        assert_eq!(aligned_child_positions(Alignment::Justify), (0.0, 80.0));
+    }
+
+    #[test]
+    fn line_alignment_positions_wrapped_line_stack() {
+        let mut tree = LayoutTree::new();
+        let root = tree.add(
+            None,
+            Atom {
+                width: Fixed(200.0),
+                height: Fixed(120.0),
+                ..Default::default()
+            },
+            (),
+        );
+        let parent = tree.add(
+            Some(root),
+            Atom {
+                width: Fixed(100.0),
+                height: Fixed(100.0),
+                child_wrap: ChildWrap::Wrap,
+                line_spacing: 10.0,
+                line_align: Alignment::Justify,
+                ..Default::default()
+            },
+            (),
+        );
+        let first = fixed_child(&mut tree, parent, 60.0, 20.0);
+        let second = fixed_child(&mut tree, parent, 60.0, 20.0);
+        let third = fixed_child(&mut tree, parent, 60.0, 20.0);
+
+        tree.compute_layout(|_, _| None);
+
+        assert_eq!(node_result(&tree, first).y, 0.0);
+        assert_eq!(node_result(&tree, second).y, 40.0);
+        assert_eq!(node_result(&tree, third).y, 80.0);
+    }
+
+    #[test]
+    fn out_of_flow_children_do_not_affect_wrapped_fit_size() {
+        let mut tree = LayoutTree::new();
+        let root = tree.add(
+            None,
+            Atom {
+                width: Fixed(200.0),
+                height: Fixed(200.0),
+                ..Default::default()
+            },
+            (),
+        );
+        let parent = tree.add(
+            Some(root),
+            Atom {
+                width: Fixed(100.0),
+                height: Fit {
+                    min: 0.0,
+                    max: f32::MAX,
+                },
+                child_wrap: ChildWrap::Wrap,
+                ..Default::default()
+            },
+            (),
+        );
+        fixed_child(&mut tree, parent, 60.0, 20.0);
+        tree.add(
+            Some(parent),
+            Atom {
+                width: Fixed(60.0),
+                height: Fixed(100.0),
+                position: Position::OutOfFlow(OverlayPosition {
+                    parent_x: AxisAnchor::Start,
+                    parent_y: AxisAnchor::End,
+                    self_x: AxisAnchor::Start,
+                    self_y: AxisAnchor::Start,
+                    offset: (0.0, 0.0),
+                    flip_x: false,
+                    flip_y: false,
+                }),
+                z_layer: 1,
+                ..Default::default()
+            },
+            (),
+        );
+
+        tree.compute_layout(|_, _| None);
+
+        assert_eq!(node_result(&tree, parent).height, 20.0);
+    }
+
+    #[test]
+    fn oversized_child_gets_its_own_wrapped_line() {
+        let mut tree = LayoutTree::new();
+        let root = tree.add(
+            None,
+            Atom {
+                width: Fixed(200.0),
+                height: Fixed(100.0),
+                ..Default::default()
+            },
+            (),
+        );
+        let parent = tree.add(
+            Some(root),
+            Atom {
+                width: Fixed(100.0),
+                height: Fit {
+                    min: 0.0,
+                    max: f32::MAX,
+                },
+                child_wrap: ChildWrap::Wrap,
+                line_spacing: 5.0,
+                ..Default::default()
+            },
+            (),
+        );
+        let first = fixed_child(&mut tree, parent, 120.0, 10.0);
+        let second = fixed_child(&mut tree, parent, 50.0, 20.0);
+
+        tree.compute_layout(|_, _| None);
+
+        assert_eq!(node_result(&tree, parent).height, 35.0);
+        assert_eq!(node_result(&tree, first).x, 0.0);
+        assert_eq!(node_result(&tree, first).y, 0.0);
+        assert_eq!(node_result(&tree, second).x, 0.0);
+        assert_eq!(node_result(&tree, second).y, 15.0);
+    }
+
+    #[test]
+    fn grow_children_expand_per_wrapped_line() {
+        let mut tree = LayoutTree::new();
+        let root = tree.add(
+            None,
+            Atom {
+                width: Fixed(200.0),
+                height: Fixed(100.0),
+                ..Default::default()
+            },
+            (),
+        );
+        let parent = tree.add(
+            Some(root),
+            Atom {
+                width: Fixed(100.0),
+                height: Fit {
+                    min: 0.0,
+                    max: f32::MAX,
+                },
+                child_wrap: ChildWrap::Wrap,
+                ..Default::default()
+            },
+            (),
+        );
+        fixed_child(&mut tree, parent, 60.0, 10.0);
+        let first_grow = tree.add(
+            Some(parent),
+            Atom {
+                width: Grow,
+                height: Fixed(10.0),
+                ..Default::default()
+            },
+            (),
+        );
+        fixed_child(&mut tree, parent, 60.0, 10.0);
+        let second_grow = tree.add(
+            Some(parent),
+            Atom {
+                width: Grow,
+                height: Fixed(10.0),
+                ..Default::default()
+            },
+            (),
+        );
+
+        tree.compute_layout(|_, _| None);
+
+        assert_eq!(node_result(&tree, first_grow).width, 40.0);
+        assert_eq!(node_result(&tree, second_grow).width, 40.0);
+        assert_eq!(node_result(&tree, second_grow).y, 10.0);
     }
 
     // ── Out-of-flow children excluded from parent Fit size ──────────────────
