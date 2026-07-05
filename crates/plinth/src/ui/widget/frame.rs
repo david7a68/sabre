@@ -24,16 +24,12 @@ pub struct Frame<'a> {
 impl<'a> Frame<'a> {
     pub fn new(builder: &'a mut UiBuilder<'_>) -> Self {
         let style = builder.theme().get(StyleClass::Surface);
-
-        let major_alignment = style.child_major_alignment.get(StateFlags::NORMAL);
-        let minor_alignment = style.child_minor_alignment.get(StateFlags::NORMAL);
-        let spacing = style.child_spacing.get(StateFlags::NORMAL);
-        let direction = style.child_direction.get(StateFlags::NORMAL);
+        let layout = style.resolve_layout_style(StateFlags::NORMAL);
 
         let mut child = builder.child();
-        child.child_alignment(major_alignment, minor_alignment);
-        child.child_spacing(spacing);
-        child.child_direction(direction);
+        child.child_alignment(layout.child_major_alignment, layout.child_minor_alignment);
+        child.child_spacing(layout.child_spacing);
+        child.child_direction(layout.child_direction);
 
         Self { builder: child }
     }
