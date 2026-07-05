@@ -12,7 +12,6 @@ use winit::keyboard::PhysicalKey;
 use crate::graphics::Canvas;
 use crate::graphics::ClipRect;
 use crate::graphics::Color;
-use crate::graphics::FontStack;
 use crate::graphics::GradientPaint;
 use crate::graphics::Paint;
 use crate::graphics::Primitive;
@@ -32,11 +31,13 @@ use crate::ui::style::CornerRadii;
 use crate::ui::style::StateFlags;
 use crate::ui::style::Style;
 use crate::ui::theme::StyleClass;
-use crate::ui::theme::default_font_features;
+use crate::ui::theme::enumerate_text_style;
 use crate::ui::widget::ClickBehavior;
 use crate::ui::widget::Interaction;
 
 use super::macros::forward_properties;
+
+const DEFAULT_TEXT_EDIT_WIDTH: f32 = 120.0;
 
 pub trait EditableTextBuffer {
     type Layout<'a>: EditableTextLayout
@@ -122,7 +123,7 @@ impl<T: EditableTextBuffer> TextEditorState<T> {
                 buffer: RefCell::new(buffer),
                 applied_style: Cell::new(None),
                 #[cfg(debug_assertions)]
-                frame_last_used: Cell::new(None),
+                app_frame_last_used: Cell::new(None),
             }),
         }
     }
@@ -165,25 +166,25 @@ struct TextEditorContent<T: EditableTextBuffer> {
     // skipped when nothing changed.
     applied_style: Cell<Option<(u64, StateFlags)>>,
     #[cfg(debug_assertions)]
-    frame_last_used: Cell<Option<u64>>,
+    app_frame_last_used: Cell<Option<u64>>,
 }
 
 impl<T: EditableTextBuffer> TextEditorContent<T> {
-    fn check_frame_use(&self, frame_counter: u64) {
+    fn check_frame_use(&self, app_frame_counter: u64) {
         #[cfg(debug_assertions)]
         {
-            let last_frame_used = self.frame_last_used.get();
+            let last_frame_used = self.app_frame_last_used.get();
             assert_ne!(
                 last_frame_used,
-                Some(frame_counter),
+                Some(app_frame_counter),
                 "TextEditorState cannot be rendered more than once in the same frame"
             );
-            self.frame_last_used.set(Some(frame_counter));
+            self.app_frame_last_used.set(Some(app_frame_counter));
         }
 
         #[cfg(not(debug_assertions))]
         {
-            let _ = frame_counter;
+            let _ = app_frame_counter;
         }
     }
 }
@@ -264,7 +265,10 @@ impl<'a, T: EditableTextBuffer + 'static> TextEdit<'a, T> {
         };
 
         builder.size(
-            Size::Grow,
+            Size::Fit {
+                min: DEFAULT_TEXT_EDIT_WIDTH,
+                max: f32::MAX,
+            },
             Size::Fit {
                 min: min_height,
                 max: f32::MAX,
@@ -320,7 +324,7 @@ impl<'a, T: EditableTextBuffer + 'static> TextEdit<'a, T> {
     pub fn finish(mut self) -> Interaction {
         self.state
             .content
-            .check_frame_use(self.builder.context.frame_counter);
+            .check_frame_use(self.builder.context.app_frame_counter);
 
         let is_focused = self.state_flags.contains(StateFlags::FOCUSED);
 
@@ -337,6 +341,7 @@ impl<'a, T: EditableTextBuffer + 'static> TextEdit<'a, T> {
 
         let mut buffer = self.state.content.buffer.borrow_mut();
         let style = theme.get(StyleClass::TextEdit);
+        let padding = style.padding.get(self.state_flags);
 
         let style_key = (theme.revision(), self.state_flags);
         if self.state.content.applied_style.get() != Some(style_key) {
@@ -349,6 +354,7 @@ impl<'a, T: EditableTextBuffer + 'static> TextEdit<'a, T> {
                 &mut buffer,
                 &input,
                 placement,
+                padding,
                 self.interaction,
                 self.state_flags,
             );
@@ -488,6 +494,7 @@ impl<'a, T: EditableTextBuffer + 'static> TextEdit<'a, T> {
         buffer: &mut T,
         input: &Input,
         placement: glamour::Rect<crate::ui::Pixels>,
+        padding: crate::ui::Padding,
         interaction: Interaction,
         state_flags: StateFlags,
     ) {
@@ -499,9 +506,16 @@ impl<'a, T: EditableTextBuffer + 'static> TextEdit<'a, T> {
             return;
         }
 
-        let max = placement.origin + placement.size.to_vector();
-        let clamped = input.pointer.clamp(placement.origin, max);
-        let local = clamped - placement.origin;
+        let content_min = Point2::new(
+            placement.origin.x + padding.left,
+            placement.origin.y + padding.top,
+        );
+        let content_max = Point2::new(
+            (placement.origin.x + placement.size.width - padding.right).max(content_min.x),
+            (placement.origin.y + placement.size.height - padding.bottom).max(content_min.y),
+        );
+        let clamped = input.pointer.clamp(content_min, content_max);
+        let local = clamped - content_min;
 
         let is_shift_held = input.modifiers.shift_key();
         let is_left_down = input.mouse_state.is_left_down();
@@ -610,42 +624,11 @@ impl EditableTextBuffer for PlainTextBuffer {
     }
 
     fn apply_style(&mut self, style: &Style, state: StateFlags) {
-        use parley::StyleProperty as Prop;
-
         let styles = self.editor.edit_styles();
 
-        styles.insert(Prop::FontFeatures(default_font_features()));
-        styles.insert(Prop::Brush(style.text_color.get(state)));
-        styles.insert(Prop::FontSize(style.font_size.get(state) as f32));
-        styles.insert(Prop::FontStyle(style.font_style.get(state).into()));
-        styles.insert(Prop::FontWeight(parley::FontWeight::new(
-            style.font_weight.get(state) as f32,
-        )));
-        styles.insert(Prop::StrikethroughBrush(Some(
-            style.strikethrough_color.get(state),
-        )));
-        styles.insert(Prop::StrikethroughOffset(Some(
-            style.strikethrough_offset.get(state),
-        )));
-        styles.insert(Prop::UnderlineBrush(Some(style.underline_color.get(state))));
-        styles.insert(Prop::UnderlineOffset(Some(
-            style.underline_offset.get(state),
-        )));
-
-        match &style.font.get(state).family {
-            FontStack::Source(cow) => {
-                styles.insert(Prop::FontFamily(parley::FontFamily::Source(cow.clone())));
-            }
-            FontStack::Single(font_family) => {
-                styles.insert(Prop::FontFamily(parley::FontFamily::Single(
-                    font_family.clone().into(),
-                )));
-            }
-            FontStack::List(cow) => {
-                let families = cow.iter().cloned().map(|f| f.into()).collect::<Vec<_>>();
-                styles.insert(Prop::FontFamily(parley::FontFamily::List(families.into())));
-            }
-        }
+        enumerate_text_style(style, state, |prop| {
+            styles.insert(prop);
+        });
     }
 
     fn enter_text(&mut self, context: &mut TextLayoutContext, text: &str) {

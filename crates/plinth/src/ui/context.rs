@@ -41,6 +41,7 @@ pub(crate) struct UiContext {
     pub(super) widget_states: IdMap<WidgetContainer>,
 
     pub(super) frame_counter: u64,
+    pub(super) app_frame_counter: u64,
     pub(super) focused_widget: Option<WidgetId>,
 
     /// The highest z_layer that contains any widget whose previous-frame placement
@@ -68,6 +69,7 @@ impl UiContext {
         theme: &'a Theme,
         input: &'a Input,
         time_delta: Duration,
+        app_frame_counter: u64,
     ) -> UiBuilder<'a> {
         self.ui_tree.clear();
 
@@ -108,6 +110,7 @@ impl UiContext {
         );
 
         self.time_delta = time_delta;
+        self.app_frame_counter = app_frame_counter;
 
         UiBuilder {
             theme,
