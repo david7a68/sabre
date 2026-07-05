@@ -74,6 +74,7 @@ pub(super) struct WrapLines {
 #[derive(Default, Debug)]
 pub(crate) struct LayoutNode {
     pub atom: Atom,
+    pub(super) text_height: Option<Size>,
     pub result: NodeLayout,
 }
 
@@ -154,6 +155,7 @@ impl<T> LayoutTree<T> {
 
         let node = LayoutNode {
             atom,
+            text_height: None,
             result: NodeLayout::default(),
         };
 
@@ -189,6 +191,10 @@ impl<T> LayoutTree<T> {
 
         let nodes: &mut [LayoutNode] = &mut self.nodes;
         let node_id = UiElementId(0);
+
+        for node in nodes.iter_mut() {
+            node.text_height = None;
+        }
 
         debug_assert_eq!(
             nodes[node_id.0 as usize].atom.direction,
@@ -272,7 +278,7 @@ mod tests {
     use super::super::types::{AxisAnchor, ChildWrap, OverlayPosition};
     use super::*;
 
-    fn node_result(tree: &LayoutTree<()>, id: UiElementId) -> &NodeLayout {
+    fn node_result<T>(tree: &LayoutTree<T>, id: UiElementId) -> &NodeLayout {
         &tree.nodes[id.0 as usize].result
     }
 
@@ -358,6 +364,57 @@ mod tests {
         assert_eq!(node_result(&tree, first).y, 0.0);
         assert_eq!(node_result(&tree, second).x, 60.0);
         assert_eq!(node_result(&tree, second).y, 0.0);
+    }
+
+    #[test]
+    fn text_fit_height_is_remeasured_without_mutating_atom_height() {
+        let mut tree = LayoutTree::new();
+        let root = tree.add(
+            None,
+            Atom {
+                width: Fixed(100.0),
+                ..Default::default()
+            },
+            false,
+        );
+        let text = tree.add(
+            Some(root),
+            Atom {
+                width: Fixed(100.0),
+                height: Fit {
+                    min: 2.0,
+                    max: 50.0,
+                },
+                ..Default::default()
+            },
+            true,
+        );
+
+        let mut measured_height = 12.0;
+        tree.compute_layout(|is_text, _| (*is_text).then_some(measured_height));
+
+        assert_eq!(node_result(&tree, text).height, 12.0);
+        assert_eq!(node_result(&tree, root).height, 12.0);
+        assert_eq!(
+            tree.nodes[text.0 as usize].atom.height,
+            Fit {
+                min: 2.0,
+                max: 50.0,
+            }
+        );
+
+        measured_height = 24.0;
+        tree.compute_layout(|is_text, _| (*is_text).then_some(measured_height));
+
+        assert_eq!(node_result(&tree, text).height, 24.0);
+        assert_eq!(node_result(&tree, root).height, 24.0);
+        assert_eq!(
+            tree.nodes[text.0 as usize].atom.height,
+            Fit {
+                min: 2.0,
+                max: 50.0,
+            }
+        );
     }
 
     #[test]
@@ -488,6 +545,38 @@ mod tests {
         assert_eq!(aligned_child_positions(Alignment::Center), (25.0, 55.0));
         assert_eq!(aligned_child_positions(Alignment::End), (50.0, 80.0));
         assert_eq!(aligned_child_positions(Alignment::Justify), (0.0, 80.0));
+    }
+
+    #[test]
+    fn non_wrapped_justify_uses_full_available_gap() {
+        let mut tree = LayoutTree::new();
+        let root = tree.add(
+            None,
+            Atom {
+                width: Fixed(200.0),
+                height: Fixed(100.0),
+                ..Default::default()
+            },
+            (),
+        );
+        let parent = tree.add(
+            Some(root),
+            Atom {
+                width: Fixed(100.0),
+                height: Fixed(20.0),
+                inter_child_padding: 10.0,
+                major_align: Alignment::Justify,
+                ..Default::default()
+            },
+            (),
+        );
+        let first = fixed_child(&mut tree, parent, 20.0, 10.0);
+        let second = fixed_child(&mut tree, parent, 20.0, 10.0);
+
+        tree.compute_layout(|_, _| None);
+
+        assert_eq!(node_result(&tree, first).x, 0.0);
+        assert_eq!(node_result(&tree, second).x, 80.0);
     }
 
     #[test]
@@ -1030,6 +1119,51 @@ mod tests {
         let or_ = node_result(&tree, overlay);
         assert_eq!(pr.x, 350.0, "parent should be at x=350 (after spacer)");
         assert_eq!(or_.x, 230.0, "overlay should flip left: 350 - 120 = 230");
+    }
+
+    #[test]
+    fn context_menu_flips_when_near_bottom_border() {
+        let mut tree = LayoutTree::new();
+        let root = tree.add(
+            None,
+            Atom {
+                width: Fixed(400.0),
+                height: Fixed(300.0),
+                minor_align: Alignment::End,
+                ..Default::default()
+            },
+            (),
+        );
+        let parent = fixed_child(&mut tree, root, 40.0, 40.0);
+        let overlay = tree.add(
+            Some(parent),
+            Atom {
+                width: Fixed(120.0),
+                height: Fixed(120.0),
+                position: Position::OutOfFlow(OverlayPosition {
+                    parent_x: AxisAnchor::Start,
+                    parent_y: AxisAnchor::End,
+                    self_x: AxisAnchor::Start,
+                    self_y: AxisAnchor::Start,
+                    offset: (0.0, 0.0),
+                    flip_x: false,
+                    flip_y: true,
+                }),
+                z_layer: 1,
+                ..Default::default()
+            },
+            (),
+        );
+
+        tree.compute_layout(|_, _| None);
+
+        let pr = node_result(&tree, parent);
+        let or_ = node_result(&tree, overlay);
+        assert_eq!(pr.y, 260.0, "parent should be aligned to bottom edge");
+        assert_eq!(
+            or_.y, 140.0,
+            "overlay should flip above parent: 260 - 120 = 140"
+        );
     }
 
     // ── Nested overlay insertion order ───────────────────────────────────────

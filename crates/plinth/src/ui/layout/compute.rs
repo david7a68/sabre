@@ -153,7 +153,8 @@ pub(super) fn compute_major_axis_offsets<D: LayoutDirectionExt>(
     node_id: UiElementId,
     current_offset: f32,
 ) -> f32 {
-    let node = &mut nodes[node_id.0 as usize];
+    let node_idx = node_id.0 as usize;
+    let node = &mut nodes[node_idx];
 
     if node.atom.direction != D::DIRECTION {
         return compute_minor_axis_offsets::<D::Other>(
@@ -179,119 +180,29 @@ pub(super) fn compute_major_axis_offsets<D: LayoutDirectionExt>(
 
     let size = D::major_size_result(node);
     let padding_start = D::major_axis_padding_start(node);
-    let padding_internal = node.atom.inter_child_padding;
+    let item_spacing = node.atom.inter_child_padding;
     let padding_end = D::major_axis_padding_end(node);
-    // Copy major_align so the mutable borrow of `nodes` through `node` ends here,
-    // allowing the immutable borrow needed by the in_flow_count filter below.
     let major_align = node.atom.major_align;
 
-    let node_children = &children[node_id.0 as usize];
+    let node_children = &children[node_idx];
+    let metrics = in_flow_child_major_metrics::<D>(nodes, node_children);
+    let (mut advance, gap) = major_axis_offset_and_gap(
+        major_align,
+        current_offset,
+        size,
+        padding_start,
+        padding_end,
+        item_spacing,
+        metrics,
+    );
 
-    // Count in-flow children for alignment calculations.
-    let in_flow_count = node_children
-        .iter()
-        .filter(|&&id| nodes[id.0 as usize].atom.position.is_in_flow())
-        .count();
-
-    // Recurse into an out-of-flow child with offset 0.0. Its absolute position will be
-    // corrected by pass 7.5 (compute_overlay_positions). We still recurse so its own
-    // children get their relative offsets computed correctly.
-    macro_rules! recurse_out_of_flow {
-        ($child_id:expr) => {
-            compute_major_axis_offsets::<D>(nodes, children, wrap_lines, $child_id, 0.0)
-        };
-    }
-
-    match major_align {
-        Alignment::Start => {
-            let mut advance = current_offset + padding_start;
-            for &child_id in node_children {
-                if nodes[child_id.0 as usize].atom.position.is_in_flow() {
-                    advance = compute_major_axis_offsets::<D>(
-                        nodes, children, wrap_lines, child_id, advance,
-                    ) + padding_internal;
-                } else {
-                    recurse_out_of_flow!(child_id);
-                }
-            }
-        }
-        Alignment::Center => {
-            let mut in_flow_content_size = padding_start
-                + padding_end
-                + padding_internal * in_flow_count.saturating_sub(1) as f32;
-            for &child_id in node_children {
-                if nodes[child_id.0 as usize].atom.position.is_in_flow() {
-                    in_flow_content_size += D::major_size_result(&nodes[child_id.0 as usize]);
-                }
-            }
-
-            let half_unused_space = ((size - in_flow_content_size) / 2.0).round();
-            let mut advance = current_offset + padding_start + half_unused_space;
-            for &child_id in node_children {
-                if nodes[child_id.0 as usize].atom.position.is_in_flow() {
-                    advance = compute_major_axis_offsets::<D>(
-                        nodes, children, wrap_lines, child_id, advance,
-                    ) + padding_internal;
-                } else {
-                    recurse_out_of_flow!(child_id);
-                }
-            }
-        }
-        Alignment::End => {
-            let mut in_flow_content_size =
-                padding_end + padding_internal * in_flow_count.saturating_sub(1) as f32;
-            for &child_id in node_children {
-                if nodes[child_id.0 as usize].atom.position.is_in_flow() {
-                    in_flow_content_size += D::major_size_result(&nodes[child_id.0 as usize]);
-                }
-            }
-
-            let mut advance = current_offset + size - in_flow_content_size;
-            for &child_id in node_children {
-                if nodes[child_id.0 as usize].atom.position.is_in_flow() {
-                    advance = compute_major_axis_offsets::<D>(
-                        nodes, children, wrap_lines, child_id, advance,
-                    ) + padding_internal;
-                } else {
-                    recurse_out_of_flow!(child_id);
-                }
-            }
-        }
-        Alignment::Justify if in_flow_count > 1 => {
-            let mut in_flow_content_size =
-                padding_start + padding_end + padding_internal * (in_flow_count - 1) as f32;
-            for &child_id in node_children {
-                if nodes[child_id.0 as usize].atom.position.is_in_flow() {
-                    in_flow_content_size += D::major_size_result(&nodes[child_id.0 as usize]);
-                }
-            }
-
-            let internal_padding =
-                padding_internal.max((size - in_flow_content_size) / (in_flow_count - 1) as f32);
-
-            let mut advance = current_offset + padding_start;
-            for &child_id in node_children {
-                if nodes[child_id.0 as usize].atom.position.is_in_flow() {
-                    advance = compute_major_axis_offsets::<D>(
-                        nodes, children, wrap_lines, child_id, advance,
-                    ) + internal_padding;
-                } else {
-                    recurse_out_of_flow!(child_id);
-                }
-            }
-        }
-        Alignment::Justify => {
-            // Justified layout with 0 or 1 in-flow children: treat as start-aligned.
-            let mut advance = current_offset + padding_start;
-            for &child_id in node_children {
-                if nodes[child_id.0 as usize].atom.position.is_in_flow() {
-                    advance = compute_major_axis_offsets::<D>(
-                        nodes, children, wrap_lines, child_id, advance,
-                    ) + padding_internal;
-                } else {
-                    recurse_out_of_flow!(child_id);
-                }
-            }
+    for &child_id in node_children {
+        if nodes[child_id.0 as usize].atom.position.is_in_flow() {
+            advance =
+                compute_major_axis_offsets::<D>(nodes, children, wrap_lines, child_id, advance)
+                    + gap;
+        } else {
+            compute_major_axis_offsets::<D>(nodes, children, wrap_lines, child_id, 0.0);
         }
     }
 
@@ -307,7 +218,7 @@ pub(super) fn compute_text_heights<'a, T: 'a>(
             continue;
         };
 
-        node.atom.height = match node.atom.height {
+        node.text_height = Some(match node.atom.height {
             Fixed(height) => Fixed(height),
             Fit { min, max } => Fixed(text_height.clamp(min, max)),
             Grow => Grow,
@@ -315,7 +226,7 @@ pub(super) fn compute_text_heights<'a, T: 'a>(
                 min: text_height.clamp(min, max),
                 max,
             },
-        };
+        });
     }
 }
 
@@ -477,43 +388,22 @@ pub(super) fn compute_minor_axis_offsets<D: LayoutDirectionExt>(
     let size = D::minor_size_result(node);
     let padding_start = D::minor_axis_padding_start(node);
     let padding_end = D::minor_axis_padding_end(node);
+    let minor_align = node.atom.minor_align;
 
-    match node.atom.minor_align {
-        // Justified layouts don't make sense in the minor axis, so we treat
-        // them as start-aligned.
-        Alignment::Start | Alignment::Justify => {
-            let inset = current_offset + padding_start;
-
-            for &child_id in node_children {
-                if nodes[child_id.0 as usize].atom.position.is_in_flow() {
-                    compute_minor_axis_offsets::<D>(nodes, children, wrap_lines, child_id, inset);
-                } else {
-                    compute_minor_axis_offsets::<D>(nodes, children, wrap_lines, child_id, 0.0);
-                }
-            }
-        }
-        Alignment::Center => {
-            // Center on a per-child basis (in-flow children only).
-            for &child_id in node_children {
-                if nodes[child_id.0 as usize].atom.position.is_in_flow() {
-                    let child_size = D::minor_size_result(&nodes[child_id.0 as usize]);
-                    let inset = (current_offset + (size - child_size).max(0.0) / 2.0).round();
-                    compute_minor_axis_offsets::<D>(nodes, children, wrap_lines, child_id, inset);
-                } else {
-                    compute_minor_axis_offsets::<D>(nodes, children, wrap_lines, child_id, 0.0);
-                }
-            }
-        }
-        Alignment::End => {
-            for &child_id in node_children {
-                if nodes[child_id.0 as usize].atom.position.is_in_flow() {
-                    let child_size = D::minor_size_result(&nodes[child_id.0 as usize]);
-                    let inset = current_offset + (size - child_size - padding_end).max(0.0);
-                    compute_minor_axis_offsets::<D>(nodes, children, wrap_lines, child_id, inset);
-                } else {
-                    compute_minor_axis_offsets::<D>(nodes, children, wrap_lines, child_id, 0.0);
-                }
-            }
+    for &child_id in node_children {
+        if nodes[child_id.0 as usize].atom.position.is_in_flow() {
+            let child_size = D::minor_size_result(&nodes[child_id.0 as usize]);
+            let inset = aligned_minor_offset(
+                minor_align,
+                current_offset,
+                size,
+                child_size,
+                padding_start,
+                padding_end,
+            );
+            compute_minor_axis_offsets::<D>(nodes, children, wrap_lines, child_id, inset);
+        } else {
+            compute_minor_axis_offsets::<D>(nodes, children, wrap_lines, child_id, 0.0);
         }
     }
 
@@ -541,6 +431,92 @@ fn finite_limit(limit: f32) -> Option<f32> {
         Some(limit.max(0.0))
     } else {
         None
+    }
+}
+
+#[derive(Clone, Copy)]
+struct ChildMajorMetrics {
+    count: usize,
+    size: f32,
+}
+
+impl ChildMajorMetrics {
+    fn spaced_size(self, spacing: f32) -> f32 {
+        self.size + spacing * self.count.saturating_sub(1) as f32
+    }
+}
+
+fn child_major_metrics<D: LayoutDirectionExt>(
+    nodes: &[LayoutNode],
+    children: &[UiElementId],
+) -> ChildMajorMetrics {
+    ChildMajorMetrics {
+        count: children.len(),
+        size: child_major_size::<D>(nodes, children),
+    }
+}
+
+fn in_flow_child_major_metrics<D: LayoutDirectionExt>(
+    nodes: &[LayoutNode],
+    children: &[UiElementId],
+) -> ChildMajorMetrics {
+    let mut metrics = ChildMajorMetrics {
+        count: 0,
+        size: 0.0,
+    };
+
+    for &child_id in children {
+        if nodes[child_id.0 as usize].atom.position.is_in_flow() {
+            metrics.count += 1;
+            metrics.size += D::major_size_result(&nodes[child_id.0 as usize]);
+        }
+    }
+
+    metrics
+}
+
+fn major_axis_offset_and_gap(
+    alignment: Alignment,
+    current_offset: f32,
+    size: f32,
+    padding_start: f32,
+    padding_end: f32,
+    item_spacing: f32,
+    metrics: ChildMajorMetrics,
+) -> (f32, f32) {
+    let available_major = (size - padding_start - padding_end).max(0.0);
+    let line_major_size = metrics.spaced_size(item_spacing);
+
+    match alignment {
+        Alignment::Start => (current_offset + padding_start, item_spacing),
+        Alignment::Center => (
+            current_offset + padding_start + ((available_major - line_major_size) / 2.0).round(),
+            item_spacing,
+        ),
+        Alignment::End => (
+            current_offset + size - padding_end - line_major_size,
+            item_spacing,
+        ),
+        Alignment::Justify if metrics.count > 1 => (
+            current_offset + padding_start,
+            item_spacing.max((available_major - metrics.size) / (metrics.count - 1) as f32),
+        ),
+        Alignment::Justify => (current_offset + padding_start, item_spacing),
+    }
+}
+
+fn aligned_minor_offset(
+    alignment: Alignment,
+    current_offset: f32,
+    size: f32,
+    child_size: f32,
+    padding_start: f32,
+    padding_end: f32,
+) -> f32 {
+    match alignment {
+        Alignment::Start | Alignment::Justify => current_offset + padding_start,
+        Alignment::Center => (current_offset + (size - child_size).max(0.0) / 2.0).round(),
+        Alignment::End => current_offset + (size - child_size - padding_end).max(0.0),
     }
 }
 
@@ -738,7 +714,6 @@ fn compute_wrapped_major_axis_offsets<D: LayoutDirectionExt>(
     let padding_end = D::major_axis_padding_end(node);
     let item_spacing = node.atom.inter_child_padding;
     let major_align = node.atom.major_align;
-    let available_major = (size - padding_start - padding_end).max(0.0);
 
     for &child_id in &children[node_idx] {
         if !nodes[child_id.0 as usize].atom.position.is_in_flow() {
@@ -747,29 +722,15 @@ fn compute_wrapped_major_axis_offsets<D: LayoutDirectionExt>(
     }
 
     for line in &wrap_lines[node_idx].lines {
-        let child_count = line.children.len();
-        let child_major_size = child_major_size::<D>(nodes, &line.children);
-        let line_major_size =
-            child_major_size + item_spacing * child_count.saturating_sub(1) as f32;
-
-        let (mut advance, gap) = match major_align {
-            Alignment::Start => (current_offset + padding_start, item_spacing),
-            Alignment::Center => (
-                current_offset
-                    + padding_start
-                    + ((available_major - line_major_size) / 2.0).round(),
-                item_spacing,
-            ),
-            Alignment::End => (
-                current_offset + size - padding_end - line_major_size,
-                item_spacing,
-            ),
-            Alignment::Justify if child_count > 1 => (
-                current_offset + padding_start,
-                item_spacing.max((available_major - child_major_size) / (child_count - 1) as f32),
-            ),
-            Alignment::Justify => (current_offset + padding_start, item_spacing),
-        };
+        let (mut advance, gap) = major_axis_offset_and_gap(
+            major_align,
+            current_offset,
+            size,
+            padding_start,
+            padding_end,
+            item_spacing,
+            child_major_metrics::<D>(nodes, &line.children),
+        );
 
         for &child_id in &line.children {
             advance =
@@ -837,13 +798,8 @@ fn compute_wrapped_minor_axis_offsets<D: LayoutDirectionExt>(
     for (line, line_size) in wrap_lines[node_idx].lines.iter().zip(line_sizes) {
         for &child_id in &line.children {
             let child_size = D::minor_size_result(&nodes[child_id.0 as usize]);
-            let child_offset = match minor_align {
-                Alignment::Start | Alignment::Justify => line_offset,
-                Alignment::Center => {
-                    line_offset + ((line_size - child_size).max(0.0) / 2.0).round()
-                }
-                Alignment::End => line_offset + (line_size - child_size).max(0.0),
-            };
+            let child_offset =
+                aligned_minor_offset(minor_align, line_offset, line_size, child_size, 0.0, 0.0);
             compute_minor_axis_offsets::<D>(nodes, children, wrap_lines, child_id, child_offset);
         }
 
@@ -887,7 +843,7 @@ impl LayoutDirectionExt for HorizontalMode {
     }
 
     fn minor_size_spec(node: &LayoutNode) -> Size {
-        node.atom.height
+        node.text_height.unwrap_or(node.atom.height)
     }
 
     fn set_major_size(node: &mut LayoutNode, size: f32) {
@@ -938,7 +894,7 @@ impl LayoutDirectionExt for VerticalMode {
     const DIRECTION: LayoutDirection = LayoutDirection::Vertical;
 
     fn major_size_spec(node: &LayoutNode) -> Size {
-        node.atom.height
+        node.text_height.unwrap_or(node.atom.height)
     }
 
     fn minor_size_spec(node: &LayoutNode) -> Size {
