@@ -136,8 +136,9 @@ impl Theme {
         properties: impl IntoIterator<Item = (StateFlags, StyleProperty)>,
     ) -> Result<StyleId, StyleError> {
         let parent = parent.unwrap_or_else(|| self.styles.default_style_id());
+        let style_id = self.styles.register(Some(parent), properties)?;
         self.revision += 1;
-        self.styles.register(Some(parent), properties)
+        Ok(style_id)
     }
 
     /// Modifies an existing style by replacing its properties.
