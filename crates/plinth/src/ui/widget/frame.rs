@@ -29,11 +29,17 @@ impl<'a> Frame<'a> {
         let minor_alignment = style.child_minor_alignment.get(StateFlags::NORMAL);
         let spacing = style.child_spacing.get(StateFlags::NORMAL);
         let direction = style.child_direction.get(StateFlags::NORMAL);
+        let wrap = style.child_wrap.get(StateFlags::NORMAL);
+        let line_spacing = style.child_line_spacing.get(StateFlags::NORMAL);
+        let line_alignment = style.child_line_alignment.get(StateFlags::NORMAL);
 
         let mut child = builder.child();
         child.child_alignment(major_alignment, minor_alignment);
         child.child_spacing(spacing);
         child.child_direction(direction);
+        child.child_wrap(wrap);
+        child.child_line_spacing(line_spacing);
+        child.child_line_alignment(line_alignment);
 
         Self { builder: child }
     }

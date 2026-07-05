@@ -13,6 +13,7 @@ use crate::shell::Input;
 
 use super::Alignment;
 use super::Atom;
+use super::ChildWrap;
 use super::Flex;
 use super::LayoutDirection;
 use super::OverlayPosition;
@@ -96,6 +97,9 @@ impl UiBuilder<'_> {
             minor_align: style.child_minor_alignment.get(state),
             direction: style.child_direction.get(state),
             inter_child_padding: style.child_spacing.get(state),
+            child_wrap: style.child_wrap.get(state),
+            line_spacing: style.child_line_spacing.get(state),
+            line_align: style.child_line_alignment.get(state),
             clip_overflow: style.clip_children.get(state),
             position,
             z_layer,
@@ -191,11 +195,38 @@ impl UiBuilder<'_> {
         self
     }
 
+    pub fn child_wrap(&mut self, wrap: ChildWrap) -> &mut Self {
+        self.context.ui_tree.atom_mut(self.index).child_wrap = wrap;
+        self
+    }
+
+    pub fn wrap_children(&mut self) -> &mut Self {
+        self.child_wrap(ChildWrap::Wrap)
+    }
+
+    pub fn set_wrap_children(&mut self, wrap: bool) -> &mut Self {
+        self.child_wrap(if wrap {
+            ChildWrap::Wrap
+        } else {
+            ChildWrap::NoWrap
+        })
+    }
+
     pub fn child_spacing(&mut self, spacing: f32) -> &mut Self {
         self.context
             .ui_tree
             .atom_mut(self.index)
             .inter_child_padding = spacing;
+        self
+    }
+
+    pub fn child_line_spacing(&mut self, spacing: f32) -> &mut Self {
+        self.context.ui_tree.atom_mut(self.index).line_spacing = spacing;
+        self
+    }
+
+    pub fn child_line_alignment(&mut self, alignment: Alignment) -> &mut Self {
+        self.context.ui_tree.atom_mut(self.index).line_align = alignment;
         self
     }
 

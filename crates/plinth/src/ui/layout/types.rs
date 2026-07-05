@@ -117,6 +117,13 @@ pub enum LayoutDirection {
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum ChildWrap {
+    #[default]
+    NoWrap,
+    Wrap,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub enum Alignment {
     #[default]
     Start,

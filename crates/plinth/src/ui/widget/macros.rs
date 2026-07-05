@@ -103,8 +103,57 @@ macro_rules! impl_container {
             }
 
             pub fn with_child_direction(mut self, direction: $crate::ui::LayoutDirection) -> Self {
-
                 self.child_direction(direction);
+                self
+            }
+
+            pub fn child_wrap(&mut self, wrap: $crate::ui::ChildWrap) -> &mut Self {
+                use $crate::ui::widget::Container;
+
+                self.builder_mut().child_wrap(wrap);
+                self
+            }
+
+            pub fn with_child_wrap(mut self, wrap: $crate::ui::ChildWrap) -> Self {
+                self.child_wrap(wrap);
+                self
+            }
+
+            pub fn wrap_children(&mut self) -> &mut Self {
+                use $crate::ui::widget::Container;
+
+                self.builder_mut().wrap_children();
+                self
+            }
+
+            pub fn set_wrap_children(&mut self, wrap: bool) -> &mut Self {
+                use $crate::ui::widget::Container;
+
+                self.builder_mut().set_wrap_children(wrap);
+                self
+            }
+
+            pub fn child_line_spacing(&mut self, spacing: f32) -> &mut Self {
+                use $crate::ui::widget::Container;
+
+                self.builder_mut().child_line_spacing(spacing);
+                self
+            }
+
+            pub fn with_child_line_spacing(mut self, spacing: f32) -> Self {
+                self.child_line_spacing(spacing);
+                self
+            }
+
+            pub fn child_line_alignment(&mut self, alignment: $crate::ui::Alignment) -> &mut Self {
+                use $crate::ui::widget::Container;
+
+                self.builder_mut().child_line_alignment(alignment);
+                self
+            }
+
+            pub fn with_child_line_alignment(mut self, alignment: $crate::ui::Alignment) -> Self {
+                self.child_line_alignment(alignment);
                 self
             }
 
