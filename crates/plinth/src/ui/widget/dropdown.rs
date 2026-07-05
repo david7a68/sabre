@@ -73,12 +73,13 @@ impl<'a> Dropdown<'a> {
 
         if is_open {
             let button_style = button.theme().get(StyleClass::Button);
-            let radii = button_style.corner_radii.get(state);
+            let button_paint = button_style.resolve_paint_style(state);
+            let radii = button_paint.corner_radii;
 
             button.paint(
-                button_style.background.get(state),
-                button_style.border.get(state),
-                button_style.border_widths.get(state),
+                button_paint.background,
+                button_paint.border,
+                button_paint.border_widths,
                 CornerRadii {
                     top_left: radii.top_left,
                     top_right: radii.top_right,
@@ -331,8 +332,8 @@ impl<'a> Dropdown<'a> {
         let button_padding = item
             .theme()
             .get(StyleClass::Button)
-            .padding
-            .get(effective_state);
+            .resolve_layout_style(effective_state)
+            .padding;
 
         item.apply_style(StyleClass::DropdownItem, effective_state);
         item.set_clip_children(true);

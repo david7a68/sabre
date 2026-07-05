@@ -6,7 +6,6 @@ use rapidhash::v3::rapidhash_v3;
 use crate::graphics::Color;
 use crate::graphics::GradientPaint;
 use crate::graphics::Paint;
-use crate::graphics::TextAlignment;
 use crate::graphics::TextLayoutContext;
 use crate::shell::Clipboard;
 use crate::shell::Input;
@@ -70,18 +69,18 @@ impl UiBuilder<'_> {
     }
 
     pub fn apply_style(&mut self, class: StyleClass, state: StateFlags) -> &mut Self {
-        let style = self.theme.get(class);
-
-        // Paint
-        let paint = style.background.get(state);
-        let border = style.border.get(state);
-        let border_width = style.border_widths.get(state);
-        let corner_radii = style.corner_radii.get(state);
-        self.paint(paint, border, border_width, corner_radii);
-
-        // Layout
         self.style_id = self.theme.get_id(class);
         self.state = state;
+
+        let style = self.theme.resolve_widget_style(self.style_id, state);
+        let paint = style.paint;
+        let layout = style.layout;
+        self.paint(
+            paint.background,
+            paint.border,
+            paint.border_widths,
+            paint.corner_radii,
+        );
 
         let atom = self.context.ui_tree.atom_mut(self.index);
         // Preserve overlay fields set by the overlay builder API before applying the style.
@@ -89,14 +88,14 @@ impl UiBuilder<'_> {
         let z_layer = atom.z_layer;
         let is_modal = atom.is_modal;
         *atom = Atom {
-            width: style.width.get(state),
-            height: style.height.get(state),
-            inner_padding: style.padding.get(state),
-            major_align: style.child_major_alignment.get(state),
-            minor_align: style.child_minor_alignment.get(state),
-            direction: style.child_direction.get(state),
-            inter_child_padding: style.child_spacing.get(state),
-            clip_overflow: style.clip_children.get(state),
+            width: layout.width,
+            height: layout.height,
+            inner_padding: layout.padding,
+            major_align: layout.child_major_alignment,
+            minor_align: layout.child_minor_alignment,
+            direction: layout.child_direction,
+            inter_child_padding: layout.child_spacing,
+            clip_overflow: layout.clip_children,
             position,
             z_layer,
             is_modal,
@@ -300,7 +299,8 @@ impl UiBuilder<'_> {
 
         let alignment = self
             .theme
-            .resolve_style::<TextAlignment>(self.style_id, self.state);
+            .resolve_text_style(self.style_id, self.state)
+            .text_align;
         let size = text_layout.layout.calculate_content_widths();
 
         self.context.ui_tree.add(

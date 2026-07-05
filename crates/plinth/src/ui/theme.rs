@@ -13,6 +13,8 @@ use super::Size;
 use super::style::BorderWidths;
 use super::style::CornerRadii;
 use super::style::PropertyKey;
+use super::style::ResolvedTextStyle;
+use super::style::ResolvedWidgetStyle;
 use super::style::StateFlags;
 use super::style::Style;
 use super::style::StyleError;
@@ -126,6 +128,25 @@ impl Theme {
         self.styles.resolve::<K>(style_id, state)
     }
 
+    pub(crate) fn resolve_widget_style(
+        &self,
+        style_id: StyleId,
+        state: StateFlags,
+    ) -> ResolvedWidgetStyle {
+        self.styles
+            .get(style_id)
+            .unwrap()
+            .resolve_widget_style(state)
+    }
+
+    pub(crate) fn resolve_text_style(
+        &self,
+        style_id: StyleId,
+        state: StateFlags,
+    ) -> ResolvedTextStyle {
+        self.styles.get(style_id).unwrap().resolve_text_style(state)
+    }
+
     /// Creates a new style with the given parent and properties.
     ///
     /// The style can then be assigned to one or more `StyleClass`es using
@@ -158,61 +179,46 @@ impl Theme {
         state: StateFlags,
         builder: &mut parley::RangedBuilder<Color>,
     ) {
-        use parley::StyleProperty as Prop;
-
-        let style = self.enumerate_styles(style_id, state, |prop| {
-            builder.push_default(prop);
-        });
-
-        match &style.font.get(state).family {
-            FontStack::Source(cow) => {
-                builder.push_default(Prop::FontFamily(parley::FontFamily::Source(cow.clone())));
-            }
-            FontStack::Single(font_family) => {
-                builder.push_default(Prop::FontFamily(parley::FontFamily::Single(
-                    font_family.clone().into(),
-                )));
-            }
-            FontStack::List(cow) => {
-                let families = cow
-                    .iter()
-                    .cloned()
-                    .map(|f| f.into())
-                    .collect::<SmallVec<[parley::FontFamilyName; 4]>>();
-                builder.push_default(Prop::FontFamily(families.as_slice().into()));
-            }
-        }
+        let text = self.resolve_text_style(style_id, state);
+        push_resolved_text_defaults(&text, builder);
     }
+}
 
-    fn enumerate_styles<'a>(
-        &self,
-        style_id: StyleId,
-        state: StateFlags,
-        mut callback: impl FnMut(parley::StyleProperty<'a, Color>),
-    ) -> &Style {
-        use parley::StyleProperty as Prop;
+fn push_resolved_text_defaults(
+    text: &ResolvedTextStyle,
+    builder: &mut parley::RangedBuilder<Color>,
+) {
+    use parley::StyleProperty as Prop;
 
-        let style = self.styles.get(style_id).unwrap();
+    builder.push_default(Prop::FontFeatures(default_font_features()));
+    builder.push_default(Prop::Brush(text.text_color));
+    builder.push_default(Prop::FontSize(text.font_size as f32));
+    builder.push_default(Prop::FontStyle(text.font_style.into()));
+    builder.push_default(Prop::FontWeight(parley::FontWeight::new(
+        text.font_weight as f32,
+    )));
+    builder.push_default(Prop::StrikethroughBrush(Some(text.strikethrough_color)));
+    builder.push_default(Prop::StrikethroughOffset(Some(text.strikethrough_offset)));
+    builder.push_default(Prop::UnderlineBrush(Some(text.underline_color)));
+    builder.push_default(Prop::UnderlineOffset(Some(text.underline_offset)));
 
-        callback(Prop::FontFeatures(default_font_features()));
-        callback(Prop::Brush(style.text_color.get(state)));
-        callback(Prop::FontSize(style.font_size.get(state) as f32));
-        callback(Prop::FontStyle(style.font_style.get(state).into()));
-        callback(Prop::FontWeight(parley::FontWeight::new(
-            style.font_weight.get(state) as f32,
-        )));
-        callback(Prop::StrikethroughBrush(Some(
-            style.strikethrough_color.get(state),
-        )));
-        callback(Prop::StrikethroughOffset(Some(
-            style.strikethrough_offset.get(state),
-        )));
-        callback(Prop::UnderlineBrush(Some(style.underline_color.get(state))));
-        callback(Prop::UnderlineOffset(Some(
-            style.underline_offset.get(state),
-        )));
-
-        style
+    match &text.font.family {
+        FontStack::Source(cow) => {
+            builder.push_default(Prop::FontFamily(parley::FontFamily::Source(cow.clone())));
+        }
+        FontStack::Single(font_family) => {
+            builder.push_default(Prop::FontFamily(parley::FontFamily::Single(
+                font_family.clone().into(),
+            )));
+        }
+        FontStack::List(cow) => {
+            let families = cow
+                .iter()
+                .cloned()
+                .map(|f| f.into())
+                .collect::<SmallVec<[parley::FontFamilyName; 4]>>();
+            builder.push_default(Prop::FontFamily(families.as_slice().into()));
+        }
     }
 }
 

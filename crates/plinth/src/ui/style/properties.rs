@@ -109,6 +109,92 @@ macros::declare_style! {
     }
 }
 
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct ResolvedWidgetStyle {
+    pub(crate) paint: ResolvedPaintStyle,
+    pub(crate) layout: ResolvedLayoutStyle,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct ResolvedPaintStyle {
+    pub(crate) background: Paint,
+    pub(crate) border: GradientPaint,
+    pub(crate) border_widths: BorderWidths,
+    pub(crate) corner_radii: CornerRadii,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct ResolvedLayoutStyle {
+    pub(crate) width: Size,
+    pub(crate) height: Size,
+    pub(crate) padding: Padding,
+    pub(crate) child_major_alignment: Alignment,
+    pub(crate) child_minor_alignment: Alignment,
+    pub(crate) child_spacing: f32,
+    pub(crate) child_direction: LayoutDirection,
+    pub(crate) clip_children: bool,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct ResolvedTextStyle {
+    pub(crate) font: Arc<crate::graphics::Font>,
+    pub(crate) font_size: u16,
+    pub(crate) font_style: FontStyle,
+    pub(crate) font_weight: u16,
+    pub(crate) strikethrough_color: Color,
+    pub(crate) strikethrough_offset: f32,
+    pub(crate) text_align: TextAlignment,
+    pub(crate) text_color: Color,
+    pub(crate) underline_color: Color,
+    pub(crate) underline_offset: f32,
+}
+
+impl Style {
+    pub(crate) fn resolve_widget_style(&self, state: StateFlags) -> ResolvedWidgetStyle {
+        ResolvedWidgetStyle {
+            paint: self.resolve_paint_style(state),
+            layout: self.resolve_layout_style(state),
+        }
+    }
+
+    pub(crate) fn resolve_paint_style(&self, state: StateFlags) -> ResolvedPaintStyle {
+        ResolvedPaintStyle {
+            background: self.background.get(state),
+            border: self.border.get(state),
+            border_widths: self.border_widths.get(state),
+            corner_radii: self.corner_radii.get(state),
+        }
+    }
+
+    pub(crate) fn resolve_layout_style(&self, state: StateFlags) -> ResolvedLayoutStyle {
+        ResolvedLayoutStyle {
+            width: self.width.get(state),
+            height: self.height.get(state),
+            padding: self.padding.get(state),
+            child_major_alignment: self.child_major_alignment.get(state),
+            child_minor_alignment: self.child_minor_alignment.get(state),
+            child_spacing: self.child_spacing.get(state),
+            child_direction: self.child_direction.get(state),
+            clip_children: self.clip_children.get(state),
+        }
+    }
+
+    pub(crate) fn resolve_text_style(&self, state: StateFlags) -> ResolvedTextStyle {
+        ResolvedTextStyle {
+            font: self.font.get(state),
+            font_size: self.font_size.get(state),
+            font_style: self.font_style.get(state),
+            font_weight: self.font_weight.get(state),
+            strikethrough_color: self.strikethrough_color.get(state),
+            strikethrough_offset: self.strikethrough_offset.get(state),
+            text_align: self.text_align.get(state),
+            text_color: self.text_color.get(state),
+            underline_color: self.underline_color.get(state),
+            underline_offset: self.underline_offset.get(state),
+        }
+    }
+}
+
 mod macros {
     /// Generates:
     /// - `Style` struct with StatefulProperty<T> for each property
