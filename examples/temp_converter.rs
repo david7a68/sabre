@@ -20,6 +20,7 @@ use plinth::ui::UiBuilder;
 use plinth::ui::style::StateFlags;
 use plinth::ui::style::StyleProperty;
 use plinth::ui::widget::Interaction;
+use plinth::ui::widget::PlainTextEditorState;
 
 fn main() {
     tracing_subscriber::fmt().pretty().init();
@@ -60,10 +61,22 @@ impl AppLifecycleHandler for Demo {
     }
 }
 
-#[derive(Default)]
 struct AppWindow {
     temp_f: f32,
     temp_c: Option<f32>,
+    edit_c: PlainTextEditorState,
+    edit_f: PlainTextEditorState,
+}
+
+impl Default for AppWindow {
+    fn default() -> Self {
+        Self {
+            temp_f: 0.0,
+            temp_c: None,
+            edit_c: PlainTextEditorState::plain(),
+            edit_f: PlainTextEditorState::plain(),
+        }
+    }
 }
 
 impl AppWindow {
@@ -76,16 +89,16 @@ impl AppWindow {
             .child_alignment(Alignment::Center, Alignment::Center)
             .surface();
 
-        let mut edit_c = panel.text_edit("", 60.0);
+        let mut edit_c = panel.text_edit(&self.edit_c).with_width(60.0);
         if let Some(temp_c) = self.temp_c.take() {
             edit_c.set_text(&format!("{:.2}", temp_c));
         }
 
-        let temp_c = parse_temp(edit_c.finish());
+        let temp_c = parse_temp(&self.edit_c, edit_c.finish());
 
         panel.label("°C =");
 
-        let mut edit_f = panel.text_edit("", 60.0);
+        let mut edit_f = panel.text_edit(&self.edit_f).with_width(60.0);
 
         if let Some(temp_c) = temp_c {
             let temp_f = temp_c * 9.0 / 5.0 + 32.0;
@@ -95,7 +108,7 @@ impl AppWindow {
             }
         }
 
-        if let Some(temp) = parse_temp(edit_f.finish()) {
+        if let Some(temp) = parse_temp(&self.edit_f, edit_f.finish()) {
             let temp_c = (temp - 32.0) * 5.0 / 9.0;
 
             if self.temp_c != Some(temp_c) {
@@ -113,12 +126,9 @@ impl AppWindow {
     }
 }
 
-fn parse_temp((text, interaction): (Option<&str>, Interaction)) -> Option<f32> {
-    if let Some(text) = text
-        && interaction.is_focused
-        && let Ok(temp) = text.parse::<f32>()
-    {
-        Some(temp)
+fn parse_temp(state: &PlainTextEditorState, interaction: Interaction) -> Option<f32> {
+    if interaction.is_focused && !state.is_composing() {
+        state.with_raw_text(|text| text.parse::<f32>().ok())
     } else {
         None
     }

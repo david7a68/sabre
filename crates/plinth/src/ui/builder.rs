@@ -270,8 +270,10 @@ impl UiBuilder<'_> {
         let (text_id, text_layout) = self.context.static_text_layout(self.text_layouts, self.id);
 
         let text_hash = hash_string(text);
+        let theme_revision = self.theme.revision();
 
         let needs_rebuild = text_layout.style_id != self.style_id
+            || text_layout.theme_revision != theme_revision
             || text_layout.state != self.state
             || text_layout.text_hash != text_hash;
 
@@ -289,6 +291,7 @@ impl UiBuilder<'_> {
 
             // Update cache tracking fields
             text_layout.style_id = self.style_id;
+            text_layout.theme_revision = theme_revision;
             text_layout.state = self.state;
             text_layout.text_hash = text_hash;
             text_layout.raw_text = text.to_string();
@@ -316,11 +319,8 @@ impl UiBuilder<'_> {
             (
                 LayoutContent::Text {
                     layout: text_id,
-                    cursor_size: 0.0,
                     alignment,
                     overflow: self.text_overflow,
-                    selection_color: Color::TRANSPARENT,
-                    cursor_color: Color::TRANSPARENT,
                 },
                 None,
             ),

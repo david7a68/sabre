@@ -19,7 +19,7 @@ use super::types::Position;
 use super::types::Size;
 
 #[derive(Debug, Default)]
-pub(crate) struct Atom {
+pub struct Atom {
     pub width: Size,
     pub height: Size,
     pub inner_padding: Padding,
@@ -43,7 +43,7 @@ pub(crate) struct Atom {
 }
 
 #[derive(Debug, Default)]
-pub(crate) struct LayoutNodeResult {
+pub struct NodeLayout {
     pub x: f32,
     pub y: f32,
     pub width: f32,
@@ -59,7 +59,7 @@ pub(super) type NodeIndexArray = SmallVec<[UiElementId; 8]>;
 #[derive(Default, Debug)]
 pub(crate) struct LayoutNode {
     pub atom: Atom,
-    pub result: LayoutNodeResult,
+    pub result: NodeLayout,
 }
 
 pub(crate) struct LayoutTree<T> {
@@ -137,7 +137,7 @@ impl<T> LayoutTree<T> {
 
         let node = LayoutNode {
             atom,
-            result: LayoutNodeResult::default(),
+            result: NodeLayout::default(),
         };
 
         self.nodes.push(node);
@@ -219,7 +219,7 @@ mod tests {
     use super::super::types::{AxisAnchor, OverlayPosition};
     use super::*;
 
-    fn node_result(tree: &LayoutTree<()>, id: UiElementId) -> &LayoutNodeResult {
+    fn node_result(tree: &LayoutTree<()>, id: UiElementId) -> &NodeLayout {
         &tree.nodes[id.0 as usize].result
     }
 

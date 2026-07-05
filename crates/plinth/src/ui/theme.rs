@@ -44,6 +44,7 @@ impl StyleClass {
 pub struct Theme {
     well_known_classes: [Option<StyleId>; StyleClass::COUNT],
     styles: StyleRegistry,
+    revision: u64,
 }
 
 impl Theme {
@@ -53,7 +54,14 @@ impl Theme {
         Self {
             styles,
             well_known_classes: [None; StyleClass::COUNT],
+            revision: 0,
         }
+    }
+
+    /// A counter that increases on every theme mutation, so that cached style
+    /// resolutions can be invalidated by comparing revisions.
+    pub fn revision(&self) -> u64 {
+        self.revision
     }
 
     /// Gets the style assigned to a style class.
@@ -70,6 +78,7 @@ impl Theme {
     /// Assigns a style to a style class.
     pub fn set(&mut self, class: StyleClass, style_id: StyleId) {
         self.well_known_classes[class as usize] = Some(style_id);
+        self.revision += 1;
     }
 
     /// Sets properties on the default style.
@@ -82,6 +91,7 @@ impl Theme {
     ) {
         let default_style_id = self.styles.default_style_id();
         self.styles.update(default_style_id, properties);
+        self.revision += 1;
     }
 
     /// Modifies a style class by replacing its properties, registering a new
@@ -126,7 +136,9 @@ impl Theme {
         properties: impl IntoIterator<Item = (StateFlags, StyleProperty)>,
     ) -> Result<StyleId, StyleError> {
         let parent = parent.unwrap_or_else(|| self.styles.default_style_id());
-        self.styles.register(Some(parent), properties)
+        let style_id = self.styles.register(Some(parent), properties)?;
+        self.revision += 1;
+        Ok(style_id)
     }
 
     /// Modifies an existing style by replacing its properties.
@@ -136,7 +148,8 @@ impl Theme {
         style_id: StyleId,
         properties: impl IntoIterator<Item = (StateFlags, StyleProperty)>,
     ) {
-        self.styles.update(style_id, properties)
+        self.styles.update(style_id, properties);
+        self.revision += 1;
     }
 
     pub(crate) fn push_text_defaults(
@@ -169,38 +182,6 @@ impl Theme {
                 builder.push_default(Prop::FontFamily(families.as_slice().into()));
             }
         }
-    }
-
-    pub(crate) fn apply_plain_editor_styles(
-        &self,
-        style_id: StyleId,
-        state: StateFlags,
-        editor: &mut parley::PlainEditor<Color>,
-    ) -> &Style {
-        use parley::StyleProperty as Prop;
-
-        let styles = editor.edit_styles();
-
-        let style = self.enumerate_styles(style_id, state, |prop| {
-            styles.insert(prop);
-        });
-
-        match &style.font.get(state).family {
-            FontStack::Source(cow) => {
-                styles.insert(Prop::FontFamily(parley::FontFamily::Source(cow.clone())));
-            }
-            FontStack::Single(font_family) => {
-                styles.insert(Prop::FontFamily(parley::FontFamily::Single(
-                    font_family.clone().into(),
-                )));
-            }
-            FontStack::List(cow) => {
-                let families = cow.iter().cloned().map(|f| f.into()).collect::<Vec<_>>();
-                styles.insert(Prop::FontFamily(parley::FontFamily::List(families.into())));
-            }
-        }
-
-        style
     }
 
     fn enumerate_styles<'a>(
@@ -241,7 +222,7 @@ impl Default for Theme {
     }
 }
 
-fn default_font_features() -> parley::FontFeatures<'static> {
+pub(crate) fn default_font_features() -> parley::FontFeatures<'static> {
     DEFAULT_FONT_FEATURES
         .get_or_init(|| {
             let mut list = Vec::new();
@@ -392,11 +373,15 @@ fn default_theme() -> Theme {
                 ),
                 (
                     StateFlags::HOVERED,
-                    StyleProperty::Background(Paint::solid(Color::srgb_nonlinear(0.92, 0.92, 0.92, 1.0))),
+                    StyleProperty::Background(Paint::solid(Color::srgb_nonlinear(
+                        0.92, 0.92, 0.92, 1.0,
+                    ))),
                 ),
                 (
                     StateFlags::PRESSED,
-                    StyleProperty::Background(Paint::solid(Color::srgb_nonlinear(0.86, 0.86, 0.86, 1.0))),
+                    StyleProperty::Background(Paint::solid(Color::srgb_nonlinear(
+                        0.86, 0.86, 0.86, 1.0,
+                    ))),
                 ),
                 (
                     StateFlags::empty(),

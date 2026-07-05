@@ -5,6 +5,7 @@ use super::widget::Button;
 use super::widget::Container;
 use super::widget::Dropdown;
 use super::widget::DropdownItem;
+use super::widget::EditableTextBuffer;
 use super::widget::Frame;
 use super::widget::HorizontalSeparator;
 use super::widget::Image;
@@ -12,6 +13,7 @@ use super::widget::Interaction;
 use super::widget::Label;
 use super::widget::Surface;
 use super::widget::TextEdit;
+use super::widget::TextEditorState;
 use super::widget::VerticalSeparator;
 
 pub trait CommonWidgetsExt<'a>: Container<'a> {
@@ -55,11 +57,12 @@ pub trait CommonWidgetsExt<'a>: Container<'a> {
         Button::new(self.builder_mut(), Some(label)).finish()
     }
 
-    fn text_edit<'this>(&'this mut self, initial_text: &str, width: f32) -> TextEdit<'this>
+    fn text_edit<'this, T>(&'this mut self, state: &'this TextEditorState<T>) -> TextEdit<'this, T>
     where
+        T: EditableTextBuffer + 'static,
         'a: 'this,
     {
-        TextEdit::new(self.builder_mut(), Size::Fixed(width)).default_text(initial_text)
+        TextEdit::new(self.builder_mut(), state)
     }
 
     fn label<'this>(&'this mut self, text: &str) -> Label<'this>

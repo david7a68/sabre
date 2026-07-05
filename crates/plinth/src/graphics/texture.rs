@@ -687,12 +687,7 @@ impl FormattedTextureManager {
     }
 
     /// Release a reference for the given texture.
-    fn release(
-        &mut self,
-        storage_id: RawStorageId,
-        node: AllocId,
-        storage_version: &Cell<u64>,
-    ) {
+    fn release(&mut self, storage_id: RawStorageId, node: AllocId, storage_version: &Cell<u64>) {
         let storage = self.storage.get_mut(storage_id).unwrap();
         storage.atlas.deallocate(node);
         storage.refcount -= 1;

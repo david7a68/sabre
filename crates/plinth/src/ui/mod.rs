@@ -2,7 +2,6 @@ use glamour::Unit;
 
 pub use builder::*;
 pub use common_widgets::CommonWidgetsExt;
-pub use container::Container;
 pub use id::*;
 pub use layout::*;
 pub use text::TextOverflow;
@@ -11,7 +10,6 @@ pub use theme::Theme;
 
 mod builder;
 mod common_widgets;
-mod container;
 pub(super) mod context;
 mod id;
 mod layout;
