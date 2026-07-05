@@ -1,150 +1,160 @@
+use glamour::Point2;
+
 use crate::ui::AxisAnchor;
 use crate::ui::LayoutDirection;
 use crate::ui::OverlayPosition;
+use crate::ui::Pixels;
 use crate::ui::Position;
 use crate::ui::Size;
 use crate::ui::StyleClass;
 use crate::ui::TextOverflow;
 use crate::ui::UiBuilder;
 use crate::ui::WidgetId;
-use crate::ui::style::CornerRadii;
 use crate::ui::style::StateFlags;
-use glamour::Contains;
 
 use super::ClickBehavior;
 use super::Interaction;
-use super::menu::MenuItem as DropdownItem;
+use super::PointerButton;
+use super::menu::MenuItem as ContextMenuItem;
 use super::menu::MenuList;
 use super::menu::MenuOverlayState;
 
-pub struct Dropdown<'a> {
+pub struct ContextMenu<'a> {
     builder: Option<UiBuilder<'a>>,
     root_id: WidgetId,
     interaction: Interaction,
     menu: MenuList,
 }
 
-impl<'a> Dropdown<'a> {
-    pub fn new(builder: &'a mut UiBuilder<'_>, id: &str, trigger_label: &str) -> Self {
+impl<'a> ContextMenu<'a> {
+    pub fn new(
+        builder: &'a mut UiBuilder<'_>,
+        id: &str,
+        trigger: impl FnOnce(&mut UiBuilder<'_>),
+    ) -> Self {
+        Self::new_inner(builder, id, Some(trigger), None)
+    }
+
+    pub fn at(builder: &'a mut UiBuilder<'_>, id: &str, position: Option<Point2<Pixels>>) -> Self {
+        Self::new_inner(builder, id, None::<fn(&mut UiBuilder<'_>)>, position)
+    }
+
+    fn new_inner(
+        builder: &'a mut UiBuilder<'_>,
+        id: &str,
+        trigger: Option<impl FnOnce(&mut UiBuilder<'_>)>,
+        open_at: Option<Point2<Pixels>>,
+    ) -> Self {
         let mut root = builder.named_child((id, "root"));
         root.child_direction(LayoutDirection::Vertical);
         root.child_spacing(0.0);
 
-        let root_id = root.id;
+        if let Some(trigger) = trigger {
+            trigger(&mut root);
+        } else {
+            root.size(0.0, 0.0);
+        }
 
+        let root_id = root.id;
         let root_state = root
             .prev_state()
             .and_then(|s| s.custom_data::<RootState>())
             .unwrap_or_default();
-        let was_open = root_state.is_open != 0;
-        // First open before the button has ever rendered: trigger_width_bits is 0,
-        // overlay sizes to its content for that frame, then catches up next frame.
-        let trigger_width = match root_state.trigger_width_bits {
-            0 => None,
-            bits => Some(f32::from_bits(bits)),
-        };
+        let was_open = root_state.is_open();
 
-        let mut button = root.named_child((id, "trigger"));
-        let pointer = button.input().pointer;
-        let pointer_over_trigger = button
-            .prev_state()
-            .is_some_and(|s| s.placement.contains(&pointer));
-
-        let (interaction, state) = Interaction::compute(
-            &button,
+        let (interaction, state) = Interaction::compute_for_button(
+            &root,
+            PointerButton::Right,
             ClickBehavior::OnPress,
             StateFlags::HOVERED | StateFlags::PRESSED,
         );
+        root.set_button_active(PointerButton::Right, state.contains(StateFlags::PRESSED));
 
-        button.apply_style(StyleClass::Button, state);
-        button.set_active(state.contains(StateFlags::PRESSED));
-        button.text(trigger_label, None);
-
-        let trigger_width_bits = button
-            .prev_state()
-            .map(|s| f32::to_bits(s.placement.width()))
-            .unwrap_or(root_state.trigger_width_bits);
-
-        let is_open = was_open ^ interaction.is_activated;
-
-        if is_open {
-            let button_style = button.theme().get(StyleClass::Button);
-            let radii = button_style.corner_radii.get(state);
-
-            button.paint(
-                button_style.background.get(state),
-                button_style.border.get(state),
-                button_style.border_widths.get(state),
-                CornerRadii {
-                    top_left: radii.top_left,
-                    top_right: radii.top_right,
-                    bottom_left: 0.0,
-                    bottom_right: 0.0,
-                },
-            );
-        }
+        let is_open = was_open || interaction.is_activated || open_at.is_some();
+        let anchor = if let Some(position) = open_at {
+            position
+        } else if interaction.is_activated {
+            root.input.pointer
+        } else {
+            root_state.anchor()
+        };
 
         let mut dismiss_activated = false;
         let mut overlay_hovered = false;
 
         let mut overlay = if is_open {
-            // Layer layout when open:
-            //   root.layer + 0  trigger button (base layer)
-            //   root.layer + 2  dismiss + overlay panel + its items.
-            //
-            // Dismiss MUST sit at the same z_layer as the overlay, not one below it.
-            // `input_block_layer` uses strict-less-than: a modal at layer N blocks
-            // input to anything with layer < N. If dismiss were at +1 and the overlay
-            // (also modal) at +2, dismiss would block itself. With both at +2 the
-            // overlay's children (items) are not blocked, and the `!overlay_hovered`
-            // guard on `close_requested` prevents clicks on items from also firing
-            // the dismiss path.
             dismiss_activated = {
                 let window_w = root.input.window_size.width;
                 let window_h = root.input.window_size.height;
-                let mut dismiss = root.modal_offset_child(
-                    (id, "dismiss"),
+
+                let mut left_dismiss = root.modal_offset_child(
+                    (id, "dismiss", PointerButton::Left),
                     Position::Absolute { x: 0.0, y: 0.0 },
                     2,
                 );
-                dismiss.size(window_w, window_h);
-                let (i, _) = Interaction::compute(
-                    &dismiss,
+                left_dismiss.size(window_w, window_h);
+                let (left_interaction, left_state) = Interaction::compute(
+                    &left_dismiss,
                     ClickBehavior::OnPress,
                     StateFlags::HOVERED | StateFlags::PRESSED,
                 );
-                i.is_activated
+                left_dismiss.set_active(left_state.contains(StateFlags::PRESSED));
+
+                let mut right_dismiss = root.modal_offset_child(
+                    (id, "dismiss", PointerButton::Right),
+                    Position::Absolute { x: 0.0, y: 0.0 },
+                    2,
+                );
+                right_dismiss.size(window_w, window_h);
+                let (right_interaction, right_state) = Interaction::compute_for_button(
+                    &right_dismiss,
+                    PointerButton::Right,
+                    ClickBehavior::OnPress,
+                    StateFlags::HOVERED | StateFlags::PRESSED,
+                );
+                right_dismiss.set_button_active(
+                    PointerButton::Right,
+                    right_state.contains(StateFlags::PRESSED),
+                );
+
+                left_interaction.is_activated || right_interaction.is_activated
             };
 
-            // Write root state before root is moved into the overlay builder.
-            // (state_mut would borrow root, conflicting with the move into UiBuilder below.)
             root.context.state_mut(root_id).set_custom_data(RootState {
-                is_open: 1,
-                trigger_width_bits,
+                anchor_x_bits: anchor.x.to_bits(),
+                anchor_y_bits: anchor.y.to_bits(),
             });
 
-            // Overlay panel. Must be constructed via struct literal so its fields are
-            // moved out of root, giving the builder the outer 'a lifetime rather than
-            // a lifetime tied to a reborrow of the local `root`. The Atom setup is
-            // factored into UiContext::add_overlay_node to avoid duplication.
             let child_layer = root.layer.saturating_add(2);
-            let child_id = root.id.then((id, "overlay"));
-            let child_index = root.context.add_overlay_node(
+            let anchor_id = root.id.then((id, "anchor"));
+            let anchor_index = root.context.add_overlay_node(
                 root.index,
+                anchor_id,
+                Position::Absolute {
+                    x: anchor.x,
+                    y: anchor.y,
+                },
+                child_layer,
+                false,
+            );
+            root.num_child_widgets += 1;
+
+            let child_id = anchor_id.then((id, "overlay"));
+            let child_index = root.context.add_overlay_node(
+                anchor_index,
                 child_id,
                 Position::OutOfFlow(OverlayPosition {
                     parent_x: AxisAnchor::Start,
-                    parent_y: AxisAnchor::End,
+                    parent_y: AxisAnchor::Start,
                     self_x: AxisAnchor::Start,
                     self_y: AxisAnchor::Start,
                     offset: (0.0, 0.0),
-                    flip_x: false,
+                    flip_x: true,
                     flip_y: true,
                 }),
                 child_layer,
                 true,
             );
-            root.num_child_widgets += 1;
 
             Some(UiBuilder {
                 theme: root.theme,
@@ -164,10 +174,9 @@ impl<'a> Dropdown<'a> {
                 text_overflow: TextOverflow::Clip,
             })
         } else {
-            root.context.state_mut(root_id).set_custom_data(RootState {
-                is_open: 0,
-                trigger_width_bits,
-            });
+            root.context
+                .state_mut(root_id)
+                .set_custom_data(RootState::default());
             None
         };
 
@@ -177,18 +186,12 @@ impl<'a> Dropdown<'a> {
                 ClickBehavior::OnPress,
                 StateFlags::HOVERED | StateFlags::PRESSED,
             );
-
             overlay_hovered = overlay_interaction.is_hovered;
 
-            overlay.apply_style(StyleClass::DropdownMenu, overlay_state);
-            if let Some(width) = trigger_width {
-                overlay.width(Size::Fixed(width));
-            }
+            overlay.apply_style(StyleClass::ContextMenu, overlay_state);
             overlay.child_spacing(0.0);
             overlay.set_active(overlay_state.contains(StateFlags::PRESSED));
             overlay.child_direction(LayoutDirection::Vertical);
-            // Claim keyboard focus so handle_keyboard_input only fires for this
-            // dropdown and not for any other widget reading keyboard_events.
             overlay.request_focus();
         }
 
@@ -198,7 +201,7 @@ impl<'a> Dropdown<'a> {
             .and_then(|s| s.custom_data::<MenuOverlayState>())
             .unwrap_or_default();
         let mut menu = MenuList::from_overlay_state(prev_overlay_state);
-        menu.close_requested = dismiss_activated && !overlay_hovered && !pointer_over_trigger;
+        menu.close_requested = dismiss_activated && !overlay_hovered;
 
         Self {
             builder: overlay,
@@ -238,7 +241,7 @@ impl<'a> Dropdown<'a> {
 
     pub fn item<T>(&mut self, callback: T) -> &mut Self
     where
-        T: DropdownItem,
+        T: ContextMenuItem,
     {
         self.item_inner(&callback)
     }
@@ -254,8 +257,6 @@ impl<'a> Dropdown<'a> {
 
         if let Some(builder) = self.builder.as_mut() {
             if self.menu.close_requested {
-                // Reset overlay state so the next open starts fresh, and flip root
-                // back to closed so was_open is false on the next frame.
                 builder
                     .context
                     .state_mut(builder.id)
@@ -265,11 +266,10 @@ impl<'a> Dropdown<'a> {
                     .state_mut(self.root_id)
                     .custom_data_mut::<RootState>()
                 {
-                    s.is_open = 0;
+                    *s = RootState::default();
                 }
                 builder.release_focus();
             } else {
-                // Always write so a fresh open never reads stale data.
                 builder
                     .context
                     .state_mut(builder.id)
@@ -280,27 +280,46 @@ impl<'a> Dropdown<'a> {
         (self.menu.selected_index(), self.interaction)
     }
 
-    fn item_inner(&mut self, callback: &dyn DropdownItem) -> &mut Self {
+    fn item_inner(&mut self, callback: &dyn ContextMenuItem) -> &mut Self {
         let Some(builder) = self.builder.as_mut() else {
             return self;
         };
 
-        self.menu.item(
-            builder,
-            StyleClass::DropdownItem,
-            Some(StyleClass::Button),
-            callback,
-        );
+        self.menu
+            .item(builder, StyleClass::ContextMenuItem, None, callback);
         self
     }
 }
 
 #[repr(C)]
-#[derive(Clone, Copy, Default)]
+#[derive(Clone, Copy)]
 struct RootState {
-    is_open: u32,
-    /// `f32::to_bits` of the trigger width; 0 means not yet measured.
-    trigger_width_bits: u32,
+    anchor_x_bits: u32,
+    anchor_y_bits: u32,
+}
+
+impl RootState {
+    const CLOSED_ANCHOR_X: u32 = u32::MAX;
+
+    fn is_open(self) -> bool {
+        self.anchor_x_bits != Self::CLOSED_ANCHOR_X
+    }
+
+    fn anchor(self) -> Point2<Pixels> {
+        Point2::new(
+            f32::from_bits(self.anchor_x_bits),
+            f32::from_bits(self.anchor_y_bits),
+        )
+    }
+}
+
+impl Default for RootState {
+    fn default() -> Self {
+        Self {
+            anchor_x_bits: Self::CLOSED_ANCHOR_X,
+            anchor_y_bits: 0,
+        }
+    }
 }
 
 unsafe impl bytemuck::Pod for RootState {}

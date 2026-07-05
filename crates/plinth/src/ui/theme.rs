@@ -34,11 +34,13 @@ pub enum StyleClass {
     VerticalSeparator,
     DropdownMenu,
     DropdownItem,
+    ContextMenu,
+    ContextMenuItem,
 }
 
 impl StyleClass {
     /// Number of style class variants. Update when adding new variants.
-    pub const COUNT: usize = 9;
+    pub const COUNT: usize = 11;
 }
 
 pub struct Theme {
@@ -364,6 +366,22 @@ fn default_theme() -> Theme {
 
     theme
         .set_style_class(
+            StyleClass::ContextMenu,
+            Some(theme.get_id(StyleClass::DropdownMenu)),
+            [(
+                StateFlags::empty(),
+                StyleProperty::BorderWidths(BorderWidths {
+                    left: 1.0,
+                    right: 1.0,
+                    top: 1.0,
+                    bottom: 1.0,
+                }),
+            )],
+        )
+        .unwrap();
+
+    theme
+        .set_style_class(
             StyleClass::DropdownItem,
             Some(theme.get_id(StyleClass::Label)),
             [
@@ -403,6 +421,14 @@ fn default_theme() -> Theme {
                 ),
                 (StateFlags::empty(), StyleProperty::Width(Size::Grow)),
             ],
+        )
+        .unwrap();
+
+    theme
+        .set_style_class(
+            StyleClass::ContextMenuItem,
+            Some(theme.get_id(StyleClass::DropdownItem)),
+            [],
         )
         .unwrap();
 

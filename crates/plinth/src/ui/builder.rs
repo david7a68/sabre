@@ -31,6 +31,7 @@ use super::text::TextLayoutStorage;
 use super::text::TextOverflow;
 use super::theme::StyleClass;
 use super::theme::Theme;
+use super::widget::PointerButton;
 use super::widget::WidgetState;
 
 pub struct UiBuilder<'a> {
@@ -227,13 +228,17 @@ impl UiBuilder<'_> {
     /// Set whether this widget is currently being actively pressed.
     /// Used for click detection across frames.
     pub fn set_active(&mut self, active: bool) {
+        self.set_button_active(PointerButton::Left, active);
+    }
+
+    pub fn set_button_active(&mut self, button: PointerButton, active: bool) {
         // container state will get created on the first frame that a widget is
         // used, but AFTER the widget's layout is computed (and thus after all
         // opportunities to call this method within the current frame have
         // elapsed). Therefore it is safe to do nothing if the widget state does
         // not exist yet.
         if let Some(widget) = self.context.widget_states.get_mut(&self.id) {
-            widget.state.was_active = active;
+            widget.state.set_pointer_button_active(button, active);
         }
     }
 
