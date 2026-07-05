@@ -5,18 +5,61 @@ use super::widget::Button;
 use super::widget::Container;
 use super::widget::Dropdown;
 use super::widget::DropdownItem;
+use super::widget::EdgeRegionConfig;
+use super::widget::EdgeRegionState;
 use super::widget::EditableTextBuffer;
 use super::widget::Frame;
 use super::widget::HorizontalSeparator;
 use super::widget::Image;
 use super::widget::Interaction;
 use super::widget::Label;
+use super::widget::SectionPanelConfig;
+use super::widget::SectionPanelState;
+use super::widget::SplitPaneConfig;
+use super::widget::SplitPaneState;
 use super::widget::Surface;
 use super::widget::TextEdit;
 use super::widget::TextEditorState;
 use super::widget::VerticalSeparator;
 
 pub trait CommonWidgetsExt<'a>: Container<'a> {
+    fn split_pane(
+        &mut self,
+        state: &mut SplitPaneState,
+        config: SplitPaneConfig,
+        first: impl FnOnce(&mut super::UiBuilder<'_>),
+        second: impl FnOnce(&mut super::UiBuilder<'_>),
+    ) -> &mut Self {
+        state.show(self.builder_mut(), config, first, second);
+        self
+    }
+
+    fn edge_region(
+        &mut self,
+        state: &mut EdgeRegionState,
+        config: EdgeRegionConfig,
+        region: impl FnOnce(&mut super::UiBuilder<'_>),
+        remaining: impl FnOnce(&mut super::UiBuilder<'_>),
+    ) -> &mut Self {
+        state.show(self.builder_mut(), config, region, remaining);
+        self
+    }
+
+    fn section_panel(
+        &mut self,
+        title: &str,
+        state: &mut SectionPanelState,
+        body: impl FnOnce(&mut super::UiBuilder<'_>),
+    ) -> &mut Self {
+        state.show(
+            self.builder_mut(),
+            title,
+            SectionPanelConfig::default(),
+            body,
+        );
+        self
+    }
+
     /// Creates an invisible, non-interactive layout widget for grouping other
     /// widgets together.
     fn frame<'this>(&'this mut self) -> Frame<'this>
