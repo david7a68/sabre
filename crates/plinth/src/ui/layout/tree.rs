@@ -756,6 +756,43 @@ mod tests {
         assert_eq!(node_result(&tree, second_grow).y, 10.0);
     }
 
+    #[test]
+    fn wrapped_minor_grow_child_fills_line() {
+        let mut tree = LayoutTree::new();
+        let root = tree.add(
+            None,
+            Atom {
+                width: Fixed(200.0),
+                height: Fixed(100.0),
+                ..Default::default()
+            },
+            (),
+        );
+        let parent = tree.add(
+            Some(root),
+            Atom {
+                width: Fixed(100.0),
+                height: Fixed(50.0),
+                child_wrap: ChildWrap::Wrap,
+                ..Default::default()
+            },
+            (),
+        );
+        let child = tree.add(
+            Some(parent),
+            Atom {
+                width: Fixed(60.0),
+                height: Grow,
+                ..Default::default()
+            },
+            (),
+        );
+
+        tree.compute_layout(|_, _| None);
+
+        assert_eq!(node_result(&tree, child).height, 50.0);
+    }
+
     // ── Out-of-flow children excluded from parent Fit size ──────────────────
 
     #[test]

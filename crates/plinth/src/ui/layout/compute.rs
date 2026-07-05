@@ -327,13 +327,42 @@ pub(super) fn compute_minor_axis_grow_sizes<D: LayoutDirectionExt>(
 
     if node.atom.child_wrap == ChildWrap::Wrap {
         let line_count = wrap_lines[node_idx].lines.len();
-        for line_index in 0..line_count {
-            let line_children = wrap_lines[node_idx].lines[line_index].children.clone();
-            let line_minor_size = line_minor_size::<D>(nodes, &line_children);
+        let line_spacing = node.atom.line_spacing;
+        let mut grow_line_count = 0;
+        let mut line_sizes = Vec::with_capacity(line_count);
+
+        for line in &wrap_lines[node_idx].lines {
+            let has_grow_child = line
+                .children
+                .iter()
+                .any(|&child_id| matches!(D::minor_size_spec(&nodes[child_id.0 as usize]), Grow));
+            if has_grow_child {
+                grow_line_count += 1;
+            }
+            line_sizes.push((
+                line.children.clone(),
+                line_minor_size::<D>(nodes, &line.children),
+                has_grow_child,
+            ));
+        }
+
+        let used_size = line_sizes
+            .iter()
+            .map(|(_, line_size, _)| *line_size)
+            .sum::<f32>()
+            + line_spacing * line_count.saturating_sub(1) as f32;
+        let grow_line_extra = if grow_line_count > 0 {
+            (remaining_size - used_size).max(0.0) / grow_line_count as f32
+        } else {
+            0.0
+        };
+
+        for (line_children, line_minor_size, has_grow_child) in line_sizes {
+            let grow_size = line_minor_size + if has_grow_child { grow_line_extra } else { 0.0 };
             for child_id in line_children {
                 let child = &mut nodes[child_id.0 as usize];
                 if matches!(D::minor_size_spec(child), Grow) {
-                    D::set_minor_size(child, line_minor_size);
+                    D::set_minor_size(child, grow_size);
                 }
             }
         }
