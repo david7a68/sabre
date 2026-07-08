@@ -1,6 +1,8 @@
 use std::hash::Hash;
 use std::time::Duration;
 
+use bytemuck::NoUninit;
+use bytemuck::Pod;
 use rapidhash::v3::rapidhash_v3;
 
 use crate::graphics::Color;
@@ -222,6 +224,22 @@ impl UiBuilder<'_> {
             .widget_states
             .get(&self.id)
             .map(|container| &container.state)
+    }
+
+    pub fn custom_data<T: Pod>(&self) -> Option<T> {
+        self.prev_state().and_then(WidgetState::custom_data)
+    }
+
+    pub fn custom_data_ref<T: Pod>(&self) -> Option<&T> {
+        self.prev_state().and_then(WidgetState::custom_data_ref)
+    }
+
+    pub fn custom_data_mut<T: Pod>(&mut self) -> Option<&mut T> {
+        self.context.state_mut(self.id).custom_data_mut::<T>()
+    }
+
+    pub fn set_custom_data<T: NoUninit>(&mut self, value: T) {
+        self.context.state_mut(self.id).set_custom_data(value);
     }
 
     /// Set whether this widget is currently being actively pressed.
